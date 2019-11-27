@@ -1,5 +1,6 @@
 import {PolymerElement, html} from '@polymer/polymer';
 import {Router} from '@vaadin/router';
+
 import '@vaadin/vaadin-app-layout/vaadin-app-layout';
 import '@vaadin/vaadin-app-layout/vaadin-drawer-toggle';
 import '@vaadin/vaadin-tabs/vaadin-tabs';
@@ -10,7 +11,7 @@ import './vapp-page2';
 import './vapp-page3';
 
 export default class VappMain extends PolymerElement{    
-    ready(){
+    ready(){      
       super.ready();
       const router = new Router(this.shadowRoot.getElementById('outlet'));
       router.setRoutes([
