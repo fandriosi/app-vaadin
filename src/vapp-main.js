@@ -7,7 +7,7 @@ import '@vaadin/vaadin-tabs/vaadin-tabs';
 import '@vaadin/vaadin-tabs/vaadin-tab';
 import '@vaadin/vaadin-icons/vaadin-icons';
 import './vapp-home';
-import './vapp-page2';
+import './vapp-client-view';
 import './vapp-page3';
 
 export default class VappMain extends PolymerElement{    
@@ -16,8 +16,8 @@ export default class VappMain extends PolymerElement{
       const router = new Router(this.shadowRoot.getElementById('outlet'));
       router.setRoutes([
         {path: '/', component: 'vapp-home'},
+        {path: '/Clinte', component: 'cliente-view'},
         {path: '/page3', component: 'vapp-page3'},
-        {path: '/page2', component: 'vapp-page2'},
       ]);
     }
     static get template(){
@@ -36,9 +36,9 @@ export default class VappMain extends PolymerElement{
               </a>
             </vaadin-tab>
             <vaadin-tab>
-              <a href="page2">
+              <a href="Clinte">
                 <iron-icon icon="vaadin:list"></iron-icon>
-                  Page 2
+                  Clintes
               </a>
             </vaadin-tab>
             <vaadin-tab>

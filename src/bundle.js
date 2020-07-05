@@ -16,8 +16,8 @@
    * When using Closure Compiler, JSCompiler_renameProperty(property, object) is replaced by the munged name for object[property]
    * We cannot alias this function, so we have to use a small shim that has the same behavior when not compiling.
    *
-   * @param {string} prop Property name
-   * @param {?Object} obj Reference object
+   * @param {?} prop Property name
+   * @param {*} obj Reference object
    * @return {string} Potentially renamed property name
    */
   window.JSCompiler_renameProperty = function(prop, obj) {
@@ -128,10 +128,24 @@
   Code distributed by Google as part of the polymer project is also
   subject to an additional IP rights grant found at http://polymer.github.io/PATENTS.txt
   */
-  const useShadow = !(window.ShadyDOM);
+  const useShadow = !(window.ShadyDOM) || !(window.ShadyDOM.inUse);
   const useNativeCSSProperties = Boolean(!window.ShadyCSS || window.ShadyCSS.nativeCss);
-  const useNativeCustomElements = !(window.customElements.polyfillWrapFlushCallback);
-
+  const supportsAdoptingStyleSheets = useShadow &&
+      ('adoptedStyleSheets' in Document.prototype) &&
+      ('replaceSync' in CSSStyleSheet.prototype) &&
+      // Since spec may change, feature detect exact API we need
+      (() => {
+        try {
+          const sheet = new CSSStyleSheet();
+          sheet.replaceSync('');
+          const host = document.createElement('div');
+          host.attachShadow({mode: 'open'});
+          host.shadowRoot.adoptedStyleSheets = [sheet];
+          return (host.shadowRoot.adoptedStyleSheets[0] === sheet);
+        } catch(e) {
+          return false;
+        }
+      })();
 
   /**
    * Globally settable property that is automatically assigned to
@@ -141,7 +155,8 @@
    * `rootPath` to provide a stable application mount path when
    * using client side routing.
    */
-  let rootPath = pathFromUrl(document.baseURI || window.location.href);
+  let rootPath = window.Polymer && window.Polymer.rootPath ||
+    pathFromUrl(document.baseURI || window.location.href);
 
   /**
    * A global callback used to sanitize any value before inserting it into the DOM.
@@ -156,9 +171,10 @@
    * `type` indicates where the value is being inserted: one of property, attribute, or text.
    * `node` is the node where the value is being inserted.
    *
-   * @type {(function(*,string,string,Node):*)|undefined}
+   * @type {(function(*,string,string,?Node):*)|undefined}
    */
-  let sanitizeDOMValue = window.Polymer && window.Polymer.sanitizeDOMValue || undefined;
+  let sanitizeDOMValue =
+    window.Polymer && window.Polymer.sanitizeDOMValue || undefined;
 
   /**
    * Globally settable property to make Polymer Gestures use passive TouchEvent listeners when recognizing gestures.
@@ -166,7 +182,8 @@
    * scrolling performance.
    * Defaults to `false` for backwards compatibility.
    */
-  let passiveTouchGestures = false;
+  let passiveTouchGestures =
+    window.Polymer && window.Polymer.setPassiveTouchGestures || false;
 
   /**
    * Setting to ensure Polymer template evaluation only occurs based on tempates
@@ -174,7 +191,8 @@
    * disallowed, `<dom-bind>` is disabled, and `<dom-if>`/`<dom-repeat>`
    * templates will only evaluate in the context of a trusted element template.
    */
-  let strictTemplatePolicy = false;
+  let strictTemplatePolicy =
+    window.Polymer && window.Polymer.strictTemplatePolicy || false;
 
   /**
    * Setting to enable dom-module lookup from Polymer.Element.  By default,
@@ -182,7 +200,8 @@
    * getter and the `html` tag function.  To enable legacy loading of templates
    * via dom-module, set this flag to true.
    */
-  let allowTemplateFromDomModule = false;
+  let allowTemplateFromDomModule =
+    window.Polymer && window.Polymer.allowTemplateFromDomModule || false;
 
   /**
    * Setting to skip processing style includes and re-writing urls in css styles.
@@ -191,20 +210,80 @@
    * If no includes or relative urls are used in styles, these steps can be
    * skipped as an optimization.
    */
-  let legacyOptimizations = false;
+  let legacyOptimizations =
+    window.Polymer && window.Polymer.legacyOptimizations || false;
+
+  /**
+   * Setting to add warnings useful when migrating from Polymer 1.x to 2.x.
+   */
+  let legacyWarnings =
+    window.Polymer && window.Polymer.legacyWarnings || false;
 
   /**
    * Setting to perform initial rendering synchronously when running under ShadyDOM.
    * This matches the behavior of Polymer 1.
    */
-  let syncInitialRender = false;
+  let syncInitialRender =
+    window.Polymer && window.Polymer.syncInitialRender || false;
 
   /**
-   * Setting to cancel synthetic click events fired by older mobile browsers. Modern browsers
-   * no longer fire synthetic click events, and the cancellation behavior can interfere
-   * when programmatically clicking on elements.
+   * Setting to retain the legacy Polymer 1 behavior for multi-property
+   * observers around undefined values. Observers and computed property methods
+   * are not called until no argument is undefined.
    */
-  let cancelSyntheticClickEvents = true;
+  let legacyUndefined =
+    window.Polymer && window.Polymer.legacyUndefined || false;
+
+  /**
+   * Setting to ensure computed properties are computed in order to ensure
+   * re-computation never occurs in a given turn.
+   */
+  let orderedComputed =
+    window.Polymer && window.Polymer.orderedComputed || false;
+
+  /**
+   * Setting to remove nested templates inside `dom-if` and `dom-repeat` as
+   * part of element template parsing.  This is a performance optimization that
+   * eliminates most of the tax of needing two elements due to the loss of
+   * type-extended templates as a result of the V1 specification changes.
+   */
+  let removeNestedTemplates =
+    window.Polymer && window.Polymer.removeNestedTemplates || false;
+
+  /**
+   * Setting to place `dom-if` elements in a performance-optimized mode that takes
+   * advantage of lighter-weight host runtime template stamping to eliminate the
+   * need for an intermediate Templatizer `TemplateInstance` to mange the nodes
+   * stamped by `dom-if`.  Under this setting, any Templatizer-provided API's
+   * such as `modelForElement` will not be available for nodes stamped by
+   * `dom-if`.
+   */
+  let fastDomIf = window.Polymer && window.Polymer.fastDomIf || false;
+
+  /**
+   * Setting to disable `dom-change` and `rendered-item-count` events from
+   * `dom-if` and `dom-repeat`. Users can opt back into `dom-change` events by
+   * setting the `notify-dom-change` attribute (`notifyDomChange: true` property)
+   * to `dom-if`/`don-repeat` instances.
+   */
+  let suppressTemplateNotifications =
+    window.Polymer && window.Polymer.suppressTemplateNotifications || false;
+
+  /**
+   * Setting to disable use of dynamic attributes. This is an optimization
+   * to avoid setting `observedAttributes`. Instead attributes are read
+   * once at create time and set/removeAttribute are patched.
+   */
+  let legacyNoObservedAttributes =
+    window.Polymer && window.Polymer.legacyNoObservedAttributes || false;
+
+  /**
+   * Setting to enable use of `adoptedStyleSheets` for sharing style sheets
+   * between component instances' shadow roots, if the app uses built Shady CSS
+   * styles.
+   */
+  let useAdoptedStyleSheetsWithBuiltCSS =
+    window.Polymer && window.Polymer.useAdoptedStyleSheetsWithBuiltCSS || false;
 
   /**
   @license
@@ -248,13 +327,13 @@
       if (!extended) {
         extended = /** @type {!Function} */(mixin)(base);
         map.set(base, extended);
+        // copy inherited mixin set from the extended class, or the base class
+        // NOTE: we avoid use of Set here because some browser (IE11)
+        // cannot extend a base Set via the constructor.
+        let mixinSet = Object.create(/** @type {!MixinFunction} */(extended).__mixinSet || baseSet || null);
+        mixinSet[mixinDedupeId] = true;
+        /** @type {!MixinFunction} */(extended).__mixinSet = mixinSet;
       }
-      // copy inherited mixin set from the extended class, or the base class
-      // NOTE: we avoid use of Set here because some browser (IE11)
-      // cannot extend a base Set via the constructor.
-      let mixinSet = Object.create(/** @type {!MixinFunction} */(extended).__mixinSet || baseSet || null);
-      mixinSet[mixinDedupeId] = true;
-      /** @type {!MixinFunction} */(extended).__mixinSet = mixinSet;
       return extended;
     }
 
@@ -992,10 +1071,12 @@
   let microtaskLastHandle = 0;
   let microtaskCallbacks = [];
   let microtaskNodeContent = 0;
+  let microtaskScheduled = false;
   let microtaskNode = document.createTextNode('');
   new window.MutationObserver(microtaskFlush).observe(microtaskNode, {characterData: true});
 
   function microtaskFlush() {
+    microtaskScheduled = false;
     const len = microtaskCallbacks.length;
     for (let i = 0; i < len; i++) {
       let cb = microtaskCallbacks[i];
@@ -1058,6 +1139,35 @@
   };
 
   /**
+   * Async interface wrapper around `requestAnimationFrame`.
+   *
+   * @namespace
+   * @summary Async interface wrapper around `requestAnimationFrame`.
+   */
+  const animationFrame = {
+    /**
+     * Enqueues a function called at `requestAnimationFrame` timing.
+     *
+     * @memberof animationFrame
+     * @param {function(number):void} fn Callback to run
+     * @return {number} Handle used for canceling task
+     */
+    run(fn) {
+      return window.requestAnimationFrame(fn);
+    },
+    /**
+     * Cancels a previously enqueued `animationFrame` callback.
+     *
+     * @memberof animationFrame
+     * @param {number} handle Handle returned from `run` of callback to cancel
+     * @return {void}
+     */
+    cancel(handle) {
+      window.cancelAnimationFrame(handle);
+    }
+  };
+
+  /**
    * Async interface wrapper around `requestIdleCallback`.  Falls back to
    * `setTimeout` on browsers that do not support `requestIdleCallback`.
    *
@@ -1114,7 +1224,10 @@
      * @return {number} Handle used for canceling task
      */
     run(callback) {
-      microtaskNode.textContent = microtaskNodeContent++;
+      if (!microtaskScheduled) {
+        microtaskScheduled = true;
+        microtaskNode.textContent = microtaskNodeContent++;
+      }
       microtaskCallbacks.push(callback);
       return microtaskCurrHandle++;
     },
@@ -1248,7 +1361,7 @@
        */
       _createPropertyAccessor(property, readOnly) {
         this._addPropertyToAttributeMap(property);
-        if (!this.hasOwnProperty('__dataHasAccessor')) {
+        if (!this.hasOwnProperty(JSCompiler_renameProperty('__dataHasAccessor', this))) {
           this.__dataHasAccessor = Object.assign({}, this.__dataHasAccessor);
         }
         if (!this.__dataHasAccessor[property]) {
@@ -1266,13 +1379,21 @@
        * @override
        */
       _addPropertyToAttributeMap(property) {
-        if (!this.hasOwnProperty('__dataAttributes')) {
+        if (!this.hasOwnProperty(JSCompiler_renameProperty('__dataAttributes', this))) {
           this.__dataAttributes = Object.assign({}, this.__dataAttributes);
         }
-        if (!this.__dataAttributes[property]) {
-          const attr = this.constructor.attributeNameForProperty(property);
+        // This check is technically not correct; it's an optimization that
+        // assumes that if a _property_ name is already in the map (note this is
+        // an attr->property map), the property mapped directly to the attribute
+        // and it has already been mapped.  This would fail if
+        // `attributeNameForProperty` were overridden such that this was not the
+        // case.
+        let attr = this.__dataAttributes[property];
+        if (!attr) {
+          attr = this.constructor.attributeNameForProperty(property);
           this.__dataAttributes[attr] = property;
         }
+        return attr;
       }
 
       /**
@@ -1287,11 +1408,15 @@
           /* eslint-disable valid-jsdoc */
           /** @this {PropertiesChanged} */
           get() {
-            return this._getProperty(property);
+            // Inline for perf instead of using `_getProperty`
+            return this.__data[property];
           },
           /** @this {PropertiesChanged} */
           set: readOnly ? function () {} : function (value) {
-            this._setProperty(property, value);
+            // Inline for perf instead of using `_setProperty`
+            if (this._setPendingProperty(property, value, true)) {
+              this._invalidateProperties();
+            }
           }
           /* eslint-enable */
         });
@@ -1307,6 +1432,9 @@
         this.__dataPending = null;
         this.__dataOld = null;
         this.__dataInstanceProps = null;
+        /** @type {number} */
+        // NOTE: used to track re-entrant calls to `_flushProperties`
+        this.__dataCounter = 0;
         this.__serializing = false;
         this._initializeProperties();
       }
@@ -1433,6 +1561,14 @@
       /* eslint-enable */
 
       /**
+       * @param {string} property Name of the property
+       * @return {boolean} Returns true if the property is pending.
+       */
+      _isPropertyPending(property) {
+        return !!(this.__dataPending && this.__dataPending.hasOwnProperty(property));
+      }
+
+      /**
        * Marks the properties as invalid, and enqueues an async
        * `_propertiesChanged` callback.
        *
@@ -1486,6 +1622,7 @@
        * @override
        */
       _flushProperties() {
+        this.__dataCounter++;
         const props = this.__data;
         const changedProps = this.__dataPending;
         const old = this.__dataOld;
@@ -1494,6 +1631,7 @@
           this.__dataOld = null;
           this._propertiesChanged(props, changedProps, old);
         }
+        this.__dataCounter--;
       }
 
       /**
@@ -2040,6 +2178,53 @@
     'dom-if': true,
     'dom-repeat': true
   };
+
+  let placeholderBugDetect = false;
+  let placeholderBug = false;
+
+  function hasPlaceholderBug() {
+    if (!placeholderBugDetect) {
+      placeholderBugDetect = true;
+      const t = document.createElement('textarea');
+      t.placeholder = 'a';
+      placeholderBug = t.placeholder === t.textContent;
+    }
+    return placeholderBug;
+  }
+
+  /**
+   * Some browsers have a bug with textarea, where placeholder text is copied as
+   * a textnode child of the textarea.
+   *
+   * If the placeholder is a binding, this can break template stamping in two
+   * ways.
+   *
+   * One issue is that when the `placeholder` attribute is removed when the
+   * binding is processed, the textnode child of the textarea is deleted, and the
+   * template info tries to bind into that node.
+   *
+   * With `legacyOptimizations` in use, when the template is stamped and the
+   * `textarea.textContent` binding is processed, no corresponding node is found
+   * because it was removed during parsing. An exception is generated when this
+   * binding is updated.
+   *
+   * With `legacyOptimizations` not in use, the template is cloned before
+   * processing and this changes the above behavior. The cloned template also has
+   * a value property set to the placeholder and textContent. This prevents the
+   * removal of the textContent when the placeholder attribute is removed.
+   * Therefore the exception does not occur. However, there is an extra
+   * unnecessary binding.
+   *
+   * @param {!Node} node Check node for placeholder bug
+   * @return {void}
+   */
+  function fixPlaceholder(node) {
+    if (hasPlaceholderBug() && node.localName === 'textarea' && node.placeholder
+          && node.placeholder === node.textContent) {
+      node.textContent = null;
+    }
+  }
+
   function wrapTemplateExtension(node) {
     let is = node.getAttribute('is');
     if (is && templateExtensions[is]) {
@@ -2090,9 +2275,11 @@
   }
 
   // push configuration references at configure time
-  function applyTemplateContent(inst, node, nodeInfo) {
+  function applyTemplateInfo(inst, node, nodeInfo, parentTemplateInfo) {
     if (nodeInfo.templateInfo) {
+      // Give the node an instance of this templateInfo and set its parent
       node._templateInfo = nodeInfo.templateInfo;
+      node._parentTemplateInfo = parentTemplateInfo;
     }
   }
 
@@ -2122,9 +2309,6 @@
    * @mixinFunction
    * @polymer
    * @summary Element class mixin that provides basic template parsing and stamping
-   * @template T
-   * @param {function(new:T)} superClass Class to apply mixin to.
-   * @return {function(new:T)} superClass with mixin applied.
    */
   const TemplateStamp = dedupingMixin(
       /**
@@ -2223,6 +2407,7 @@
           // TODO(rictic): fix typing
           let /** ? */ templateInfo = template._templateInfo = {};
           templateInfo.nodeInfoList = [];
+          templateInfo.nestedTemplate = Boolean(outerTemplateInfo);
           templateInfo.stripWhiteSpace =
             (outerTemplateInfo && outerTemplateInfo.stripWhiteSpace) ||
             template.hasAttribute('strip-whitespace');
@@ -2269,13 +2454,18 @@
           // For ShadyDom optimization, indicating there is an insertion point
           templateInfo.hasInsertionPoint = true;
         }
+        fixPlaceholder(element);
         if (element.firstChild) {
           this._parseTemplateChildNodes(element, templateInfo, nodeInfo);
         }
         if (element.hasAttributes && element.hasAttributes()) {
           noted = this._parseTemplateNodeAttributes(element, templateInfo, nodeInfo) || noted;
         }
-        return noted;
+        // Checking `nodeInfo.noted` allows a child node of this node (who gets
+        // access to `parentInfo`) to cause the parent to be noted, which
+        // otherwise has no return path via `_parseTemplateChildNodes` (used by
+        // some optimizations)
+        return noted || nodeInfo.noted;
       }
 
       /**
@@ -2454,16 +2644,22 @@
        * is removed and stored in notes as well.
        *
        * @param {!HTMLTemplateElement} template Template to stamp
+       * @param {TemplateInfo=} templateInfo Optional template info associated
+       *   with the template to be stamped; if omitted the template will be
+       *   automatically parsed.
        * @return {!StampedTemplate} Cloned template content
        * @override
        */
-      _stampTemplate(template) {
+      _stampTemplate(template, templateInfo) {
         // Polyfill support: bootstrap the template if it has not already been
         if (template && !template.content &&
             window.HTMLTemplateElement && HTMLTemplateElement.decorate) {
           HTMLTemplateElement.decorate(template);
         }
-        let templateInfo = this.constructor._parseTemplate(template);
+        // Accepting the `templateInfo` via an argument allows for creating
+        // instances of the `templateInfo` by the caller, useful for adding
+        // instance-time information to the prototypical data
+        templateInfo = templateInfo || this.constructor._parseTemplate(template);
         let nodeInfo = templateInfo.nodeInfoList;
         let content = templateInfo.content || template.content;
         let dom = /** @type {DocumentFragment} */ (document.importNode(content, true));
@@ -2474,7 +2670,7 @@
         for (let i=0, l=nodeInfo.length, info; (i<l) && (info=nodeInfo[i]); i++) {
           let node = nodes[i] = findTemplateNode(dom, info);
           applyIdToMap(this, dom.$, node, info);
-          applyTemplateContent(this, node, info);
+          applyTemplateInfo(this, node, info, templateInfo);
           applyEventListener(this, node, info);
         }
         dom = /** @type {!StampedTemplate} */(dom); // eslint-disable-line no-self-assign
@@ -2550,6 +2746,8 @@
   // from multiple properties in the same turn
   let dedupeId$1 = 0;
 
+  const NOOP = [];
+
   /**
    * Property effect types; effects are stored on the prototype using these keys
    * @enum {string}
@@ -2562,6 +2760,8 @@
     OBSERVE: '__observeEffects',
     READ_ONLY: '__readOnly'
   };
+
+  const COMPUTE_INFO = '__computeInfo';
 
   /** @const {!RegExp} */
   const capitalAttributeRegex = /[A-Z]/;
@@ -2585,20 +2785,25 @@
    *
    * @param {Object} model Prototype or instance
    * @param {string} type Property effect type
+   * @param {boolean=} cloneArrays Clone any arrays assigned to the map when
+   *   extending a superclass map onto this subclass
    * @return {Object} The own-property map of effects for the given type
    * @private
    */
-  function ensureOwnEffectMap(model, type) {
+  function ensureOwnEffectMap(model, type, cloneArrays) {
     let effects = model[type];
     if (!effects) {
       effects = model[type] = {};
     } else if (!model.hasOwnProperty(type)) {
       effects = model[type] = Object.create(model[type]);
-      for (let p in effects) {
-        let protoFx = effects[p];
-        let instFx = effects[p] = Array(protoFx.length);
-        for (let i=0; i<protoFx.length; i++) {
-          instFx[i] = protoFx[i];
+      if (cloneArrays) {
+        for (let p in effects) {
+          let protoFx = effects[p];
+          // Perf optimization over Array.slice
+          let instFx = effects[p] = Array(protoFx.length);
+          for (let i=0; i<protoFx.length; i++) {
+            instFx[i] = protoFx[i];
+          }
         }
       }
     }
@@ -2623,12 +2828,22 @@
   function runEffects(inst, effects, props, oldProps, hasPaths, extraArgs) {
     if (effects) {
       let ran = false;
-      let id = dedupeId$1++;
+      const id = dedupeId$1++;
       for (let prop in props) {
-        if (runEffectsForProperty(
-                inst, /** @type {!Object} */ (effects), id, prop, props, oldProps,
-                hasPaths, extraArgs)) {
-          ran = true;
+        // Inline `runEffectsForProperty` for perf.
+        let rootProperty = hasPaths ? root(prop) : prop;
+        let fxs = effects[rootProperty];
+        if (fxs) {
+          for (let i=0, l=fxs.length, fx; (i<l) && (fx=fxs[i]); i++) {
+            if ((!fx.info || fx.info.lastRun !== id) &&
+                (!hasPaths || pathMatchesTrigger(prop, fx.trigger))) {
+              if (fx.info) {
+                fx.info.lastRun = id;
+              }
+              fx.fn(inst, prop, props, oldProps, fx.info, hasPaths, extraArgs);
+              ran = true;
+            }
+          }
         }
       }
       return ran;
@@ -2808,6 +3023,11 @@
     if (path) {
       detail.path = path;
     }
+    // As a performance optimization, we could elide the wrap here since notifying
+    // events are non-bubbling and shouldn't need retargeting. However, a very
+    // small number of internal tests failed in obscure ways, which may indicate
+    // user code relied on timing differences resulting from ShadyDOM flushing
+    // as a result of the wrapped `dispatchEvent`.
     wrap(/** @type {!HTMLElement} */(inst)).dispatchEvent(new CustomEvent(eventName, { detail }));
   }
 
@@ -2914,14 +3134,189 @@
   function runComputedEffects(inst, changedProps, oldProps, hasPaths) {
     let computeEffects = inst[TYPES.COMPUTE];
     if (computeEffects) {
-      let inputProps = changedProps;
-      while (runEffects(inst, computeEffects, inputProps, oldProps, hasPaths)) {
+      if (orderedComputed) {
+        // Runs computed effects in efficient order by keeping a topologically-
+        // sorted queue of compute effects to run, and inserting subsequently
+        // invalidated effects as they are run
+        dedupeId$1++;
+        const order = getComputedOrder(inst);
+        const queue = [];
+        for (let p in changedProps) {
+          enqueueEffectsFor(p, computeEffects, queue, order, hasPaths);
+        }
+        let info;
+        while ((info = queue.shift())) {
+          if (runComputedEffect(inst, '', changedProps, oldProps, info)) {
+            enqueueEffectsFor(info.methodInfo, computeEffects, queue, order, hasPaths);
+          }
+        }
         Object.assign(/** @type {!Object} */ (oldProps), inst.__dataOld);
         Object.assign(/** @type {!Object} */ (changedProps), inst.__dataPending);
-        inputProps = inst.__dataPending;
         inst.__dataPending = null;
+      } else {
+        // Original Polymer 2.x computed effects order, which continues running
+        // effects until no further computed properties have been invalidated
+        let inputProps = changedProps;
+        while (runEffects(inst, computeEffects, inputProps, oldProps, hasPaths)) {
+          Object.assign(/** @type {!Object} */ (oldProps), inst.__dataOld);
+          Object.assign(/** @type {!Object} */ (changedProps), inst.__dataPending);
+          inputProps = inst.__dataPending;
+          inst.__dataPending = null;
+        }
       }
     }
+  }
+
+  /**
+   * Inserts a computed effect into a queue, given the specified order. Performs
+   * the insert using a binary search.
+   *
+   * Used by `orderedComputed: true` computed property algorithm.
+   *
+   * @param {Object} info Property effects metadata
+   * @param {Array<Object>} queue Ordered queue of effects
+   * @param {Map<string,number>} order Map of computed property name->topological
+   *   sort order
+   */
+  const insertEffect = (info, queue, order) => {
+    let start = 0;
+    let end = queue.length - 1;
+    let idx = -1;
+    while (start <= end) {
+      const mid = (start + end) >> 1;
+      // Note `methodInfo` is where the computed property name is stored in
+      // the effect metadata
+      const cmp = order.get(queue[mid].methodInfo) - order.get(info.methodInfo);
+      if (cmp < 0) {
+        start = mid + 1;
+      } else if (cmp > 0) {
+        end = mid - 1;
+      } else {
+        idx = mid;
+        break;
+      }
+    }
+    if (idx < 0) {
+      idx = end + 1;
+    }
+    queue.splice(idx, 0, info);
+  };
+
+  /**
+   * Inserts all downstream computed effects invalidated by the specified property
+   * into the topologically-sorted queue of effects to be run.
+   *
+   * Used by `orderedComputed: true` computed property algorithm.
+   *
+   * @param {string} prop Property name
+   * @param {Object} computeEffects Computed effects for this element
+   * @param {Array<Object>} queue Topologically-sorted queue of computed effects
+   *   to be run
+   * @param {Map<string,number>} order Map of computed property name->topological
+   *   sort order
+   * @param {boolean} hasPaths True with `changedProps` contains one or more paths
+   */
+  const enqueueEffectsFor = (prop, computeEffects, queue, order, hasPaths) => {
+    const rootProperty = hasPaths ? root(prop) : prop;
+    const fxs = computeEffects[rootProperty];
+    if (fxs) {
+      for (let i=0; i<fxs.length; i++) {
+        const fx = fxs[i];
+        if ((fx.info.lastRun !== dedupeId$1) &&
+            (!hasPaths || pathMatchesTrigger(prop, fx.trigger))) {
+          fx.info.lastRun = dedupeId$1;
+          insertEffect(fx.info, queue, order);
+        }
+      }
+    }
+  };
+
+  /**
+   * Generates and retrieves a memoized map of computed property name to its
+   * topologically-sorted order.
+   *
+   * The map is generated by first assigning a "dependency count" to each property
+   * (defined as number properties it depends on, including its method for
+   * "dynamic functions"). Any properties that have no dependencies are added to
+   * the `ready` queue, which are properties whose order can be added to the final
+   * order map. Properties are popped off the `ready` queue one by one and a.) added as
+   * the next property in the order map, and b.) each property that it is a
+   * dependency for has its dep count decremented (and if that property's dep
+   * count goes to zero, it is added to the `ready` queue), until all properties
+   * have been visited and ordered.
+   *
+   * Used by `orderedComputed: true` computed property algorithm.
+   *
+   * @param {!Polymer_PropertyEffects} inst The instance to retrieve the computed
+   *   effect order for.
+   * @return {Map<string,number>} Map of computed property name->topological sort
+   *   order
+   */
+  function getComputedOrder(inst) {
+    let ordered = inst.constructor.__orderedComputedDeps;
+    if (!ordered) {
+      ordered = new Map();
+      const effects = inst[TYPES.COMPUTE];
+      let {counts, ready, total} = dependencyCounts(inst);
+      let curr;
+      while ((curr = ready.shift())) {
+        ordered.set(curr, ordered.size);
+        const computedByCurr = effects[curr];
+        if (computedByCurr) {
+          computedByCurr.forEach(fx => {
+            // Note `methodInfo` is where the computed property name is stored
+            const computedProp = fx.info.methodInfo;
+            --total;
+            if (--counts[computedProp] === 0) {
+              ready.push(computedProp);
+            }
+          });
+        }
+      }
+      if (total !== 0) {
+        const el = /** @type {HTMLElement} */ (inst);
+        console.warn(`Computed graph for ${el.localName} incomplete; circular?`);
+      }
+      inst.constructor.__orderedComputedDeps = ordered;
+    }
+    return ordered;
+  }
+
+  /**
+   * Generates a map of property-to-dependency count (`counts`, where "dependency
+   * count" is the number of dependencies a given property has assuming it is a
+   * computed property, otherwise 0).  It also returns a pre-populated list of
+   * `ready` properties that have no dependencies and a `total` count, which is
+   * used for error-checking the graph.
+   *
+   * Used by `orderedComputed: true` computed property algorithm.
+   *
+   * @param {!Polymer_PropertyEffects} inst The instance to generate dependency
+   *   counts for.
+   * @return {!Object} Object containing `counts` map (property-to-dependency
+   *   count) and pre-populated `ready` array of properties that had zero
+   *   dependencies.
+   */
+  function dependencyCounts(inst) {
+    const infoForComputed = inst[COMPUTE_INFO];
+    const counts = {};
+    const computedDeps = inst[TYPES.COMPUTE];
+    const ready = [];
+    let total = 0;
+    // Count dependencies for each computed property
+    for (let p in infoForComputed) {
+      const info = infoForComputed[p];
+      // Be sure to add the method name itself in case of "dynamic functions"
+      total += counts[p] =
+        info.args.filter(a => !a.literal).length + (info.dynamicFn ? 1 : 0);
+    }
+    // Build list of ready properties (that aren't themselves computed)
+    for (let p in computedDeps) {
+      if (!infoForComputed[p]) {
+        ready.push(p);
+      }
+    }
+    return {counts, ready, total};
   }
 
   /**
@@ -2931,19 +3326,25 @@
    *
    * @param {!Polymer_PropertyEffects} inst The instance the effect will be run on
    * @param {string} property Name of property
-   * @param {?Object} props Bag of current property changes
+   * @param {?Object} changedProps Bag of current property changes
    * @param {?Object} oldProps Bag of previous values for changed properties
    * @param {?} info Effect metadata
-   * @return {void}
+   * @return {boolean} True when the property being computed changed
    * @private
    */
-  function runComputedEffect(inst, property, props, oldProps, info) {
-    let result = runMethodEffect(inst, property, props, oldProps, info);
+  function runComputedEffect(inst, property, changedProps, oldProps, info) {
+    // Dirty check dependencies and run if any invalid
+    let result = runMethodEffect(inst, property, changedProps, oldProps, info);
+    // Abort if method returns a no-op result
+    if (result === NOOP) {
+      return false;
+    }
     let computedProp = info.methodInfo;
     if (inst.__dataHasAccessor && inst.__dataHasAccessor[computedProp]) {
-      inst._setPendingProperty(computedProp, result, true);
+      return inst._setPendingProperty(computedProp, result, true);
     } else {
       inst[computedProp] = result;
+      return false;
     }
   }
 
@@ -3086,7 +3487,10 @@
     } else {
       let value = info.evaluator._evaluateBinding(inst, part, path, props, oldProps, hasPaths);
       // Propagate value to child
-      applyBindingValue(inst, node, binding, part, value);
+      // Abort if value is a no-op result
+      if (value !== NOOP) {
+        applyBindingValue(inst, node, binding, part, value);
+      }
     }
   }
 
@@ -3120,7 +3524,9 @@
             inst._enqueueClient(node);
           }
         }
-      } else  {
+      } else {
+        // In legacy no-batching mode, bindings applied before dataReady are
+        // equivalent to the "apply config" phase, which only set managed props
         inst._setUnmanagedPropertyToNode(node, prop, value);
       }
     }
@@ -3200,6 +3606,8 @@
             addNotifyListener(node, inst, binding);
           }
         }
+        // This ensures all bound elements have a host set, regardless
+        // of whether they upgrade synchronous to creation
         node.__dataHost = inst;
       }
     }
@@ -3280,7 +3688,7 @@
    * @param {boolean|Object=} dynamicFn Boolean or object map indicating whether
    *   method names should be included as a dependency to the effect. Note,
    *   defaults to true if the signature is static (sig.static is true).
-   * @return {void}
+   * @return {!Object} Effect metadata for this method effect
    * @private
    */
   function createMethodEffect(model, sig, type, effectFn, methodInfo, dynamicFn) {
@@ -3304,6 +3712,7 @@
         fn: effectFn, info: info
       });
     }
+    return info;
   }
 
   /**
@@ -3329,7 +3738,7 @@
     let fn = context[info.methodName];
     if (fn) {
       let args = inst._marshalArgs(info.args, property, props);
-      return fn.apply(context, args);
+      return args === NOOP ? NOOP : fn.apply(context, args);
     } else if (!info.dynamicFn) {
       console.warn('method `' + info.methodName + '` not defined');
     }
@@ -3512,8 +3921,18 @@
    * @private
    */
   function notifySplices(inst, array, path, splices) {
-    inst.notifyPath(path + '.splices', { indexSplices: splices });
+    const splicesData = { indexSplices: splices };
+    // Legacy behavior stored splices in `__data__` so it was *not* ephemeral.
+    // To match this behavior, we store splices directly on the array.
+    if (legacyUndefined && !inst._overrideLegacyUndefined) {
+      array.splices = splicesData;
+    }
+    inst.notifyPath(path + '.splices', splicesData);
     inst.notifyPath(path + '.length', array.length);
+    // Clear splice data only when it's stored on the array.
+    if (legacyUndefined && !inst._overrideLegacyUndefined) {
+      splicesData.indexSplices = [];
+    }
   }
 
   /**
@@ -3586,9 +4005,6 @@
    * @appliesMixin PropertyAccessors
    * @summary Element class mixin that provides meta-programming for Polymer's
    * template binding and data observation system.
-   * @template T
-   * @param {function(new:T)} superClass Class to apply mixin to.
-   * @return {function(new:T)} superClass with mixin applied.
    */
   const PropertyEffects = dedupingMixin(superClass => {
 
@@ -3615,11 +4031,6 @@
         /** @type {boolean} */
         // Used to identify users of this mixin, ala instanceof
         this.__isPropertyEffectsClient = true;
-        /** @type {number} */
-        // NOTE: used to track re-entrant calls to `_flushProperties`
-        // path changes dirty check against `__dataTemp` only during one "turn"
-        // and are cleared when `__dataCounter` returns to 0.
-        this.__dataCounter = 0;
         /** @type {boolean} */
         this.__dataClientsReady;
         /** @type {Array} */
@@ -3647,6 +4058,8 @@
         /** @type {Object} */
         this.__computeEffects;
         /** @type {Object} */
+        this.__computeInfo;
+        /** @type {Object} */
         this.__reflectEffects;
         /** @type {Object} */
         this.__notifyEffects;
@@ -3658,11 +4071,10 @@
         this.__readOnly;
         /** @type {!TemplateInfo} */
         this.__templateInfo;
+        /** @type {boolean} */
+        this._overrideLegacyUndefined;
       }
 
-      /**
-       * @return {!Object<string, string>} Effect prototype property name map.
-       */
       get PROPERTY_EFFECT_TYPES() {
         return TYPES;
       }
@@ -3673,7 +4085,7 @@
        */
       _initializeProperties() {
         super._initializeProperties();
-        hostStack.registerHost(this);
+        this._registerHost();
         this.__dataClientsReady = false;
         this.__dataPendingClients = null;
         this.__dataToNotify = null;
@@ -3684,6 +4096,16 @@
         this.__dataHost = this.__dataHost || null;
         this.__dataTemp = {};
         this.__dataClientsInitialized = false;
+      }
+
+      _registerHost() {
+        if (hostStack.length) {
+          let host = hostStack[hostStack.length-1];
+          host._enqueueClient(this);
+          // This ensures even non-bound elements have a host set, as
+          // long as they upgrade synchronously
+          this.__dataHost = host;
+        }
       }
 
       /**
@@ -3737,7 +4159,7 @@
       _addPropertyEffect(property, type, effect) {
         this._createPropertyAccessor(property, type == TYPES.READ_ONLY);
         // effects are accumulated into arrays per property based on type
-        let effects = ensureOwnEffectMap(this, type)[property];
+        let effects = ensureOwnEffectMap(this, type, true)[property];
         if (!effects) {
           effects = this[type][property] = [];
         }
@@ -3754,7 +4176,7 @@
        * @return {void}
        */
       _removePropertyEffect(property, type, effect) {
-        let effects = ensureOwnEffectMap(this, type)[property];
+        let effects = ensureOwnEffectMap(this, type, true)[property];
         let idx = effects.indexOf(effect);
         if (idx >= 0) {
           effects.splice(idx, 1);
@@ -4048,19 +4470,6 @@
       }
 
       /**
-       * Overrides superclass implementation.
-       *
-       * @override
-       * @return {void}
-       * @protected
-       */
-      _flushProperties() {
-        this.__dataCounter++;
-        super._flushProperties();
-        this.__dataCounter--;
-      }
-
-      /**
        * Flushes any clients previously enqueued via `_enqueueClient`, causing
        * their `_flushProperties` method to run.
        *
@@ -4199,11 +4608,12 @@
         // ----------------------------
         let hasPaths = this.__dataHasPaths;
         this.__dataHasPaths = false;
+        let notifyProps;
         // Compute properties
         runComputedEffects(this, changedProps, oldProps, hasPaths);
         // Clear notify properties prior to possible reentry (propagate, observe),
         // but after computing effects have a chance to add to them
-        let notifyProps = this.__dataToNotify;
+        notifyProps = this.__dataToNotify;
         this.__dataToNotify = null;
         // Propagate properties to clients
         this._propagatePropertyChanges(changedProps, oldProps, hasPaths);
@@ -4241,11 +4651,23 @@
         if (this[TYPES.PROPAGATE]) {
           runEffects(this, this[TYPES.PROPAGATE], changedProps, oldProps, hasPaths);
         }
-        let templateInfo = this.__templateInfo;
-        while (templateInfo) {
+        if (this.__templateInfo) {
+          this._runEffectsForTemplate(this.__templateInfo, changedProps, oldProps, hasPaths);
+        }
+      }
+
+      _runEffectsForTemplate(templateInfo, changedProps, oldProps, hasPaths) {
+        const baseRunEffects = (changedProps, hasPaths) => {
           runEffects(this, templateInfo.propertyEffects, changedProps, oldProps,
             hasPaths, templateInfo.nodeList);
-          templateInfo = templateInfo.nextTemplateInfo;
+          for (let info=templateInfo.firstChild; info; info=info.nextSibling) {
+            this._runEffectsForTemplate(info, changedProps, oldProps, hasPaths);
+          }
+        };
+        if (templateInfo.runEffects) {
+          templateInfo.runEffects(baseRunEffects, changedProps, hasPaths);
+        } else {
+          baseRunEffects(changedProps, hasPaths);
         }
       }
 
@@ -4448,7 +4870,7 @@
        * @param {number} start Index from which to start removing/inserting.
        * @param {number=} deleteCount Number of items to remove.
        * @param {...*} items Items to insert into array.
-       * @return {Array} Array of removed items.
+       * @return {!Array} Array of removed items.
        * @public
        */
       splice(path, start, deleteCount, ...items) {
@@ -4704,7 +5126,10 @@
         if (!sig) {
           throw new Error("Malformed computed expression '" + expression + "'");
         }
-        createMethodEffect(this, sig, TYPES.COMPUTE, runComputedEffect, property, dynamicFn);
+        const info = createMethodEffect(this, sig, TYPES.COMPUTE, runComputedEffect, property, dynamicFn);
+        // Effects are normally stored as map of dependency->effect, but for
+        // ordered computation, we also need tree of computedProp->dependencies
+        ensureOwnEffectMap(this, COMPUTE_INFO)[property] = info;
       }
 
       /**
@@ -4717,7 +5142,7 @@
        * @param {!Array<!MethodArg>} args Array of argument metadata
        * @param {string} path Property/path name that triggered the method effect
        * @param {Object} props Bag of current property changes
-       * @return {Array<*>} Array of argument values
+       * @return {!Array<*>} Array of argument values
        * @private
        */
       _marshalArgs(args, path, props) {
@@ -4737,6 +5162,11 @@
             } else {
               value = structured ? getArgValue(data, props, name) : data[name];
             }
+          }
+          // When the `legacyUndefined` flag is enabled, pass a no-op value
+          // so that the observer, computed property, or compound binding is aborted.
+          if (legacyUndefined && !this._overrideLegacyUndefined && value === undefined && args.length > 1) {
+            return NOOP;
           }
           values[i] = value;
         }
@@ -4904,10 +5334,43 @@
 
       // -- binding ----------------------------------------------
 
+      /*
+       * Overview of binding flow:
+       *
+       * During finalization (`instanceBinding==false`, `wasPreBound==false`):
+       *  `_bindTemplate(t, false)` called directly during finalization - parses
+       *  the template (for the first time), and then assigns that _prototypical_
+       *  template info to `__preboundTemplateInfo` _on the prototype_; note in
+       *  this case `wasPreBound` is false; this is the first time we're binding
+       *  it, thus we create accessors.
+       *
+       * During first stamping (`instanceBinding==true`, `wasPreBound==true`):
+       *   `_stampTemplate` calls `_bindTemplate(t, true)`: the `templateInfo`
+       *   returned matches the prebound one, and so this is `wasPreBound == true`
+       *   state; thus we _skip_ creating accessors, but _do_ create an instance
+       *   of the template info to serve as the start of our linked list (needs to
+       *   be an instance, not the prototypical one, so that we can add `nodeList`
+       *   to it to contain the `nodeInfo`-ordered list of instance nodes for
+       *   bindings, and so we can chain runtime-stamped template infos off of
+       *   it). At this point, the call to `_stampTemplate` calls
+       *   `applyTemplateInfo` for each nested `<template>` found during parsing
+       *   to hand prototypical `_templateInfo` to them; we also pass the _parent_
+       *   `templateInfo` to the `<template>` so that we have the instance-time
+       *   parent to link the `templateInfo` under in the case it was
+       *   runtime-stamped.
+       *
+       * During subsequent runtime stamping (`instanceBinding==true`,
+       *   `wasPreBound==false`): `_stampTemplate` calls `_bindTemplate(t, true)`
+       *   - here `templateInfo` is guaranteed to _not_ match the prebound one,
+       *   because it was either a different template altogether, or even if it
+       *   was the same template, the step above created a instance of the info;
+       *   in this case `wasPreBound == false`, so we _do_ create accessors, _and_
+       *   link a instance into the linked list.
+       */
+
       /**
-       * Equivalent to static `bindTemplate` API but can be called on
-       * an instance to add effects at runtime.  See that method for
-       * full API docs.
+       * Equivalent to static `bindTemplate` API but can be called on an instance
+       * to add effects at runtime.  See that method for full API docs.
        *
        * This method may be called on the prototype (for prototypical template
        * binding, to avoid creating accessors every instance) once per prototype,
@@ -4917,20 +5380,20 @@
        *
        * @override
        * @param {!HTMLTemplateElement} template Template containing binding
-       *   bindings
+       * bindings
        * @param {boolean=} instanceBinding When false (default), performs
-       *   "prototypical" binding of the template and overwrites any previously
-       *   bound template for the class. When true (as passed from
-       *   `_stampTemplate`), the template info is instanced and linked into
-       *   the list of bound templates.
+       * "prototypical" binding of the template and overwrites any previously
+       * bound template for the class. When true (as passed from
+       * `_stampTemplate`), the template info is instanced and linked into the
+       * list of bound templates.
        * @return {!TemplateInfo} Template metadata object; for `runtimeBinding`,
-       *   this is an instance of the prototypical template info
+       * this is an instance of the prototypical template info
        * @protected
        * @suppress {missingProperties} go/missingfnprops
        */
       _bindTemplate(template, instanceBinding) {
         let templateInfo = this.constructor._parseTemplate(template);
-        let wasPreBound = this.__templateInfo == templateInfo;
+        let wasPreBound = this.__preBoundTemplateInfo == templateInfo;
         // Optimization: since this is called twice for proto-bound templates,
         // don't attempt to recreate accessors if this template was pre-bound
         if (!wasPreBound) {
@@ -4940,17 +5403,40 @@
         }
         if (instanceBinding) {
           // For instance-time binding, create instance of template metadata
-          // and link into list of templates if necessary
+          // and link into tree of templates if necessary
           templateInfo = /** @type {!TemplateInfo} */(Object.create(templateInfo));
           templateInfo.wasPreBound = wasPreBound;
-          if (!wasPreBound && this.__templateInfo) {
-            let last = this.__templateInfoLast || this.__templateInfo;
-            this.__templateInfoLast = last.nextTemplateInfo = templateInfo;
-            templateInfo.previousTemplateInfo = last;
-            return templateInfo;
+          if (!this.__templateInfo) {
+            // Set the info to the root of the tree
+            this.__templateInfo = templateInfo;
+          } else {
+            // Append this template info onto the end of its parent template's
+            // list, which will determine the tree structure via which property
+            // effects are run; if this template was not nested in another
+            // template, use the root template (the first stamped one) as the
+            // parent. Note, `parent` is the `templateInfo` instance for this
+            // template's parent (containing) template, which was set up in
+            // `applyTemplateInfo`.  While a given template's `parent` is set
+            // apriori, it is only added to the parent's child list at the point
+            // that it is being bound, since a template may or may not ever be
+            // stamped, and may be stamped more than once (in which case instances
+            // of the template info will be in the tree under its parent more than
+            // once).
+            const parent = template._parentTemplateInfo || this.__templateInfo;
+            const previous = parent.lastChild;
+            templateInfo.parent = parent;
+            parent.lastChild = templateInfo;
+            templateInfo.previousSibling = previous;
+            if (previous) {
+              previous.nextSibling = templateInfo;
+            } else {
+              parent.firstChild = templateInfo;
+            }
           }
+        } else {
+          this.__preBoundTemplateInfo = templateInfo;
         }
-        return this.__templateInfo = templateInfo;
+        return templateInfo;
       }
 
       /**
@@ -4991,17 +5477,20 @@
        * in the main element template.
        *
        * @param {!HTMLTemplateElement} template Template to stamp
+       * @param {TemplateInfo=} templateInfo Optional bound template info associated
+       *   with the template to be stamped; if omitted the template will be
+       *   automatically bound.
        * @return {!StampedTemplate} Cloned template content
        * @override
        * @protected
        */
-      _stampTemplate(template) {
+      _stampTemplate(template, templateInfo) {
+        templateInfo =  templateInfo || /** @type {!TemplateInfo} */(this._bindTemplate(template, true));
         // Ensures that created dom is `_enqueueClient`'d to this element so
         // that it can be flushed on next call to `_flushProperties`
-        hostStack.beginHosting(this);
-        let dom = super._stampTemplate(template);
-        hostStack.endHosting(this);
-        let templateInfo = /** @type {!TemplateInfo} */(this._bindTemplate(template, true));
+        hostStack.push(this);
+        let dom = super._stampTemplate(template, templateInfo);
+        hostStack.pop();
         // Add template-instance-specific data to instanced templateInfo
         templateInfo.nodeList = dom.nodeList;
         // Capture child nodes to allow unstamping of non-prototypical templates
@@ -5014,10 +5503,18 @@
         dom.templateInfo = templateInfo;
         // Setup compound storage, 2-way listeners, and dataHost for bindings
         setupBindings(this, templateInfo);
-        // Flush properties into template nodes if already booted
-        if (this.__dataReady) {
-          runEffects(this, templateInfo.propertyEffects, this.__data, null,
-            false, templateInfo.nodeList);
+        // Flush properties into template nodes; the check on `__dataClientsReady`
+        // ensures we don't needlessly run effects for an element's initial
+        // prototypical template stamping since they will happen as a part of the
+        // first call to `_propertiesChanged`. This flag is set to true
+        // after running the initial propagate effects, and immediately before
+        // flushing clients. Since downstream clients could cause stamping on
+        // this host (e.g. a fastDomIf `dom-if` being forced to render
+        // synchronously), this flag ensures effects for runtime-stamped templates
+        // are run at this point during the initial element boot-up.
+        if (this.__dataClientsReady) {
+          this._runEffectsForTemplate(templateInfo, this.__data, null, false);
+          this._flushClients();
         }
         return dom;
       }
@@ -5033,25 +5530,28 @@
        * @protected
        */
       _removeBoundDom(dom) {
-        // Unlink template info
-        let templateInfo = dom.templateInfo;
-        if (templateInfo.previousTemplateInfo) {
-          templateInfo.previousTemplateInfo.nextTemplateInfo =
-            templateInfo.nextTemplateInfo;
+        // Unlink template info; Note that while the child is unlinked from its
+        // parent list, a template's `parent` reference is never removed, since
+        // this is is determined by the tree structure and applied at
+        // `applyTemplateInfo` time.
+        const templateInfo = dom.templateInfo;
+        const {previousSibling, nextSibling, parent} = templateInfo;
+        if (previousSibling) {
+          previousSibling.nextSibling = nextSibling;
+        } else if (parent) {
+          parent.firstChild = nextSibling;
         }
-        if (templateInfo.nextTemplateInfo) {
-          templateInfo.nextTemplateInfo.previousTemplateInfo =
-            templateInfo.previousTemplateInfo;
+        if (nextSibling) {
+          nextSibling.previousSibling = previousSibling;
+        } else if (parent) {
+          parent.lastChild = previousSibling;
         }
-        if (this.__templateInfoLast == templateInfo) {
-          this.__templateInfoLast = templateInfo.previousTemplateInfo;
-        }
-        templateInfo.previousTemplateInfo = templateInfo.nextTemplateInfo = null;
+        templateInfo.nextSibling = templateInfo.previousSibling = null;
         // Remove stamped nodes
         let nodes = templateInfo.childNodes;
         for (let i=0; i<nodes.length; i++) {
           let node = nodes[i];
-          node.parentNode.removeChild(node);
+          wrap(wrap(node).parentNode).removeChild(node);
         }
       }
 
@@ -5135,6 +5635,10 @@
             }
             node.setAttribute(name, literal);
           }
+          // support disable-upgrade
+          if (kind == 'attribute' && origName == 'disable-upgrade$') {
+            node.setAttribute(name, '');
+          }
           // Clear attribute before removing, since IE won't allow removing
           // `value` attribute if it previously had a value (can't
           // unconditionally set '' before removing since attributes with `$`
@@ -5180,12 +5684,49 @@
         //     Change back to just super.methodCall()
         let noted = propertyEffectsBase._parseTemplateNestedTemplate.call(
           this, node, templateInfo, nodeInfo);
+        const parent = node.parentNode;
+        const nestedTemplateInfo = nodeInfo.templateInfo;
+        const isDomIf = parent.localName === 'dom-if';
+        const isDomRepeat = parent.localName === 'dom-repeat';
+        // Remove nested template and redirect its host bindings & templateInfo
+        // onto the parent (dom-if/repeat element)'s nodeInfo
+        if (removeNestedTemplates && (isDomIf || isDomRepeat)) {
+          parent.removeChild(node);
+          // Use the parent's nodeInfo (for the dom-if/repeat) to record the
+          // templateInfo, and use that for any host property bindings below
+          nodeInfo = nodeInfo.parentInfo;
+          nodeInfo.templateInfo = nestedTemplateInfo;
+          // Ensure the parent dom-if/repeat is noted since it now may have host
+          // bindings; it may not have been if it did not have its own bindings
+          nodeInfo.noted = true;
+          noted = false;
+        }
         // Merge host props into outer template and add bindings
-        let hostProps = nodeInfo.templateInfo.hostProps;
-        let mode = '{';
-        for (let source in hostProps) {
-          let parts = [{ mode, source, dependencies: [source] }];
-          addBinding(this, templateInfo, nodeInfo, 'property', '_host_' + source, parts);
+        let hostProps = nestedTemplateInfo.hostProps;
+        if (fastDomIf && isDomIf) {
+          // `fastDomIf` mode uses runtime-template stamping to add accessors/
+          // effects to properties used in its template; as such we don't need to
+          // tax the host element with `_host_` bindings for the `dom-if`.
+          // However, in the event it is nested in a `dom-repeat`, it is still
+          // important that its host properties are added to the
+          // TemplateInstance's `hostProps` so that they are forwarded to the
+          // TemplateInstance.
+          if (hostProps) {
+            templateInfo.hostProps =
+              Object.assign(templateInfo.hostProps || {}, hostProps);
+            // Ensure the dom-if is noted so that it has a __dataHost, since
+            // `fastDomIf` uses the host for runtime template stamping; note this
+            // was already ensured above in the `removeNestedTemplates` case
+            if (!removeNestedTemplates) {
+              nodeInfo.parentInfo.noted = true;
+            }
+          }
+        } else {
+          let mode = '{';
+          for (let source in hostProps) {
+            let parts = [{ mode, source, dependencies: [source], hostProp: true }];
+            addBinding(this, templateInfo, nodeInfo, 'property', '_host_' + source, parts);
+          }
         }
         return noted;
       }
@@ -5342,7 +5883,7 @@
   });
 
   /**
-   * Helper api for enqueuing client dom created by a host element.
+   * Stack for enqueuing client dom created by a host element.
    *
    * By default elements are flushed via `_flushProperties` when
    * `connectedCallback` is called. Elements attach their client dom to
@@ -5364,42 +5905,7 @@
    *
    * @private
    */
-  class HostStack {
-    constructor() {
-      this.stack = [];
-    }
-
-    /**
-     * @param {*} inst Instance to add to hostStack
-     * @return {void}
-     */
-    registerHost(inst) {
-      if (this.stack.length) {
-        let host = this.stack[this.stack.length-1];
-        host._enqueueClient(inst);
-      }
-    }
-
-    /**
-     * @param {*} inst Instance to begin hosting
-     * @return {void}
-     */
-    beginHosting(inst) {
-      this.stack.push(inst);
-    }
-
-    /**
-     * @param {*} inst Instance to end hosting
-     * @return {void}
-     */
-    endHosting(inst) {
-      let stackLen = this.stack.length;
-      if (stackLen && this.stack[stackLen-1] == inst) {
-        this.stack.pop();
-      }
-    }
-  }
-  const hostStack = new HostStack();
+  const hostStack = [];
 
   /**
   @license
@@ -5433,8 +5939,8 @@
    * Creates a copy of `props` with each property normalized such that
    * upgraded it is an object with at least a type property { type: Type}.
    *
-   * @param {Object} props Properties to normalize
-   * @return {Object} Copy of input `props` with normalized properties that
+   * @param {!Object} props Properties to normalize
+   * @return {!Object} Copy of input `props` with normalized properties that
    * are in the form {type: Type}
    * @private
    */
@@ -5535,10 +6041,10 @@
       * @nocollapse
       */
      static get observedAttributes() {
-       if (!this.hasOwnProperty('__observedAttributes')) {
+       if (!this.hasOwnProperty(JSCompiler_renameProperty('__observedAttributes', this))) {
          register(this.prototype);
          const props = this._properties;
-         this.__observedAttributes = props ? Object.keys(props).map(p => this.attributeNameForProperty(p)) : [];
+         this.__observedAttributes = props ? Object.keys(props).map(p => this.prototype._addPropertyToAttributeMap(p)) : [];
        }
        return this.__observedAttributes;
      }
@@ -5671,7 +6177,7 @@
    * Current Polymer version in Semver notation.
    * @type {string} Semver notation of the current version of Polymer.
    */
-  const version = '3.3.0';
+  const version = '3.4.1';
 
   const builtCSS = window.ShadyCSS && window.ShadyCSS['cssBuild'];
 
@@ -5941,6 +6447,30 @@
       if (window.ShadyCSS) {
         window.ShadyCSS.prepareTemplate(template, is);
       }
+      // Support for `adoptedStylesheets` relies on using native Shadow DOM
+      // and built CSS. Built CSS is required because runtime transformation of
+      // `@apply` is not supported. This is because ShadyCSS relies on being able
+      // to update a `style` element in the element template and this is
+      // removed when using `adoptedStyleSheets`.
+      // Note, it would be more efficient to allow style includes to become
+      // separate stylesheets; however, because of `@apply` these are
+      // potentially not shareable and sharing the ones that could be shared
+      // would require some coordination. To keep it simple, all the includes
+      // and styles are collapsed into a single shareable stylesheet.
+      if (useAdoptedStyleSheetsWithBuiltCSS && builtCSS &&
+          supportsAdoptingStyleSheets) {
+        // Remove styles in template and make a shareable stylesheet
+        const styles = template.content.querySelectorAll('style');
+        if (styles) {
+          let css = '';
+          Array.from(styles).forEach(s => {
+            css += s.textContent;
+            s.parentNode.removeChild(s);
+          });
+          klass._styleSheet = new CSSStyleSheet();
+          klass._styleSheet.replaceSync(css);
+        }
+      }
     }
 
     /**
@@ -6058,9 +6588,13 @@
       /**
        * Returns the template that will be stamped into this element's shadow root.
        *
-       * If a `static get is()` getter is defined, the default implementation
-       * will return the first `<template>` in a `dom-module` whose `id`
-       * matches this element's `is`.
+       * If a `static get is()` getter is defined, the default implementation will
+       * return the first `<template>` in a `dom-module` whose `id` matches this
+       * element's `is` (note that a `_template` property on the class prototype
+       * takes precedence over the `dom-module` template, to maintain legacy
+       * element semantics; a subclass will subsequently fall back to its super
+       * class template if neither a `prototype._template` or a `dom-module` for
+       * the class's `is` was found).
        *
        * Users may override this getter to return an arbitrary template
        * (in which case the `is` getter is unnecessary). The template returned
@@ -6107,13 +6641,20 @@
         //     or set in registered(); once the static getter runs, a clone of it
         //     will overwrite it on the prototype as the working template.
         if (!this.hasOwnProperty(JSCompiler_renameProperty('_template', this))) {
+          const protoTemplate = this.prototype.hasOwnProperty(
+            JSCompiler_renameProperty('_template', this.prototype)) ?
+            this.prototype._template : undefined;
           this._template =
             // If user has put template on prototype (e.g. in legacy via registered
-            // callback or info object), prefer that first
-            this.prototype.hasOwnProperty(JSCompiler_renameProperty('_template', this.prototype)) ?
-            this.prototype._template :
+            // callback or info object), prefer that first. Note that `null` is
+            // used as a sentinel to indicate "no template" and can be used to
+            // override a super template, whereas `undefined` is used as a
+            // sentinel to mean "fall-back to default template lookup" via
+            // dom-module and/or super.template.
+            protoTemplate !== undefined ? protoTemplate :
             // Look in dom-module associated with this element's is
-            (getTemplateFromDomModule(/** @type {PolymerElementConstructor}*/ (this).is) ||
+            ((this.hasOwnProperty(JSCompiler_renameProperty('is', this)) &&
+            (getTemplateFromDomModule(/** @type {PolymerElementConstructor}*/ (this).is))) ||
             // Next look for superclass template (call the super impl this
             // way so that `this` points to the superclass)
             Object.getPrototypeOf(/** @type {PolymerElementConstructor}*/ (this).prototype).constructor.template);
@@ -6209,10 +6750,7 @@
         }
         for (let p in p$) {
           let info = p$[p];
-          // Don't set default value if there is already an own property, which
-          // happens when a `properties` property with default but no effects had
-          // a property set (e.g. bound) by its host before upgrade
-          if (!this.hasOwnProperty(p)) {
+          if (this._canApplyPropertyDefault(p)) {
             let value = typeof info.value == 'function' ?
               info.value.call(this) :
               info.value;
@@ -6225,6 +6763,18 @@
             }
           }
         }
+      }
+
+      /**
+       * Determines if a property dfeault can be applied. For example, this
+       * prevents a default from being applied when a property that has no
+       * accessor is overridden by its host before upgrade (e.g. via a binding).
+       * @override
+       * @param {string} property Name of the property
+       * @return {boolean} Returns true if the property default can be applied.
+       */
+      _canApplyPropertyDefault(property) {
+        return !this.hasOwnProperty(property);
       }
 
       /**
@@ -6338,9 +6888,14 @@
             if (!n.shadowRoot) {
               n.attachShadow({mode: 'open', shadyUpgradeFragment: dom});
               n.shadowRoot.appendChild(dom);
+              // When `adoptedStyleSheets` is supported a stylesheet is made
+              // available on the element constructor.
+              if (this.constructor._styleSheet) {
+                n.shadowRoot.adoptedStyleSheets = [this.constructor._styleSheet];
+              }
             }
             if (syncInitialRender && window.ShadyDOM) {
-              ShadyDOM.flushInitial(n.shadowRoot);
+              window.ShadyDOM.flushInitial(n.shadowRoot);
             }
             return n.shadowRoot;
           }
@@ -6446,7 +7001,15 @@
         // The warning is only enabled in `legacyOptimizations` mode, since
         // we don't want to spam existing users who might have adopted the
         // shorthand when attribute deserialization is not important.
-        if (legacyOptimizations && !(prop in this._properties)) {
+        if (legacyWarnings && !(prop in this._properties) &&
+            // Methods used in templates with no dependencies (or only literal
+            // dependencies) become accessors with template effects; ignore these
+            !(effect.info.part.signature && effect.info.part.signature.static) &&
+            // Warnings for bindings added to nested templates are handled by
+            // templatizer so ignore both the host-to-template bindings
+            // (`hostProp`) and TemplateInstance-to-child bindings
+            // (`nestedTemplate`)
+            !effect.info.part.hostProp && !templateInfo.nestedTemplate) {
           console.warn(`Property '${prop}' used in template but not declared in 'properties'; ` +
             `attribute will not be observed.`);
         }
@@ -6816,6 +7379,11 @@
       return;
     }
 
+    // ignore the click if the <a> element has the 'router-ignore' attribute
+    if (anchor.hasAttribute('router-ignore')) {
+      return;
+    }
+
     // ignore the click if the target URL is a fragment on the current page
     if (anchor.pathname === window.location.pathname && anchor.hash !== '') {
       return;
@@ -6829,7 +7397,8 @@
     }
 
     // if none of the above, convert the click into a navigation event
-    if (fireRouterEvent('go', {pathname: anchor.pathname})) {
+    const {pathname, search, hash} = anchor;
+    if (fireRouterEvent('go', {pathname, search, hash})) {
       event.preventDefault();
     }
   }
@@ -6841,7 +7410,7 @@
    * Only regular clicks on in-app links are translated (primary mouse button, no
    * modifier keys, the target href is within the app's URL space).
    *
-   * @memberOf Vaadin.Router.Triggers
+   * @memberOf Router.NavigationTrigger
    * @type {NavigationTrigger}
    */
   const CLICK = {
@@ -6873,14 +7442,15 @@
     if (event.state === 'vaadin-router-ignore') {
       return;
     }
-    fireRouterEvent('go', {pathname: window.location.pathname});
+    const {pathname, search, hash} = window.location;
+    fireRouterEvent('go', {pathname, search, hash});
   }
 
   /**
    * A navigation trigger for Vaadin Router that translates popstate events into
    * Vaadin Router navigation events.
    *
-   * @memberOf Vaadin.Router.Triggers
+   * @memberOf Router.NavigationTrigger
    * @type {NavigationTrigger}
    */
   const POPSTATE = {
@@ -6920,8 +7490,8 @@
     // Match Express-style parameters and un-named parameters with a prefix
     // and optional suffixes. Matches appear as:
     //
-    // "/:test(\\d+)?" => ["/", "test", "\d+", undefined, "?"]
-    // "/route(\\d+)"  => [undefined, undefined, undefined, "\d+", undefined]
+    // ":test(\\d+)?" => ["test", "\d+", undefined, "?"]
+    // "(\\d+)"  => [undefined, undefined, "\d+", undefined]
     '(?:\\:(\\w+)(?:\\(((?:\\\\.|[^\\\\()])+)\\))?|\\(((?:\\\\.|[^\\\\()])+)\\))([+*?])?'
   ].join('|'), 'g');
 
@@ -7195,11 +7765,12 @@
     options = options || {};
 
     var strict = options.strict;
+    var start = options.start !== false;
     var end = options.end !== false;
     var delimiter = escapeString(options.delimiter || DEFAULT_DELIMITER);
     var delimiters = options.delimiters || DEFAULT_DELIMITERS;
     var endsWith = [].concat(options.endsWith || []).map(escapeString).concat('$').join('|');
-    var route = '';
+    var route = start ? '^' : '';
     var isEndDelimited = tokens.length === 0;
 
     // Iterate over the tokens and create our regexp string.
@@ -7210,21 +7781,20 @@
         route += escapeString(token);
         isEndDelimited = i === tokens.length - 1 && delimiters.indexOf(token[token.length - 1]) > -1;
       } else {
-        var prefix = escapeString(token.prefix);
         var capture = token.repeat
-          ? '(?:' + token.pattern + ')(?:' + prefix + '(?:' + token.pattern + '))*'
+          ? '(?:' + token.pattern + ')(?:' + escapeString(token.delimiter) + '(?:' + token.pattern + '))*'
           : token.pattern;
 
         if (keys) keys.push(token);
 
         if (token.optional) {
           if (token.partial) {
-            route += prefix + '(' + capture + ')?';
+            route += escapeString(token.prefix) + '(' + capture + ')?';
           } else {
-            route += '(?:' + prefix + '(' + capture + '))?';
+            route += '(?:' + escapeString(token.prefix) + '(' + capture + '))?';
           }
         } else {
-          route += prefix + '(' + capture + ')';
+          route += escapeString(token.prefix) + '(' + capture + ')';
         }
       }
     }
@@ -7238,7 +7808,7 @@
       if (!isEndDelimited) route += '(?=' + delimiter + '|' + endsWith + ')';
     }
 
-    return new RegExp('^' + route, flags(options))
+    return new RegExp(route, flags(options))
   }
 
   /**
@@ -7511,24 +8081,27 @@
     return errorMessage;
   }
 
-  function addRouteToChain(context, match) {
+  function updateChainForRoute(context, match) {
     const {route, path} = match;
-    function shouldDiscardOldChain(oldChain, route) {
-      return !route.parent || !oldChain || !oldChain.length || oldChain[oldChain.length - 1].route !== route.parent;
-    }
 
     if (route && !route.__synthetic) {
       const item = {path, route};
-      if (shouldDiscardOldChain(context.chain, route)) {
-        context.chain = [item];
+      if (!context.chain) {
+        context.chain = [];
       } else {
-        context.chain.push(item);
+        // Discard old items
+        if (route.parent) {
+          let i = context.chain.length;
+          while (i-- && context.chain[i].route && context.chain[i].route !== route.parent) {
+            context.chain.pop();
+          }
+        }
       }
+      context.chain.push(item);
     }
   }
 
   /**
-   * @memberof Vaadin
    */
   class Resolver {
     constructor(routes, options = {}) {
@@ -7549,7 +8122,7 @@
      * routes to / from the returned array does not affect the routing config,
      * but modifying the route objects does.
      *
-     * @return {!Array<!Route>}
+     * @return {!Array<!Router.Route>}
      */
     getRoutes() {
       return [...this.root.__children];
@@ -7558,7 +8131,7 @@
     /**
      * Sets the routing config (replacing the existing one).
      *
-     * @param {!Array<!Route>|!Route} routes a single route or an array of those
+     * @param {!Array<!Router.Route>|!Router.Route} routes a single route or an array of those
      *    (the array is shallow copied)
      */
     setRoutes(routes) {
@@ -7571,9 +8144,9 @@
      * Appends one or several routes to the routing config and returns the
      * effective routing config after the operation.
      *
-     * @param {!Array<!Route>|!Route} routes a single route or an array of those
+     * @param {!Array<!Router.Route>|!Router.Route} routes a single route or an array of those
      *    (the array is shallow copied)
-     * @return {!Array<!Route>}
+     * @return {!Array<!Router.Route>}
      * @protected
      */
     addRoutes(routes) {
@@ -7638,8 +8211,14 @@
           return Promise.reject(getNotFoundError(context));
         }
 
-        addRouteToChain(context, matches.value);
-        currentContext = Object.assign({}, context, matches.value);
+        currentContext = Object.assign(
+          currentContext
+            ? {chain: (currentContext.chain ? currentContext.chain.slice(0) : [])}
+            : {},
+          context,
+          matches.value
+        );
+        updateChainForRoute(currentContext, matches.value);
 
         return Promise.resolve(resolve(currentContext)).then(resolution => {
           if (resolution !== null && resolution !== undefined && resolution !== notFoundResult) {
@@ -7896,11 +8475,13 @@
     return copy;
   }
 
-  function createLocation({pathname = '', chain = [], params = {}, redirectFrom, resolver}, route) {
+  function createLocation({pathname = '', search = '', hash = '', chain = [], params = {}, redirectFrom, resolver}, route) {
     const routes = chain.map(item => item.route);
     return {
       baseUrl: resolver && resolver.baseUrl || '',
       pathname,
+      search,
+      hash,
       routes,
       route: route || routes.length && routes[routes.length - 1] || null,
       params,
@@ -7925,8 +8506,7 @@
     };
   }
 
-  function renderComponent(context, component) {
-    const element = document.createElement(component);
+  function renderElement(context, element) {
     element.location = createLocation(context);
     const index = context.chain.map(item => item.route).indexOf(context.route);
     context.chain[index].element = element;
@@ -8007,23 +8587,22 @@
    *   keys are supported:
    *   * `baseUrl` — the initial value for [
    *     the `baseUrl` property
-   *   ](#/classes/Vaadin.Router#property-baseUrl)
+   *   ](#/classes/Router#property-baseUrl)
    *
    * The Router instance is automatically subscribed to navigation events
    * on `window`.
    *
-   * See [Live Examples](#/classes/Vaadin.Router/demos/demo/index.html) for the detailed usage demo and code snippets.
+   * See [Live Examples](#/classes/Router/demos/demo/index.html) for the detailed usage demo and code snippets.
    *
    * See also detailed API docs for the following methods, for the advanced usage:
    *
-   * * [setOutlet](#/classes/Vaadin.Router#method-setOutlet) – should be used to configure the outlet.
-   * * [setTriggers](#/classes/Vaadin.Router#method-setTriggers) – should be used to configure the navigation events.
-   * * [setRoutes](#/classes/Vaadin.Router#method-setRoutes) – should be used to configure the routes.
+   * * [setOutlet](#/classes/Router#method-setOutlet) – should be used to configure the outlet.
+   * * [setTriggers](#/classes/Router#method-setTriggers) – should be used to configure the navigation events.
+   * * [setRoutes](#/classes/Router#method-setRoutes) – should be used to configure the routes.
    *
    * Only `setRoutes` has to be called manually, others are automatically invoked when creating a new instance.
    *
-   * @memberof Vaadin
-   * @extends Vaadin.Resolver
+   * @extends Resolver
    * @demo demo/index.html
    * @summary JavaScript class that renders different DOM content depending on
    *    a given path. It can re-render when triggered or automatically on
@@ -8037,17 +8616,18 @@
      * Using a constructor argument or a setter for outlet is equivalent:
      *
      * ```
-     * const router = new Vaadin.Router();
+     * const router = new Router();
      * router.setOutlet(outlet);
      * ```
-     * @param {?Node} outlet
-     * @param {?RouterOptions} options
+     * @param {?Node=} outlet
+     * @param {?RouterOptions=} options
      */
     constructor(outlet, options) {
       const baseElement = document.head.querySelector('base');
+      const baseHref = baseElement && baseElement.getAttribute('href');
       super([], Object.assign({
         // Default options
-        baseUrl: baseElement && baseElement.getAttribute('href')
+        baseUrl: baseHref && Resolver.__createUrl(baseHref, document.URL).pathname.replace(/[^\/]*$/, '')
       }, options));
 
       this.resolveRoute = context => this.__resolveRoute(context);
@@ -8057,8 +8637,9 @@
 
       /**
        * The base URL for all routes in the router instance. By default,
-       * takes the `<base href>` attribute value if the base element exists
-       * in the `<head>`.
+       * if the base element exists in the `<head>`, vaadin-router
+       * takes the `<base href>` attribute value, resolves against current `document.URL`
+       * and gets the `pathname` from the result.
        *
        * @public
        * @type {string}
@@ -8071,7 +8652,7 @@
        * with the last render cycle result.
        *
        * @public
-       * @type {!Promise<!Vaadin.Router.Location>}
+       * @type {!Promise<!RouterLocation>}
        */
       this.ready;
       this.ready = Promise.resolve(outlet);
@@ -8079,11 +8660,11 @@
       /**
        * Contains read-only information about the current router location:
        * pathname, active routes, parameters. See the
-       * [Location type declaration](#/classes/Vaadin.Router.Location)
+       * [Location type declaration](#/classes/RouterLocation)
        * for more details.
        *
        * @public
-       * @type {!Vaadin.Router.Location}
+       * @type {!RouterLocation}
        */
       this.location;
       this.location = createLocation({resolver: this});
@@ -8092,6 +8673,9 @@
       this.__navigationEventHandler = this.__onNavigationEvent.bind(this);
       this.setOutlet(outlet);
       this.subscribe();
+      // Using WeakMap instead of WeakSet because WeakSet is not supported by IE11
+      this.__createdByRouter = new WeakMap();
+      this.__addedByRouter = new WeakMap();
     }
 
     __resolveRoute(context) {
@@ -8114,16 +8698,24 @@
 
       const commands = {
         redirect: path => createRedirect(context, path),
-        component: component => renderComponent(context, component)
+        component: (component) => {
+          const element = document.createElement(component);
+          this.__createdByRouter.set(element, true);
+          return element;
+        }
       };
 
       return callbacks
-        .then(() => runCallbackIfPossible(route.action, [context, commands], route))
+        .then(() => {
+          if (this.__isLatestRender(context)) {
+            return runCallbackIfPossible(route.action, [context, commands], route);
+          }
+        })
         .then(result => {
           if (isResultNotEmpty(result)) {
             // Actions like `() => import('my-view.js')` are not expected to
             // end the resolution, despite the result is not empty. Checking
-            // the result with a whitelist of values that end the resulution.
+            // the result with a whitelist of values that end the resolution.
             if (result instanceof HTMLElement ||
                 result.redirect ||
                 result === notFoundResult) {
@@ -8208,11 +8800,11 @@
      * a `commands.component(name)` result, a `commands.redirect(path)` result,
      * or a `context.next()` result, the current route resolution is finished,
      * and other route config properties are ignored.
-     * See also **Route Actions** section in [Live Examples](#/classes/Vaadin.Router/demos/demo/index.html).
+     * See also **Route Actions** section in [Live Examples](#/classes/Router/demos/demo/index.html).
      *
      * * `redirect` – other route's path to redirect to. Passes all route parameters to the redirect target.
      * The target route should also be defined.
-     * See also **Redirects** section in [Live Examples](#/classes/Vaadin.Router/demos/demo/index.html).
+     * See also **Redirects** section in [Live Examples](#/classes/Router/demos/demo/index.html).
      *
      * * `bundle` – string containing the path to `.js` or `.mjs` bundle to load before resolving the route,
      * or the object with "module" and "nomodule" keys referring to different bundles.
@@ -8220,7 +8812,7 @@
      * depending on whether the browser supports ES modules or not.
      * The property is ignored when either an `action` returns the result or `redirect` property is present.
      * Any error, e.g. 404 while loading bundle will cause route resolution to throw.
-     * See also **Code Splitting** section in [Live Examples](#/classes/Vaadin.Router/demos/demo/index.html).
+     * See also **Code Splitting** section in [Live Examples](#/classes/Router/demos/demo/index.html).
      *
      * * `component` – the tag name of the Web Component to resolve the route to.
      * The property is ignored when either an `action` returns the result or `redirect` property is present.
@@ -8229,7 +8821,7 @@
      * will be rendered as a light dom child of a parent component.
      *
      * * `name` – the string name of the route to use in the
-     * [`router.urlForName(name, params)`](#/classes/Vaadin.Router#method-urlForName)
+     * [`router.urlForName(name, params)`](#/classes/Router#method-urlForName)
      * navigation helper method.
      *
      * For any route function (`action`, `children`) defined, the corresponding `route` object is available inside the callback
@@ -8238,6 +8830,10 @@
      *
      * `context` object that is passed to `action` function holds the following properties:
      * * `context.pathname` – string with the pathname being resolved
+     *
+     * * `context.search` – search query string
+     *
+     * * `context.hash` – hash string
      *
      * * `context.params` – object with route parameters
      *
@@ -8253,14 +8849,23 @@
      * for the path specified.
      *
      * * `commands.component(component)` – function that creates a new HTMLElement
-     * with current context
+     * with current context. Note: the component created by this function is reused if visiting the same path twice in row.
      *
-     * @param {!Array<!Object>|!Object} routes a single route or an array of those
+     *
+     * @param {!Array<!Route>|!Route} routes a single route or an array of those
+     * @param {?boolean} skipRender configure the router but skip rendering the
+     *     route corresponding to the current `window.location` values
+     *
+     * @return {!Promise<!Node>}
      */
-    setRoutes(routes) {
+    setRoutes(routes, skipRender = false) {
+      this.__previousContext = undefined;
       this.__urlForName = undefined;
       super.setRoutes(routes);
-      this.__onNavigationEvent();
+      if (!skipRender) {
+        this.__onNavigationEvent();
+      }
+      return this.ready;
     }
 
     /**
@@ -8276,17 +8881,31 @@
      * If another render pass is started before the previous one is completed, the
      * result of the previous render pass is ignored.
      *
-     * @param {!string|!{pathname: !string}} pathnameOrContext the pathname to
-     *    render or a context object with a `pathname` property and other
-     *    properties to pass to the resolver.
+     * @param {!string|!{pathname: !string, search: ?string, hash: ?string}} pathnameOrContext
+     *    the pathname to render or a context object with a `pathname` property,
+     *    optional `search` and `hash` properties, and other properties
+     *    to pass to the resolver.
+     * @param {boolean=} shouldUpdateHistory
+     *    update browser history with the rendered location
      * @return {!Promise<!Node>}
      */
     render(pathnameOrContext, shouldUpdateHistory) {
       const renderId = ++this.__lastStartedRenderId;
-      const pathname = pathnameOrContext.pathname || pathnameOrContext;
+      const context = Object.assign(
+        {
+          search: '',
+          hash: ''
+        },
+        isString(pathnameOrContext)
+          ? {pathname: pathnameOrContext}
+          : pathnameOrContext,
+        {
+          __renderId: renderId
+        }
+      );
 
       // Find the first route that resolves to a non-empty result
-      this.ready = this.resolve(pathnameOrContext)
+      this.ready = this.resolve(context)
 
         // Process the result of this.resolve() and handle all special commands:
         // (redirect / prevent / component). If the result is a 'component',
@@ -8295,19 +8914,32 @@
         .then(context => this.__fullyResolveChain(context))
 
         .then(context => {
-          if (renderId === this.__lastStartedRenderId) {
+          if (this.__isLatestRender(context)) {
             const previousContext = this.__previousContext;
 
             // Check if the render was prevented and make an early return in that case
             if (context === previousContext) {
+              // Replace the history with the previous context
+              // to make sure the URL stays the same.
+              this.__updateBrowserHistory(previousContext, true);
               return this.location;
             }
 
             this.location = createLocation(context);
-            fireRouterEvent('location-changed', {router: this, location: this.location});
 
             if (shouldUpdateHistory) {
-              this.__updateBrowserHistory(context.pathname, context.redirectFrom);
+              // Replace only if first render redirects, so that we don’t leave
+              // the redirecting record in the history
+              this.__updateBrowserHistory(context, renderId === 1);
+            }
+
+            fireRouterEvent('location-changed', {router: this, location: this.location});
+
+            // Skip detaching/re-attaching there are no render changes
+            if (context.__skipAttach) {
+              this.__copyUnchangedElements(context, previousContext);
+              this.__previousContext = context;
+              return this.location;
             }
 
             this.__addAppearingContent(context, previousContext);
@@ -8317,7 +8949,7 @@
             this.__runOnAfterLeaveCallbacks(context, previousContext);
 
             return animationDone.then(() => {
-              if (renderId === this.__lastStartedRenderId) {
+              if (this.__isLatestRender(context)) {
                 // If there is another render pass started after this one,
                 // the 'disappearing content' would be removed when the other
                 // render pass calls `this.__addAppearingContent()`
@@ -8332,46 +8964,86 @@
         .catch(error => {
           if (renderId === this.__lastStartedRenderId) {
             if (shouldUpdateHistory) {
-              this.__updateBrowserHistory(pathname);
+              this.__updateBrowserHistory(context);
             }
             removeDomNodes(this.__outlet && this.__outlet.children);
-            this.location = createLocation({pathname, resolver: this});
-            fireRouterEvent('error', {router: this, error, pathname});
+            this.location = createLocation(Object.assign(context, {resolver: this}));
+            fireRouterEvent('error', Object.assign({router: this, error}, context));
             throw error;
           }
         });
       return this.ready;
     }
 
-    __fullyResolveChain(originalContext, currentContext = originalContext) {
-      return this.__amendWithResolutionResult(currentContext)
-        .then(amendedContext => {
-          const initialContext = amendedContext !== currentContext ? amendedContext : originalContext;
-          return amendedContext.next()
-            .then(nextContext => {
+    // `topOfTheChainContextBeforeRedirects` is a context coming from Resolver.resolve().
+    // It would contain a 'redirect' route or the first 'component' route that
+    // matched the pathname. There might be more child 'component' routes to be
+    // resolved and added into the chain. This method would find and add them.
+    // `contextBeforeRedirects` is the context containing such a child component
+    // route. It's only necessary when this method is called recursively (otherwise
+    // it's the same as the 'top of the chain' context).
+    //
+    // Apart from building the chain of child components, this method would also
+    // handle 'redirect' routes, call 'onBefore' callbacks and handle 'prevent'
+    // and 'redirect' callback results.
+    __fullyResolveChain(topOfTheChainContextBeforeRedirects,
+      contextBeforeRedirects = topOfTheChainContextBeforeRedirects) {
+      return this.__findComponentContextAfterAllRedirects(contextBeforeRedirects)
+        // `contextAfterRedirects` is always a context with an `HTMLElement` result
+        // In other cases the promise gets rejected and .then() is not called
+        .then(contextAfterRedirects => {
+          const redirectsHappened = contextAfterRedirects !== contextBeforeRedirects;
+          const topOfTheChainContextAfterRedirects =
+            redirectsHappened ? contextAfterRedirects : topOfTheChainContextBeforeRedirects;
+
+          const matchedPath = getPathnameForRouter(
+            getMatchedPath(contextAfterRedirects.chain),
+            contextAfterRedirects.resolver
+          );
+          const isFound = (matchedPath === contextAfterRedirects.pathname);
+
+          // Recursive method to try matching more child and sibling routes
+          const findNextContextIfAny = (context, parent = context.route, prevResult) => {
+            return context.next(undefined, parent, prevResult).then(nextContext => {
               if (nextContext === null || nextContext === notFoundResult) {
-                const matchedPath = getPathnameForRouter(
-                  getMatchedPath(amendedContext.chain),
-                  amendedContext.resolver
-                );
-                if (matchedPath !== amendedContext.pathname) {
-                  throw getNotFoundError(initialContext);
+                // Next context is not found in children, ...
+                if (isFound) {
+                  // ...but original context is already fully matching - use it
+                  return context;
+                } else if (parent.parent !== null) {
+                  // ...and there is no full match yet - step up to check siblings
+                  return findNextContextIfAny(context, parent.parent, nextContext);
+                } else {
+                  return nextContext;
                 }
               }
-              return nextContext && nextContext !== notFoundResult
-                ? this.__fullyResolveChain(initialContext, nextContext)
-                : this.__amendWithOnBeforeCallbacks(initialContext);
+
+              return nextContext;
             });
+          };
+
+          return findNextContextIfAny(contextAfterRedirects).then(nextContext => {
+            if (nextContext === null || nextContext === notFoundResult) {
+              throw getNotFoundError(topOfTheChainContextAfterRedirects);
+            }
+
+            return nextContext
+            && nextContext !== notFoundResult
+            && nextContext !== contextAfterRedirects
+              ? this.__fullyResolveChain(topOfTheChainContextAfterRedirects, nextContext)
+              : this.__amendWithOnBeforeCallbacks(contextAfterRedirects);
+          });
         });
     }
 
-    __amendWithResolutionResult(context) {
+    __findComponentContextAfterAllRedirects(context) {
       const result = context.result;
       if (result instanceof HTMLElement) {
+        renderElement(context, result);
         return Promise.resolve(context);
       } else if (result.redirect) {
-        return this.__redirect(result.redirect, context.__redirectCount)
-          .then(context => this.__amendWithResolutionResult(context));
+        return this.__redirect(result.redirect, context.__redirectCount, context.__renderId)
+          .then(context => this.__findComponentContextAfterAllRedirects(context));
       } else if (result instanceof Error) {
         return Promise.reject(result);
       } else {
@@ -8405,48 +9077,108 @@
       const redirect = (pathname) => createRedirect(newContext, pathname);
 
       newContext.__divergedChainIndex = 0;
+      newContext.__skipAttach = false;
       if (previousChain.length) {
         for (let i = 0; i < Math.min(previousChain.length, newChain.length); i = ++newContext.__divergedChainIndex) {
           if (previousChain[i].route !== newChain[i].route
-            || previousChain[i].path !== newChain[i].path
-            || (previousChain[i].element && previousChain[i].element.localName)
-              !== (newChain[i].element && newChain[i].element.localName)
-          ) {
+            || previousChain[i].path !== newChain[i].path && previousChain[i].element !== newChain[i].element
+            || !this.__isReusableElement(previousChain[i].element, newChain[i].element)) {
             break;
           }
         }
 
-        for (let i = previousChain.length - 1; i >= newContext.__divergedChainIndex; i--) {
-          const location = createLocation(newContext);
-          callbacks = callbacks
-            .then(amend('onBeforeLeave', [location, {prevent}, this], previousChain[i].element))
-            .then(result => {
-              if (!(result || {}).redirect) {
-                return result;
-              }
-            });
+        // Skip re-attaching and notifications if element and chain do not change
+        newContext.__skipAttach =
+          // Same route chain
+          newChain.length === previousChain.length && newContext.__divergedChainIndex == newChain.length &&
+          // Same element
+          this.__isReusableElement(newContext.result, previousContext.result);
+
+        if (newContext.__skipAttach) {
+          // execute onBeforeLeave for changed segment element when skipping attach
+          for (let i = newChain.length - 1; i >= 0; i--) {
+            callbacks = this.__runOnBeforeLeaveCallbacks(callbacks, newContext, {prevent}, previousChain[i]);
+          }
+          // execute onBeforeEnter for changed segment element when skipping attach
+          for (let i = 0; i < newChain.length; i++) {
+            callbacks = this.__runOnBeforeEnterCallbacks(callbacks, newContext, {prevent, redirect}, newChain[i]);
+            previousChain[i].element.location = createLocation(newContext, previousChain[i].route);
+          }
+
+        } else {
+          // execute onBeforeLeave when NOT skipping attach
+          for (let i = previousChain.length - 1; i >= newContext.__divergedChainIndex; i--) {
+            callbacks = this.__runOnBeforeLeaveCallbacks(callbacks, newContext, {prevent}, previousChain[i]);
+          }
         }
       }
-
-      for (let i = newContext.__divergedChainIndex; i < newChain.length; i++) {
-        const location = createLocation(newContext, newChain[i].route);
-        callbacks = callbacks.then(amend('onBeforeEnter', [location, {prevent, redirect}, this], newChain[i].element));
+      // execute onBeforeEnter when NOT skipping attach
+      if (!newContext.__skipAttach) {
+        for (let i = 0; i < newChain.length; i++) {
+          if (i < newContext.__divergedChainIndex) {
+            if (i < previousChain.length && previousChain[i].element) {
+              previousChain[i].element.location = createLocation(newContext, previousChain[i].route);
+            }
+          } else {
+            callbacks = this.__runOnBeforeEnterCallbacks(callbacks, newContext, {prevent, redirect}, newChain[i]);
+            if (newChain[i].element) {
+              newChain[i].element.location = createLocation(newContext, newChain[i].route);
+            }
+          }
+        }
       }
-
       return callbacks.then(amendmentResult => {
         if (amendmentResult) {
           if (amendmentResult.cancel) {
+            this.__previousContext.__renderId = newContext.__renderId;
             return this.__previousContext;
           }
           if (amendmentResult.redirect) {
-            return this.__redirect(amendmentResult.redirect, newContext.__redirectCount);
+            return this.__redirect(amendmentResult.redirect, newContext.__redirectCount, newContext.__renderId);
           }
         }
         return newContext;
       });
     }
 
-    __redirect(redirectData, counter) {
+    __runOnBeforeLeaveCallbacks(callbacks, newContext, commands, chainElement) {
+      const location = createLocation(newContext);
+      return callbacks.then(result => {
+        if (this.__isLatestRender(newContext)) {
+          const afterLeaveFunction = amend('onBeforeLeave', [location, commands, this], chainElement.element);
+          return afterLeaveFunction(result);
+        }
+      }).then(result => {
+        if (!(result || {}).redirect) {
+          return result;
+        }
+      });
+    }
+
+    __runOnBeforeEnterCallbacks(callbacks, newContext, commands, chainElement) {
+      const location = createLocation(newContext, chainElement.route);
+      return callbacks.then(result => {
+        if (this.__isLatestRender(newContext)) {
+          const beforeEnterFunction = amend('onBeforeEnter', [location, commands, this], chainElement.element);
+          return beforeEnterFunction(result);
+        }
+      });
+    }
+
+    __isReusableElement(element, otherElement) {
+      if (element && otherElement) {
+        return this.__createdByRouter.get(element) && this.__createdByRouter.get(otherElement)
+          ? element.localName === otherElement.localName
+          : element === otherElement;
+      }
+      return false;
+    }
+
+    __isLatestRender(context) {
+      return context.__renderId === this.__lastStartedRenderId;
+    }
+
+    __redirect(redirectData, counter, renderId) {
       if (counter > MAX_REDIRECT_COUNT) {
         throw new Error(log(`Too many redirects when rendering ${redirectData.from}`));
       }
@@ -8457,7 +9189,8 @@
           redirectData.params
         ),
         redirectFrom: redirectData.from,
-        __redirectCount: (counter || 0) + 1
+        __redirectCount: (counter || 0) + 1,
+        __renderId: renderId
       });
     }
 
@@ -8467,21 +9200,18 @@
       }
     }
 
-    __updateBrowserHistory(pathname, replace) {
-      if (window.location.pathname !== pathname) {
+    __updateBrowserHistory({pathname, search = '', hash = ''}, replace) {
+      if (window.location.pathname !== pathname
+          || window.location.search !== search
+          || window.location.hash !== hash
+      ) {
         const changeState = replace ? 'replaceState' : 'pushState';
-        window.history[changeState](null, document.title, pathname);
+        window.history[changeState](null, document.title, pathname + search + hash);
         window.dispatchEvent(new PopStateEvent('popstate', {state: 'vaadin-router-ignore'}));
       }
     }
 
-    __addAppearingContent(context, previousContext) {
-      this.__ensureOutlet();
-
-      // If the previous 'entering' animation has not completed yet,
-      // stop it and remove that content from the DOM before adding new one.
-      this.__removeAppearingContent();
-
+    __copyUnchangedElements(context, previousContext) {
       // Find the deepest common parent between the last and the new component
       // chains. Update references for the unchanged elements in the new chain
       let deepestCommonParent = this.__outlet;
@@ -8496,12 +9226,30 @@
           }
         }
       }
+      return deepestCommonParent;
+    }
+
+    __addAppearingContent(context, previousContext) {
+      this.__ensureOutlet();
+
+      // If the previous 'entering' animation has not completed yet,
+      // stop it and remove that content from the DOM before adding new one.
+      this.__removeAppearingContent();
+
+      // Copy reusable elements from the previousContext to current
+      const deepestCommonParent = this.__copyUnchangedElements(context, previousContext);
 
       // Keep two lists of DOM elements:
       //  - those that should be removed once the transition animation is over
       //  - and those that should remain
-      this.__disappearingContent = Array.from(deepestCommonParent.children);
       this.__appearingContent = [];
+      this.__disappearingContent = Array
+        .from(deepestCommonParent.children)
+        .filter(
+          // Only remove layout content that was added by router
+          e => this.__addedByRouter.get(e) &&
+          // Do not remove the result element to avoid flickering
+          e !== context.result);
 
       // Add new elements (starting after the deepest common parent) to the DOM.
       // That way only the components that are actually different between the two
@@ -8512,6 +9260,7 @@
         const elementToAdd = context.chain[i].element;
         if (elementToAdd) {
           parentElement.appendChild(elementToAdd);
+          this.__addedByRouter.set(elementToAdd, true);
           if (parentElement === deepestCommonParent) {
             this.__appearingContent.push(elementToAdd);
           }
@@ -8543,6 +9292,9 @@
 
       // REVERSE iteration: from Z to A
       for (let i = targetContext.chain.length - 1; i >= currentContext.__divergedChainIndex; i--) {
+        if (!this.__isLatestRender(currentContext)) {
+          break;
+        }
         const currentComponent = targetContext.chain[i].element;
         if (!currentComponent) {
           continue;
@@ -8554,7 +9306,9 @@
             [location, {}, targetContext.resolver],
             currentComponent);
         } finally {
-          removeDomNodes(currentComponent.children);
+          if (this.__disappearingContent.indexOf(currentComponent) > -1) {
+            removeDomNodes(currentComponent.children);
+          }
         }
       }
     }
@@ -8562,6 +9316,9 @@
     __runOnAfterEnterCallbacks(currentContext) {
       // forward iteration: from A to Z
       for (let i = currentContext.__divergedChainIndex; i < currentContext.chain.length; i++) {
+        if (!this.__isLatestRender(currentContext)) {
+          break;
+        }
         const currentComponent = currentContext.chain[i].element || {};
         const location = createLocation(currentContext, currentContext.chain[i].route);
         runCallbackIfPossible(
@@ -8614,17 +9371,17 @@
     }
 
     __onNavigationEvent(event) {
-      const pathname = event ? event.detail.pathname : window.location.pathname;
+      const {pathname, search, hash} = event ? event.detail : window.location;
       if (isString(this.__normalizePathname(pathname))) {
         if (event && event.preventDefault) {
           event.preventDefault();
         }
-        this.render(pathname, true);
+        this.render({pathname, search, hash}, true);
       }
     }
 
     /**
-     * Configures what triggers Vaadin.Router navigation events:
+     * Configures what triggers Router navigation events:
      *  - `POPSTATE`: popstate events on the current `window`
      *  - `CLICK`: click events on `<a>` links leading to the current page
      *
@@ -8635,7 +9392,7 @@
      * create the own one and only import the triggers you need, instead of pulling in all the code,
      * e.g. if you want to handle `click` differently.
      *
-     * See also **Navigation Triggers** section in [Live Examples](#/classes/Vaadin.Router/demos/demo/index.html).
+     * See also **Navigation Triggers** section in [Live Examples](#/classes/Router/demos/demo/index.html).
      *
      * @param {...NavigationTrigger} triggers
      */
@@ -8647,7 +9404,7 @@
      * Generates a URL for the route with the given name, optionally performing
      * substitution of parameters.
      *
-     * The route is searched in all the Vaadin.Router instances subscribed to
+     * The route is searched in all the Router instances subscribed to
      * navigation events.
      *
      * **Note:** For child route names, only array children are considered.
@@ -8656,7 +9413,7 @@
      *
      * @function urlForName
      * @param {!string} name the route name or the route’s `component` name.
-     * @param {?Object} params Optional object with route path parameters.
+     * @param {Params=} params Optional object with route path parameters.
      * Named parameters are passed by name (`params[name] = value`), unnamed
      * parameters are passed by index (`params[index] = value`).
      *
@@ -8677,7 +9434,7 @@
      * substitution of parameters.
      *
      * @param {!string} path string route path declared in [express.js syntax](https://expressjs.com/en/guide/routing.html#route-paths").
-     * @param {?Object} params Optional object with route path parameters.
+     * @param {Params=} params Optional object with route path parameters.
      * Named parameters are passed by name (`params[name] = value`), unnamed
      * parameters are passed by index (`params[index] = value`).
      *
@@ -8692,15 +9449,20 @@
 
     /**
      * Triggers navigation to a new path. Returns a boolean without waiting until
-     * the navigation is complete. Returns `true` if at least one `Vaadin.Router`
+     * the navigation is complete. Returns `true` if at least one `Router`
      * has handled the navigation (was subscribed and had `baseUrl` matching
-     * the `pathname` argument), otherwise returns `false`.
+     * the `path` argument), otherwise returns `false`.
      *
-     * @param {!string} pathname a new in-app path
+     * @param {!string|!{pathname: !string, search: (string|undefined), hash: (string|undefined)}} path
+     *   a new in-app path string, or an URL-like object with `pathname`
+     *   string property, and optional `search` and `hash` string properties.
      * @return {boolean}
      */
-    static go(pathname) {
-      return fireRouterEvent('go', {pathname});
+    static go(path) {
+      const {pathname, search, hash} = isString(path)
+        ? this.__createUrl(path, 'http://a') // some base to omit origin
+        : path;
+      return fireRouterEvent('go', {pathname, search, hash});
     }
   }
 
@@ -8962,6 +9724,10 @@
       value: function getUsedVaadinElements(elements) {
         var version = getPolymerVersion();
         var elementClasses = void 0;
+        // NOTE: In case you edit the code here, YOU MUST UPDATE any statistics reporting code in Flow.
+        // Check all locations calling the method getEntries() in
+        // https://github.com/vaadin/flow/blob/master/flow-server/src/main/java/com/vaadin/flow/internal/UsageStatistics.java#L106
+        // Currently it is only used by BootstrapHandler.
         if (version && version.indexOf('2') === 0) {
           // Polymer 2: components classes are stored in window.Vaadin
           elementClasses = Object.keys(window.Vaadin).map(function (c) {
@@ -9005,7 +9771,7 @@
           try {
             var version = detector();
             if (version) {
-              frameworks[framework] = { "version": version };
+              frameworks[framework] = { version: version };
             }
           } catch (e) {}
         });
@@ -9035,9 +9801,9 @@
           var keys = Object.keys(gatheredStats[type]);
           keys.forEach(function (key) {
             if (!storedStats[type][key] || _typeof(storedStats[type][key]) != _typeof({})) {
-              storedStats[type][key] = { "firstUsed": now };
+              storedStats[type][key] = { firstUsed: now };
             }
-            // Discards any previously logged version numebr
+            // Discards any previously logged version number
             storedStats[type][key].version = gatheredStats[type][key].version;
             storedStats[type][key].lastUsed = now;
           });
@@ -9193,7 +9959,7 @@
     }, {
       key: 'lottery',
       value: function lottery() {
-        return Math.random() <= 0.05;
+        return true;
       }
     }, {
       key: 'currentMonth',
@@ -9251,7 +10017,7 @@
     }], [{
       key: 'version',
       get: function get$1() {
-        return '2.0.1';
+        return '2.1.0';
       }
     }, {
       key: 'firstUseKey',
@@ -9296,7 +10062,7 @@
 
   window.Vaadin.registrations.push({
     is: '@vaadin/router',
-    version: '1.2.0',
+    version: '1.7.2',
   });
 
   usageStatistics();
@@ -9305,7 +10071,7 @@
 
   class Lumo extends HTMLElement {
     static get version() {
-      return '1.5.0';
+      return '1.6.0';
     }
   }
 
@@ -10170,6 +10936,14 @@
       strong {
         font-weight: 600;
       }
+
+      /* RTL specific styles */
+
+      blockquote[dir="rtl"] {
+        border-left: none;
+        border-right: 2px solid var(--lumo-contrast-30pct);
+      }
+
     </style>
   </template>
 </dom-module>`;
@@ -10179,16 +10953,34 @@
   const $_documentContainer$3 = html`<dom-module id="lumo-app-layout" theme-for="vaadin-app-layout">
   <template>
     <style>
-      [part="navbar"] {
+      [part="navbar"]::before {
         background: var(--lumo-base-color) linear-gradient(var(--lumo-contrast-5pct), var(--lumo-contrast-5pct));
       }
 
-      :host(:not([overlay])) [part="drawer"] {
+      :host(:not([dir='rtl']):not([overlay])) [part='drawer'] {
         border-right: 1px solid var(--lumo-contrast-10pct);
       }
 
-      :host([overlay]) [part="drawer"] {
+      :host([dir='rtl']:not([overlay])) [part='drawer'] {
+        border-left: 1px solid var(--lumo-contrast-10pct);
+      }
+
+      :host([overlay]) [part="drawer"]::before {
         background: var(--lumo-base-color);
+      }
+
+      [part="navbar"]::before,
+      :host([overlay]) [part="drawer"]::before {
+        position: absolute;
+        content: "";
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+      }
+
+      :host([overlay]) [part='drawer']::before {
+        background: var(--lumo-base-color);
+        height: var(--_vaadin-app-layout-drawer-scroll-size, 100%);
       }
 
       [part="backdrop"] {
@@ -10203,17 +10995,23 @@
         margin-bottom: var(--lumo-space-xs) !important;
       }
 
-      @supports (-webkit-backdrop-filter: blur(1px)) {
+      @supports (-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px)) {
+        [part="navbar"]::before {
+          opacity: 0.8;
+        }
+
         [part="navbar"] {
-          /* TODO(jouni): should use a Lumo color, but we don’t have a suitable one */
-          background: rgba(255, 255, 255, 0.8) linear-gradient(var(--lumo-contrast-5pct), var(--lumo-contrast-5pct));
           -webkit-backdrop-filter: blur(24px);
+          backdrop-filter: blur(24px);
+        }
+
+        :host([overlay]) [part="drawer"]::before {
+          opacity: 0.9;
         }
 
         :host([overlay]) [part="drawer"] {
-          /* TODO(jouni): should use a Lumo color, but we don’t have a suitable one */
-          background: rgba(255, 255, 255, 0.9);
           -webkit-backdrop-filter: blur(24px);
+          backdrop-filter: blur(24px);
         }
       }
     </style>
@@ -10370,7 +11168,18 @@
       return {
         /**
          * Helper property with theme attribute value facilitating propagation
-         * in shadow DOM. Allows using `theme$="[[theme]]"` in the template.
+         * in shadow DOM.
+         *
+         * Enables the component implementation to propagate the `theme`
+         * attribute value to the subcomponents in Shadow DOM by binding
+         * the subcomponent’s "theme" attribute to the `theme` property of
+         * the host.
+         *
+         * **NOTE:** Extending the mixin only provides the property for binding,
+         * and does not make the propagation alone.
+         *
+         * See [Theme Attribute and Subcomponents](https://github.com/vaadin/vaadin-themable-mixin/wiki/5.-Theme-Attribute-and-Subcomponents).
+         * page for more information.
          *
          * @protected
          */
@@ -10393,6 +11202,7 @@
 
   /**
    * @polymerMixin
+   * @mixes ThemePropertyMixin
    */
   const ThemableMixin = superClass => class VaadinThemableMixin extends ThemePropertyMixin(superClass) {
 
@@ -10414,7 +11224,7 @@
       this._includeMatchingThemes(template);
     }
 
-    /** @protected */
+    /** @private */
     static _includeMatchingThemes(template) {
       const domModule = DomModule;
       const modules = domModule.prototype.modules;
@@ -10661,6 +11471,218 @@
       }
       debouncers = flushDebouncers();
     } while (shadyDOM || debouncers);
+  };
+
+  /**
+  @license
+  Copyright (c) 2020 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * Helper that provides a set of functions for RTL.
+   */
+  class DirHelper {
+    /**
+     * Get the scroll type in the current browser view.
+     *
+     * @return {string} the scroll type. Possible values are `default|reverse|negative`
+     */
+    static detectScrollType() {
+      const dummy = document.createElement('div');
+      dummy.textContent = 'ABCD';
+      dummy.dir = 'rtl';
+      dummy.style.fontSize = '14px';
+      dummy.style.width = '4px';
+      dummy.style.height = '1px';
+      dummy.style.position = 'absolute';
+      dummy.style.top = '-1000px';
+      dummy.style.overflow = 'scroll';
+      document.body.appendChild(dummy);
+
+      let cachedType = 'reverse';
+      if (dummy.scrollLeft > 0) {
+        cachedType = 'default';
+      } else {
+        dummy.scrollLeft = 1;
+        if (dummy.scrollLeft === 0) {
+          cachedType = 'negative';
+        }
+      }
+      document.body.removeChild(dummy);
+      return cachedType;
+    }
+
+    /**
+     * Get the scrollLeft value of the element relative to the direction
+     *
+     * @param {string} scrollType type of the scroll detected with `detectScrollType`
+     * @param {string} direction current direction of the element
+     * @param {Element} element
+     * @return {number} the scrollLeft value.
+    */
+    static getNormalizedScrollLeft(scrollType, direction, element) {
+      const {scrollLeft} = element;
+      if (direction !== 'rtl' || !scrollType) {
+        return scrollLeft;
+      }
+
+      switch (scrollType) {
+        case 'negative':
+          return element.scrollWidth - element.clientWidth + scrollLeft;
+        case 'reverse':
+          return element.scrollWidth - element.clientWidth - scrollLeft;
+      }
+      return scrollLeft;
+    }
+
+    /**
+     * Set the scrollLeft value of the element relative to the direction
+     *
+     * @param {string} scrollType type of the scroll detected with `detectScrollType`
+     * @param {string} direction current direction of the element
+     * @param {Element} element
+     * @param {number} scrollLeft the scrollLeft value to be set
+     */
+    static setNormalizedScrollLeft(scrollType, direction, element, scrollLeft) {
+      if (direction !== 'rtl' || !scrollType) {
+        element.scrollLeft = scrollLeft;
+        return;
+      }
+
+      switch (scrollType) {
+        case 'negative':
+          element.scrollLeft = element.clientWidth - element.scrollWidth + scrollLeft;
+          break;
+        case 'reverse':
+          element.scrollLeft = element.scrollWidth - element.clientWidth - scrollLeft;
+          break;
+        default:
+          element.scrollLeft = scrollLeft;
+          break;
+      }
+    }
+  }
+
+  /**
+   * Array of Vaadin custom element classes that have been subscribed to the dir changes.
+   */
+  const directionSubscribers = [];
+  const directionUpdater = function() {
+    const documentDir = getDocumentDir();
+    directionSubscribers.forEach(element => {
+      alignDirs(element, documentDir);
+    });
+  };
+
+  let scrollType;
+
+  const directionObserver = new MutationObserver(directionUpdater);
+  directionObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['dir']});
+
+  const alignDirs = function(element, documentDir) {
+    if (documentDir) {
+      element.setAttribute('dir', documentDir);
+    } else {
+      element.removeAttribute('dir');
+    }
+  };
+
+  const getDocumentDir = function() {
+    return document.documentElement.getAttribute('dir');
+  };
+
+  /**
+   * @polymerMixin
+   */
+  const DirMixin = superClass => class VaadinDirMixin extends superClass {
+    static get properties() {
+      return {
+        /**
+         * @protected
+         */
+        dir: {
+          type: String,
+          readOnly: true
+        }
+      };
+    }
+
+    /** @protected */
+    static finalize() {
+      super.finalize();
+
+      if (!scrollType) {
+        scrollType = DirHelper.detectScrollType();
+      }
+    }
+
+    /** @protected */
+    connectedCallback() {
+      super.connectedCallback();
+
+      if (!this.hasAttribute('dir')) {
+        this.__subscribe();
+        alignDirs(this, getDocumentDir());
+      }
+    }
+
+    /** @protected */
+    attributeChangedCallback(name, oldValue, newValue) {
+      super.attributeChangedCallback(name, oldValue, newValue);
+      if (name !== 'dir') {
+        return;
+      }
+
+      // New value equals to the document direction and the element is not subscribed to the changes
+      const newValueEqlDocDir = newValue === getDocumentDir() && directionSubscribers.indexOf(this) === -1;
+      // Value was emptied and the element is not subscribed to the changes
+      const newValueEmptied = !newValue && oldValue && directionSubscribers.indexOf(this) === -1;
+      // New value is different and the old equals to document direction and the element is not subscribed to the changes
+      const newDiffValue = newValue !== getDocumentDir() && oldValue === getDocumentDir();
+
+      if (newValueEqlDocDir || newValueEmptied) {
+        this.__subscribe();
+        alignDirs(this, getDocumentDir());
+      } else if (newDiffValue) {
+        this.__subscribe(false);
+      }
+    }
+
+    /** @protected */
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.__subscribe(false);
+      this.removeAttribute('dir');
+    }
+
+    /** @private */
+    __subscribe(push = true) {
+      if (push) {
+        directionSubscribers.indexOf(this) === -1 &&
+          directionSubscribers.push(this);
+      } else {
+        directionSubscribers.indexOf(this) > -1 &&
+          directionSubscribers.splice(directionSubscribers.indexOf(this), 1);
+      }
+    }
+
+    /**
+     * @param {Element} element
+     * @return {number}
+     * @protected
+     */
+    __getNormalizedScrollLeft(element) {
+      return DirHelper.getNormalizedScrollLeft(scrollType, this.getAttribute('dir') || 'ltr', element);
+    }
+
+    /**
+     * @param {Element} element
+     * @param {number} scrollLeft
+     * @protected
+     */
+    __setNormalizedScrollLeft(element, scrollLeft) {
+      return DirHelper.setNormalizedScrollLeft(scrollType, this.getAttribute('dir') || 'ltr', element, scrollLeft);
+    }
   };
 
   const DEV_MODE_CODE_REGEXP$1 =
@@ -10921,6 +11943,10 @@
       value: function getUsedVaadinElements(elements) {
         var version = getPolymerVersion();
         var elementClasses = void 0;
+        // NOTE: In case you edit the code here, YOU MUST UPDATE any statistics reporting code in Flow.
+        // Check all locations calling the method getEntries() in
+        // https://github.com/vaadin/flow/blob/master/flow-server/src/main/java/com/vaadin/flow/internal/UsageStatistics.java#L106
+        // Currently it is only used by BootstrapHandler.
         if (version && version.indexOf('2') === 0) {
           // Polymer 2: components classes are stored in window.Vaadin
           elementClasses = Object.keys(window.Vaadin).map(function (c) {
@@ -10964,7 +11990,7 @@
           try {
             var version = detector();
             if (version) {
-              frameworks[framework] = { "version": version };
+              frameworks[framework] = { version: version };
             }
           } catch (e) {}
         });
@@ -10994,9 +12020,9 @@
           var keys = Object.keys(gatheredStats[type]);
           keys.forEach(function (key) {
             if (!storedStats[type][key] || _typeof(storedStats[type][key]) != _typeof({})) {
-              storedStats[type][key] = { "firstUsed": now };
+              storedStats[type][key] = { firstUsed: now };
             }
-            // Discards any previously logged version numebr
+            // Discards any previously logged version number
             storedStats[type][key].version = gatheredStats[type][key].version;
             storedStats[type][key].lastUsed = now;
           });
@@ -11152,7 +12178,7 @@
     }, {
       key: 'lottery',
       value: function lottery() {
-        return Math.random() <= 0.05;
+        return true;
       }
     }, {
       key: 'currentMonth',
@@ -11210,7 +12236,7 @@
     }], [{
       key: 'version',
       get: function get$1() {
-        return '2.0.1';
+        return '2.1.0';
       }
     }, {
       key: 'firstUseKey',
@@ -11269,17 +12295,23 @@
 
   let statsJob;
 
+  const registered = new Set();
+
   /**
    * @polymerMixin
+   * @mixes DirMixin
    */
-  const ElementMixin$1 = superClass => class VaadinElementMixin extends superClass {
+  const ElementMixin$1 = superClass => class VaadinElementMixin extends DirMixin(superClass) {
     /** @protected */
-    static _finalizeClass() {
-      super._finalizeClass();
+    static finalize() {
+      super.finalize();
+
+      const {is} = this;
 
       // Registers a class prototype for telemetry purposes.
-      if (this.is) {
+      if (is && !registered.has(is)) {
         window.Vaadin.registrations.push(this);
+        registered.add(is);
 
         if (window.Vaadin.developmentModeCallback) {
           statsJob = Debouncer.debounce(statsJob,
@@ -11291,8 +12323,9 @@
         }
       }
     }
-    ready() {
-      super.ready();
+
+    constructor() {
+      super();
       if (document.doctype === null) {
         console.warn(
           'Vaadin components require the "standards mode" declaration. Please add <!DOCTYPE html> to the HTML document.'
@@ -11749,7 +12782,7 @@
             /** @type {!NodeList<!Node>} */ (wrap(this._target).children));
         if (window.ShadyDOM) {
           this._shadyChildrenObserver =
-            ShadyDOM.observeChildren(this._target, (mutations) => {
+            window.ShadyDOM.observeChildren(this._target, (mutations) => {
               this._processMutations(mutations);
             });
         } else {
@@ -11779,7 +12812,7 @@
         this._unlistenSlots(
             /** @type {!NodeList<!Node>} */ (wrap(this._target).children));
         if (window.ShadyDOM && this._shadyChildrenObserver) {
-          ShadyDOM.unobserveChildren(this._shadyChildrenObserver);
+          window.ShadyDOM.unobserveChildren(this._shadyChildrenObserver);
           this._shadyChildrenObserver = null;
         } else if (this._nativeChildrenObserver) {
           this._nativeChildrenObserver.disconnect();
@@ -12003,9 +13036,9 @@
    * That will make the `[content]` element of app layout scrollable.
    * On this case, the toolbars on mobile device won't collapse.
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.ElementMixin
-   * @mixes Vaadin.ThemableMixin
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ThemableMixin
    * @demo demo/index.html
    */
   class AppLayoutElement extends ElementMixin$1(ThemableMixin(PolymerElement)) {
@@ -12026,7 +13059,13 @@
         padding-left: var(--vaadin-app-layout-navbar-offset-left);
       }
 
-      :host([hidden]) {
+      :host([dir="rtl"]) {
+        padding-left: 0;
+        padding-right: var(--vaadin-app-layout-navbar-offset-left);
+      }
+
+      :host([hidden]),
+      [hidden] {
         display: none !important;
       }
 
@@ -12058,7 +13097,8 @@
         }
       }
 
-      [part="navbar"] {
+      [part="navbar"],
+      [part="navbar"]::before {
         position: fixed;
         display: flex;
         align-items: center;
@@ -12072,8 +13112,12 @@
         z-index: 1;
       }
 
-      :host([primary-section="drawer"][drawer-opened]:not([overlay])) [part="navbar"] {
+      :host(:not([dir="rtl"])[primary-section="drawer"][drawer-opened]:not([overlay])) [part="navbar"] {
         left: var(--vaadin-app-layout-drawer-offset-left, 0);
+      }
+
+      :host([dir="rtl"][primary-section="drawer"][drawer-opened]:not([overlay])) [part="navbar"] {
+        right: var(--vaadin-app-layout-drawer-offset-left, 0);
       }
 
       :host([primary-section="drawer"]) [part="drawer"] {
@@ -12087,6 +13131,7 @@
       }
 
       [part="drawer"] {
+        overflow: auto;
         position: fixed;
         top: var(--vaadin-app-layout-navbar-offset-top, 0);
         right: auto;
@@ -12133,7 +13178,7 @@
 
       :host([overlay]) [part="drawer"],
       :host([overlay]) [part="backdrop"] {
-        z-index: 1;
+        z-index: 2;
       }
 
       :host([drawer-opened][overlay]) [part="backdrop"] {
@@ -12141,8 +13186,27 @@
         touch-action: manipulation;
       }
 
-      :host([drawer-opened]:not([overlay])) {
+      :host([dir="rtl"]) [part="drawer"] {
+        left: auto;
+        right: var(--vaadin-app-layout-navbar-offset-start, 0);
+        transform: translateX(100%);
+      }
+
+      :host([dir="rtl"]) [part="navbar"],
+      :host([dir="rtl"]) [part="navbar"]::before {
+        transition: right var(--vaadin-app-layout-transition);
+      }
+
+      :host([dir="rtl"][drawer-opened]) [part='drawer'] {
+        transform: translateX(0%);
+      }
+
+      :host(:not([dir="rtl"])[drawer-opened]:not([overlay])) {
         padding-left: var(--vaadin-app-layout-drawer-offset-left);
+      }
+
+      :host([dir="rtl"][drawer-opened]:not([overlay])) {
+        padding-right: var(--vaadin-app-layout-drawer-offset-left);
       }
 
       @media (max-width: 800px),
@@ -12156,7 +13220,7 @@
         }
       }
     </style>
-    <div part="navbar">
+    <div part="navbar" id="navbarTop">
       <slot name="navbar"></slot>
     </div>
     <div part="backdrop" on-click="_close" on-touchstart="_close"></div>
@@ -12166,9 +13230,10 @@
     <div content="">
       <slot></slot>
     </div>
-    <div part="navbar" bottom="" hidden="">
+    <div part="navbar" id="navbarBottom" bottom="" hidden="">
       <slot name="navbar-bottom"></slot>
     </div>
+    <div hidden=""><slot id="touchSlot" name="navbar touch-optimized"></slot></div>
 `;
     }
 
@@ -12177,7 +13242,7 @@
     }
 
     static get version() {
-      return '2.0.2';
+      return '2.1.0';
     }
 
     static get properties() {
@@ -12258,7 +13323,16 @@
 
       this._updateTouchOptimizedMode();
 
-      this._navbarChildObserver = new FlattenedNodesObserver(this.$.drawerSlot, (info) => {
+      const navbarSlot = this.$.navbarTop.firstElementChild;
+      this._navbarChildObserver = new FlattenedNodesObserver(navbarSlot, (info) => {
+        this._updateTouchOptimizedMode();
+      });
+
+      this._touchChildObserver = new FlattenedNodesObserver(this.$.touchSlot, (info) => {
+        this._updateTouchOptimizedMode();
+      });
+
+      this._drawerChildObserver = new FlattenedNodesObserver(this.$.drawerSlot, (info) => {
         this._updateDrawerSize();
       });
       this._updateDrawerSize();
@@ -12274,6 +13348,8 @@
       super.disconnectedCallback();
 
       this._navbarChildObserver && this._navbarChildObserver.disconnect();
+      this._drawerChildObserver && this._drawerChildObserver.disconnect();
+      this._touchChildObserver && this._touchChildObserver.disconnect();
       window.removeEventListener('resize', this.__boundResizeListener);
       this.removeEventListener('drawer-toggle-click', this.__drawerToggleClickListener);
       this.removeEventListener('close-overlay-drawer', this.__drawerToggleClickListener);
@@ -12302,6 +13378,7 @@
         if (this.drawerOpened) {
           drawer.setAttribute('tabindex', 0);
           drawer.focus();
+          this._updateDrawerHeight();
         }
       }
     }
@@ -12339,7 +13416,7 @@
 
     _updateDrawerSize() {
       const childCount = this.querySelectorAll('[slot=drawer]').length;
-      const drawer = this.shadowRoot.querySelector('[part=drawer]');
+      const drawer = this.$.drawer;
 
       if (childCount === 0) {
         drawer.setAttribute('hidden', '');
@@ -12384,7 +13461,19 @@
       } else {
         this.style.setProperty('--_vaadin-app-layout-drawer-offset-size', drawerRect.width + 'px');
       }
+    }
 
+    _updateDrawerHeight() {
+      const {scrollHeight, offsetHeight} = this.$.drawer;
+      const height = scrollHeight > offsetHeight ? `${scrollHeight}px` : '100%';
+
+      if (this._isShadyCSS()) {
+        window.ShadyCSS.styleSubtree(this, {
+          '--_vaadin-app-layout-drawer-scroll-size': height
+        });
+      } else {
+        this.style.setProperty('--_vaadin-app-layout-drawer-scroll-size', height);
+      }
     }
 
     _updateOverlayMode() {
@@ -12413,10 +13502,11 @@
         drawer.removeAttribute('aria-label');
       }
 
+      this._updateDrawerHeight();
+
       // TODO(jouni): ARIA attributes. The drawer should act similar to a modal dialog when in ”overlay” mode
     }
 
-    // TODO(jouni): what mechanism should we use to close the overlay drawer a navigation is triggered?
     _close() {
       this.drawerOpened = false;
     }
@@ -12437,11 +13527,10 @@
     _updateTouchOptimizedMode() {
       const touchOptimized = this._getCustomPropertyValue('--vaadin-app-layout-touch-optimized') == 'true';
 
-      const navbarBottom = this.shadowRoot.querySelector('[part="navbar"][bottom]');
-      const navbars = this.querySelectorAll('[slot*="navbar"]');
+      const navbarItems = this.querySelectorAll('[slot*="navbar"]');
 
-      if (navbars.length > 0) {
-        Array.from(navbars).forEach(navbar => {
+      if (navbarItems.length > 0) {
+        Array.from(navbarItems).forEach(navbar => {
           if (navbar.getAttribute('slot').indexOf('touch-optimized') > -1) {
             navbar.__touchOptimized = true;
           }
@@ -12454,10 +13543,16 @@
         });
       }
 
-      if (touchOptimized) {
-        navbarBottom.removeAttribute('hidden');
+      if (this.$.navbarTop.querySelector('[name=navbar]').assignedNodes().length === 0) {
+        this.$.navbarTop.setAttribute('hidden', '');
       } else {
-        navbarBottom.setAttribute('hidden', '');
+        this.$.navbarTop.removeAttribute('hidden');
+      }
+
+      if (touchOptimized) {
+        this.$.navbarBottom.removeAttribute('hidden');
+      } else {
+        this.$.navbarBottom.setAttribute('hidden', '');
       }
 
       this._updateOffsetSize();
@@ -12788,6 +13883,24 @@
         margin-left: 0;
         margin-right: 0;
       }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part="prefix"] {
+        margin-left: 0.25em;
+        margin-right: -0.25em;
+      }
+
+      :host([dir="rtl"]) [part="suffix"] {
+        margin-left: -0.25em;
+        margin-right: 0.25em;
+      }
+
+      :host([dir="rtl"][theme~="icon"]) [part="prefix"],
+      :host([dir="rtl"][theme~="icon"]) [part="suffix"] {
+        margin-left: 0;
+        margin-right: 0;
+      }
     </style>
   </template>
 </dom-module>`;
@@ -12931,10 +14044,10 @@
 
   /* eslint no-empty: ["error", { "allowEmptyCatch": true }] */
   // check for passive event listeners
-  let SUPPORTS_PASSIVE = false;
+  let supportsPassive = false;
   (function() {
     try {
-      let opts = Object.defineProperty({}, 'passive', {get() {SUPPORTS_PASSIVE = true;}});
+      let opts = Object.defineProperty({}, 'passive', {get() {supportsPassive = true;}});
       window.addEventListener('test', null, opts);
       window.removeEventListener('test', null, opts);
     } catch(e) {}
@@ -12952,7 +14065,7 @@
     if (isMouseEvent(eventName) || eventName === 'touchend') {
       return;
     }
-    if (HAS_NATIVE_TA && SUPPORTS_PASSIVE && passiveTouchGestures) {
+    if (HAS_NATIVE_TA && supportsPassive && passiveTouchGestures) {
       return {passive: true};
     } else {
       return;
@@ -13090,9 +14203,6 @@
   }
 
   function ignoreMouse(e) {
-    if (!cancelSyntheticClickEvents) {
-      return;
-    }
     if (!POINTERSTATE.mouse.mouseIgnoreJob) {
       setupTeardownMouseCanceller(true);
     }
@@ -13200,10 +14310,10 @@
     stateObj.upfn = null;
   }
 
-  if (cancelSyntheticClickEvents) {
+  {
     // use a document-wide touchend listener to start the ghost-click prevention mechanism
     // Use passive event listeners, if supported, to not affect scrolling performance
-    document.addEventListener('touchend', ignoreMouse, SUPPORTS_PASSIVE ? {passive: true} : false);
+    document.addEventListener('touchend', ignoreMouse, supportsPassive ? {passive: true} : false);
   }
 
   /**
@@ -14001,6 +15111,7 @@
    * A private mixin to avoid problems with dynamic properties and Polymer Analyzer.
    * No need to expose these properties in the API docs.
    * @polymerMixin
+   * @private
    */
   const TabIndexMixin = superClass => class VaadinTabIndexMixin extends superClass {
     static get properties() {
@@ -14045,6 +15156,7 @@
 
         /**
          * Stores the previous value of tabindex attribute of the disabled element
+         * @private
          */
         _previousTabIndex: {
           type: Number
@@ -14059,16 +15171,25 @@
           reflectToAttribute: true
         },
 
+        /**
+         * @private
+         */
         _isShiftTabbing: {
           type: Boolean
         }
       };
     }
 
+    /**
+     * @protected
+     */
     ready() {
       this.addEventListener('focusin', e => {
         if (e.composedPath()[0] === this) {
-          this._focus(e);
+          // Only focus if the focus is received from somewhere outside
+          if (!this.contains(e.relatedTarget)) {
+            this._focus();
+          }
         } else if (e.composedPath().indexOf(this.focusElement) !== -1 && !this.disabled) {
           this._setFocused(true);
         }
@@ -14117,7 +15238,7 @@
               && this.nextSibling) {
               const fakeTarget = document.createElement('input');
               fakeTarget.style.position = 'absolute';
-              fakeTarget.style.opacity = 0;
+              fakeTarget.style.opacity = '0';
               fakeTarget.tabIndex = this.tabIndex;
 
               this.parentNode.insertBefore(fakeTarget, this.nextSibling);
@@ -14129,7 +15250,7 @@
         }
       });
 
-      if (this.autofocus && !this.focused && !this.disabled) {
+      if (this.autofocus && !this.disabled) {
         window.requestAnimationFrame(() => {
           this._focus();
           this._setFocused(true);
@@ -14167,6 +15288,10 @@
       }
     }
 
+    /**
+     * @param {boolean} focused
+     * @protected
+     */
     _setFocused(focused) {
       if (focused) {
         this.setAttribute('focused', '');
@@ -14183,10 +15308,17 @@
       }
     }
 
+    /**
+     * @param {KeyboardEvent} e
+     * @private
+     */
     _bodyKeydownListener(e) {
       this._tabPressed = e.keyCode === 9;
     }
 
+    /**
+     * @private
+     */
     _bodyKeyupListener() {
       this._tabPressed = false;
     }
@@ -14194,14 +15326,18 @@
     /**
      * Any element extending this mixin is required to implement this getter.
      * It returns the actual focusable element in the component.
+     * @return {Element | null | undefined}
      */
     get focusElement() {
       window.console.warn(`Please implement the 'focusElement' property in <${this.localName}>`);
       return this;
     }
 
-    _focus(e) {
-      if (this._isShiftTabbing) {
+    /**
+     * @protected
+     */
+    _focus() {
+      if (!this.focusElement || this._isShiftTabbing) {
         return;
       }
 
@@ -14228,10 +15364,17 @@
      * @private
      */
     blur() {
+      if (!this.focusElement) {
+        return;
+      }
       this.focusElement.blur();
       this._setFocused(false);
     }
 
+    /**
+     * @param {boolean} disabled
+     * @private
+     */
     _disabledChanged(disabled) {
       this.focusElement.disabled = disabled;
       if (disabled) {
@@ -14247,6 +15390,10 @@
       }
     }
 
+    /**
+     * @param {number | null | undefined} tabindex
+     * @private
+     */
     _tabindexChanged(tabindex) {
       if (tabindex !== undefined) {
         this.focusElement.tabIndex = tabindex;
@@ -14314,11 +15461,11 @@
    *
    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.ElementMixin
-   * @mixes Vaadin.ControlStateMixin
-   * @mixes Vaadin.ThemableMixin
-   * @mixes Polymer.GestureEventListeners
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ControlStateMixin
+   * @mixes ThemableMixin
+   * @mixes GestureEventListeners
    * @demo demo/index.html
    */
   class ButtonElement extends
@@ -14376,6 +15523,7 @@
         position: absolute;
         top: 0;
         left: 0;
+        right: 0;
         width: 100%;
         height: 100%;
         opacity: 0;
@@ -14402,7 +15550,7 @@
     }
 
     static get version() {
-      return '2.2.1';
+      return '2.3.0';
     }
 
     ready() {
@@ -14416,6 +15564,9 @@
       this.$.button.setAttribute('role', 'presentation');
 
       this._addActiveListeners();
+
+      // Fix for https://github.com/vaadin/vaadin-button-flow/issues/120
+      window.ShadyDOM && window.ShadyDOM.flush();
     }
 
     /**
@@ -14465,8 +15616,7 @@
    * </vaadin-app-layout>
    * ```
    *
-   * @memberof Vaadin
-   * @extends Vaadin.ButtonElement
+   * @extends PolymerElement
    * @demo demo/index.html
    */
   class DrawerToggleElement extends ButtonElement {
@@ -14693,11 +15843,11 @@
         box-sizing: border-box !important;
       }
 
-      :host ::slotted(iron-icon:first-child) {
+      :host(:not([dir="rtl"])) ::slotted(iron-icon:first-child) {
         margin-left: 0;
       }
 
-      :host ::slotted(iron-icon:last-child) {
+      :host(:not([dir="rtl"])) ::slotted(iron-icon:last-child) {
         margin-right: 0;
       }
 
@@ -14735,6 +15885,40 @@
       :host([focus-ring]) {
         box-shadow: inset 0 0 0 2px var(--lumo-primary-color-50pct);
         border-radius: var(--lumo-border-radius);
+      }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"])::before,
+      :host([dir="rtl"])::after {
+        left: auto;
+        right: 50%;
+        transform: translateX(50%) scale(0);
+      }
+
+      :host([dir="rtl"][selected]:not([orientation="vertical"]))::before,
+      :host([dir="rtl"][selected]:not([orientation="vertical"]))::after {
+        transform: translateX(50%) scale(1);
+      }
+
+      :host([dir="rtl"]) ::slotted(iron-icon:first-child) {
+        margin-right: 0;
+      }
+
+      :host([dir="rtl"]) ::slotted(iron-icon:last-child) {
+        margin-left: 0;
+      }
+
+      :host([orientation="vertical"][dir="rtl"]) {
+        transform-origin: 100% 50%;
+      }
+
+      :host([dir="rtl"][orientation="vertical"])::before,
+      :host([dir="rtl"][orientation="vertical"])::after {
+        left: auto;
+        right: 0;
+        border-radius: var(--lumo-border-radius) 0 0 var(--lumo-border-radius);
+        transform-origin: 0% 50%;
       }
     </style>
   </template>
@@ -14911,10 +16095,10 @@
    *
    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.ElementMixin
-   * @mixes Vaadin.ThemableMixin
-   * @mixes Vaadin.ItemMixin
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ThemableMixin
+   * @mixes ItemMixin
    */
   class TabElement extends ElementMixin$1(ThemableMixin(ItemMixin(PolymerElement))) {
     static get template() {
@@ -14928,7 +16112,7 @@
     }
 
     static get version() {
-      return '3.0.4';
+      return '3.1.0';
     }
 
     ready() {
@@ -15003,7 +16187,7 @@
         color: inherit;
       }
 
-      [part="forward-button"] {
+      :host(:not([dir="rtl"])) [part="forward-button"] {
         right: 0;
       }
 
@@ -15130,6 +16314,56 @@
       :host([theme~="equal-width-tabs"]) [part="tabs"] ::slotted(vaadin-tab) {
         flex: 1 0 0%;
       }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part="forward-button"]::after {
+        content: var(--lumo-icons-angle-left);
+      }
+
+      :host([dir="rtl"]) [part="back-button"]::after {
+        content: var(--lumo-icons-angle-right);
+      }
+
+      :host([orientation="vertical"][dir="rtl"]) {
+        box-shadow: 1px 0 0 0 var(--lumo-contrast-10pct);
+      }
+
+      :host([dir="rtl"]) [part="forward-button"] {
+        left: 0;
+      }
+
+      :host([dir="rtl"]) [part="tabs"] ::slotted(:not(vaadin-tab)) {
+        margin-left: 0;
+        margin-right: var(--lumo-space-m);
+      }
+
+      /* Both ends overflowing */
+      :host([dir="rtl"][overflow~="start"][overflow~="end"]:not([orientation="vertical"])) [part="tabs"] {
+        --_lumo-tabs-overflow-mask-image: linear-gradient(-90deg, transparent 2em, #000 4em, #000 calc(100% - 4em), transparent calc(100% - 2em));
+      }
+
+      /* End overflowing */
+      :host([dir="rtl"][overflow~="end"]:not([orientation="vertical"])) [part="tabs"] {
+        --_lumo-tabs-overflow-mask-image: linear-gradient(-90deg, #000 calc(100% - 4em), transparent calc(100% - 2em));
+      }
+
+      /* Start overflowing */
+      :host([dir="rtl"][overflow~="start"]:not([orientation="vertical"])) [part="tabs"] {
+        --_lumo-tabs-overflow-mask-image: linear-gradient(-90deg, transparent 2em, #000 4em);
+      }
+
+      :host([dir="rtl"][theme~="hide-scroll-buttons"][overflow~="start"][overflow~="end"]:not([orientation="vertical"])) [part="tabs"] {
+        --_lumo-tabs-overflow-mask-image: linear-gradient(-90deg, transparent, #000 2em, #000 calc(100% - 2em), transparent 100%);
+      }
+
+      :host([dir="rtl"][theme~="hide-scroll-buttons"][overflow~="end"]:not([orientation="vertical"])) [part="tabs"] {
+        --_lumo-tabs-overflow-mask-image: linear-gradient(-90deg, #000 calc(100% - 2em), transparent 100%);
+      }
+
+      :host([dir="rtl"][theme~="hide-scroll-buttons"][overflow~="start"]:not([orientation="vertical"])) [part="tabs"] {
+        --_lumo-tabs-overflow-mask-image: linear-gradient(-90deg, transparent, #000 2em);
+      }
     </style>
   </template>
 </dom-module>`;
@@ -15152,13 +16386,15 @@
       return {
         /**
          * Used for mixin detection because `instanceof` does not work with mixins.
+         * @type {boolean}
          */
         _hasVaadinListMixin: {
           value: true
         },
 
         /**
-         * The index of the item selected in the items array
+         * The index of the item selected in the items array.
+         * Note: Not updated when used in `multiple` selection mode.
          */
         selected: {
           type: Number,
@@ -15170,6 +16406,7 @@
          * Define how items are disposed in the dom.
          * Possible values are: `horizontal|vertical`.
          * It also changes navigation keys from left/right to up/down.
+         * @type {!ListOrientation}
          */
         orientation: {
           type: String,
@@ -15187,6 +16424,7 @@
          * Note: unlike `<vaadin-combo-box>`, this property is read-only,
          * so if you want to provide items by iterating array of data,
          * you have to use `dom-repeat` and place it to the light DOM.
+         * @type {!Array<!Element> | undefined}
          */
         items: {
           type: Array,
@@ -15196,6 +16434,7 @@
 
         /**
          * The search buffer for the keyboard selection feature.
+         * @private
          */
         _searchBuf: {
           type: String,
@@ -15205,9 +16444,10 @@
     }
 
     static get observers() {
-      return ['_enhanceItems(items, orientation, selected)'];
+      return ['_enhanceItems(items, orientation, selected, disabled)'];
     }
 
+    /** @protected */
     ready() {
       super.ready();
       this.addEventListener('keydown', e => this._onKeydown(e));
@@ -15218,34 +16458,49 @@
       });
     }
 
-    _enhanceItems(items, orientation, selected) {
-      if (items) {
-        this.setAttribute('aria-orientation', orientation || 'vertical');
-        this.items.forEach(item => {
-          orientation ? item.setAttribute('orientation', orientation) : item.removeAttribute('orientation');
-          item.updateStyles();
-        });
+    /** @private */
+    _enhanceItems(items, orientation, selected, disabled) {
+      if (!disabled) {
+        if (items) {
+          this.setAttribute('aria-orientation', orientation || 'vertical');
+          this.items.forEach(item => {
+            orientation ? item.setAttribute('orientation', orientation) : item.removeAttribute('orientation');
+            item.updateStyles();
+          });
 
-        this._setFocusable(selected);
+          this._setFocusable(selected);
 
-        const itemToSelect = items[selected];
-        items.forEach(item => item.selected = item === itemToSelect);
-        if (itemToSelect && !itemToSelect.disabled) {
-          this._scrollToItem(selected);
+          const itemToSelect = items[selected];
+          items.forEach(item => item.selected = item === itemToSelect);
+          if (itemToSelect && !itemToSelect.disabled) {
+            this._scrollToItem(selected);
+          }
         }
       }
     }
 
+    /**
+     * @return {Element}
+     */
     get focused() {
       return this.getRootNode().activeElement;
     }
 
+    /**
+     * @param {!Array<!Element>} array
+     * @return {!Array<!Element>}
+     * @protected
+     */
     _filterItems(array) {
       return array.filter(e => e._hasVaadinItemMixin);
     }
 
+    /**
+     * @param {!MouseEvent} event
+     * @protected
+     */
     _onClick(event) {
-      if (event.metaKey || event.shiftKey || event.ctrlKey) {
+      if (event.metaKey || event.shiftKey || event.ctrlKey || event.defaultPrevented) {
         return;
       }
 
@@ -15256,6 +16511,12 @@
       }
     }
 
+    /**
+     * @param {number} currentIdx
+     * @param {string} key
+     * @return {number}
+     * @protected
+     */
     _searchKey(currentIdx, key) {
       this._searchReset = Debouncer.debounce(
         this._searchReset,
@@ -15264,7 +16525,7 @@
       );
       this._searchBuf += key.toLowerCase();
       const increment = 1;
-      const condition = item => !item.disabled &&
+      const condition = item => !(item.disabled || this._isItemHidden(item)) &&
         item.textContent.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().indexOf(this._searchBuf) === 0;
 
       if (!this.items.some(item => item.textContent.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().indexOf(this._searchBuf) === 0)) {
@@ -15275,6 +16536,18 @@
       return this._getAvailableIndex(idx, increment, condition);
     }
 
+    /**
+     * @return {boolean}
+     * @protected
+     */
+    get _isRTL() {
+      return !this._vertical && this.getAttribute('dir') === 'rtl';
+    }
+
+    /**
+     * @param {!KeyboardEvent} event
+     * @protected
+     */
     _onKeydown(event) {
       if (event.metaKey || event.ctrlKey) {
         return;
@@ -15293,15 +16566,17 @@
         return;
       }
 
-      const condition = item => !item.disabled;
+      const condition = item => !(item.disabled || this._isItemHidden(item));
       let idx, increment;
 
+      const dirIncrement = this._isRTL ? -1 : 1;
+
       if (this._vertical && key === 'Up' || !this._vertical && key === 'Left') {
-        increment = -1;
-        idx = currentIdx - 1;
+        increment = -dirIncrement;
+        idx = currentIdx - dirIncrement;
       } else if (this._vertical && key === 'Down' || !this._vertical && key === 'Right') {
-        increment = 1;
-        idx = currentIdx + 1;
+        increment = dirIncrement;
+        idx = currentIdx + dirIncrement;
       } else if (key === 'Home') {
         increment = 1;
         idx = 0;
@@ -15317,6 +16592,13 @@
       }
     }
 
+    /**
+     * @param {number} idx
+     * @param {number} increment
+     * @param {function(!Element):boolean} condition
+     * @return {number}
+     * @protected
+     */
     _getAvailableIndex(idx, increment, condition) {
       const totalItems = this.items.length;
       for (let i = 0; typeof idx == 'number' && i < totalItems; i++, idx += (increment || 1)) {
@@ -15327,6 +16609,7 @@
         }
 
         const item = this.items[idx];
+
         if (condition(item)) {
           return idx;
         }
@@ -15334,12 +16617,29 @@
       return -1;
     }
 
+    /**
+     * @param {!Element} item
+     * @return {boolean}
+     * @protected
+     */
+    _isItemHidden(item) {
+      return getComputedStyle(item).display === 'none';
+    }
+
+    /**
+     * @param {number} idx
+     * @protected
+     */
     _setFocusable(idx) {
       idx = this._getAvailableIndex(idx, 1, item => !item.disabled);
       const item = this.items[idx] || this.items[0];
       this.items.forEach(e => e.tabIndex = e === item ? 0 : -1);
     }
 
+    /**
+     * @param {number} idx
+     * @protected
+     */
     _focus(idx) {
       const item = this.items[idx];
       this.items.forEach(e => e.focused = e === item);
@@ -15355,41 +16655,76 @@
       firstItem && firstItem.focus();
     }
 
-    /* @protected */
+    /**
+     * @return {!HTMLElement}
+     * @protected
+     */
     get _scrollerElement() {
       // Returning scroller element of the component
     }
 
-    // Scroll the container to have the next item by the edge of the viewport
+    /**
+     * Scroll the container to have the next item by the edge of the viewport.
+     * @param {number} idx
+     * @protected
+     */
     _scrollToItem(idx) {
       const item = this.items[idx];
       if (!item) {
         return;
       }
 
-      const props = this._vertical ? ['top', 'bottom'] : ['left', 'right'];
+      const props = this._vertical ? ['top', 'bottom'] :
+        this._isRTL ? ['right', 'left'] : ['left', 'right'];
+
       const scrollerRect = this._scrollerElement.getBoundingClientRect();
       const nextItemRect = (this.items[idx + 1] || item).getBoundingClientRect();
       const prevItemRect = (this.items[idx - 1] || item).getBoundingClientRect();
 
       let scrollDistance = 0;
-      if (nextItemRect[props[1]] >= scrollerRect[props[1]]) {
+      if (!this._isRTL && nextItemRect[props[1]] >= scrollerRect[props[1]] ||
+        this._isRTL && nextItemRect[props[1]] <= scrollerRect[props[1]]) {
         scrollDistance = nextItemRect[props[1]] - scrollerRect[props[1]];
-      } else if (prevItemRect[props[0]] <= scrollerRect[props[0]]) {
+      } else if (!this._isRTL && prevItemRect[props[0]] <= scrollerRect[props[0]] ||
+        this._isRTL && prevItemRect[props[0]] >= scrollerRect[props[0]]) {
         scrollDistance = prevItemRect[props[0]] - scrollerRect[props[0]];
       }
 
       this._scroll(scrollDistance);
     }
 
-    /* @protected */
+    /**
+     * @return {boolean}
+     * @protected
+     */
     get _vertical() {
       return this.orientation !== 'horizontal';
     }
 
+    /**
+     * @param {number} pixels
+     * @protected
+     */
     _scroll(pixels) {
-      this._scrollerElement['scroll' + (this._vertical ? 'Top' : 'Left')] += pixels;
+      if (this._vertical) {
+        this._scrollerElement['scrollTop'] += pixels;
+      } else {
+        const scrollType = DirHelper.detectScrollType();
+        const scrollLeft = DirHelper.getNormalizedScrollLeft(scrollType,
+          this.getAttribute('dir') || 'ltr', this._scrollerElement) + pixels;
+        DirHelper.setNormalizedScrollLeft(scrollType,
+          this.getAttribute('dir') || 'ltr', this._scrollerElement, scrollLeft);
+      }
     }
+
+    /**
+     * Fired when the selection is changed.
+     * Not fired when used in `multiple` selection mode.
+     *
+     * @event selected-changed
+     * @param {Object} detail
+     * @param {Object} detail.value the index of the item selected in the items array.
+     */
   };
 
   /**
@@ -15454,7 +16789,7 @@
   // super simple {...} lexer that returns a node tree
   /**
    * @param {string} text
-   * @return {StyleNode}
+   * @return {!StyleNode}
    */
   function lex(text) {
     let root = new StyleNode();
@@ -15485,7 +16820,7 @@
   /**
    * @param {StyleNode} node
    * @param {string} text
-   * @return {StyleNode}
+   * @return {!StyleNode}
    */
   function parseCss(node, text) {
     let t = text.substring(node['start'], node['end'] - 1);
@@ -15673,7 +17008,9 @@
     const text = style.textContent;
     if (!styleTextSet.has(text)) {
       styleTextSet.add(text);
-      const newStyle = style.cloneNode(true);
+      const newStyle = document.createElement('style');
+      newStyle.setAttribute('shady-unscoped', '');
+      newStyle.textContent = text;
       document.head.appendChild(newStyle);
     }
   }
@@ -16742,10 +18079,10 @@
   /** @type {?MutationObserver} */
   let observer = null;
 
-  let DOCUMENT_DIR = '';
+  let documentDir = '';
 
   function getRTL() {
-    DOCUMENT_DIR = document.documentElement.getAttribute('dir');
+    documentDir = document.documentElement.getAttribute('dir');
   }
 
   /**
@@ -16754,13 +18091,13 @@
   function setRTL(instance) {
     if (!instance.__autoDirOptOut) {
       const el = /** @type {!HTMLElement} */(instance);
-      el.setAttribute('dir', DOCUMENT_DIR);
+      el.setAttribute('dir', documentDir);
     }
   }
 
   function updateDirection() {
     getRTL();
-    DOCUMENT_DIR = document.documentElement.getAttribute('dir');
+    documentDir = document.documentElement.getAttribute('dir');
     for (let i = 0; i < DIR_INSTANCES.length; i++) {
       setRTL(DIR_INSTANCES[i]);
     }
@@ -16798,7 +18135,7 @@
    * @param {function(new:T)} superClass Class to apply mixin to.
    * @return {function(new:T)} superClass with mixin applied.
    */
-  const DirMixin = dedupingMixin((base) => {
+  const DirMixin$1 = dedupingMixin((base) => {
 
     if (!SHIM_SHADOW) {
       if (!observer) {
@@ -16972,7 +18309,7 @@
   class DomApiNative {
 
     /**
-     * @param {Node} node Node for which to create a Polymer.dom helper object.
+     * @param {!Node} node Node for which to create a Polymer.dom helper object.
      */
     constructor(node) {
       if (window['ShadyDOM'] && window['ShadyDOM']['inUse']) {
@@ -17040,7 +18377,7 @@
     /**
      * Returns the root node of this node.  Equivalent to `getRootNode()`.
      *
-     * @return {Node} Top most element in the dom tree in which the node
+     * @return {!Node} Top most element in the dom tree in which the node
      * exists. If the node is connected to a document this is either a
      * shadowRoot or the document; otherwise, it may be the node
      * itself or a node or document fragment containing it.
@@ -17219,94 +18556,6 @@
       return this.event.composedPath();
     }
   }
-
-  /**
-   * @function
-   * @param {boolean=} deep
-   * @return {!Node}
-   */
-  DomApiNative.prototype.cloneNode;
-  /**
-   * @function
-   * @param {!Node} node
-   * @return {!Node}
-   */
-  DomApiNative.prototype.appendChild;
-  /**
-   * @function
-   * @param {!Node} newChild
-   * @param {Node} refChild
-   * @return {!Node}
-   */
-  DomApiNative.prototype.insertBefore;
-  /**
-   * @function
-   * @param {!Node} node
-   * @return {!Node}
-   */
-  DomApiNative.prototype.removeChild;
-  /**
-   * @function
-   * @param {!Node} oldChild
-   * @param {!Node} newChild
-   * @return {!Node}
-   */
-  DomApiNative.prototype.replaceChild;
-  /**
-   * @function
-   * @param {string} name
-   * @param {string} value
-   * @return {void}
-   */
-  DomApiNative.prototype.setAttribute;
-  /**
-   * @function
-   * @param {string} name
-   * @return {void}
-   */
-  DomApiNative.prototype.removeAttribute;
-  /**
-   * @function
-   * @param {string} selector
-   * @return {?Element}
-   */
-  DomApiNative.prototype.querySelector;
-  /**
-   * @function
-   * @param {string} selector
-   * @return {!NodeList<!Element>}
-   */
-  DomApiNative.prototype.querySelectorAll;
-
-  /** @type {?Node} */
-  DomApiNative.prototype.parentNode;
-  /** @type {?Node} */
-  DomApiNative.prototype.firstChild;
-  /** @type {?Node} */
-  DomApiNative.prototype.lastChild;
-  /** @type {?Node} */
-  DomApiNative.prototype.nextSibling;
-  /** @type {?Node} */
-  DomApiNative.prototype.previousSibling;
-  /** @type {?HTMLElement} */
-  DomApiNative.prototype.firstElementChild;
-  /** @type {?HTMLElement} */
-  DomApiNative.prototype.lastElementChild;
-  /** @type {?HTMLElement} */
-  DomApiNative.prototype.nextElementSibling;
-  /** @type {?HTMLElement} */
-  DomApiNative.prototype.previousElementSibling;
-  /** @type {!Array<!Node>} */
-  DomApiNative.prototype.childNodes;
-  /** @type {!Array<!HTMLElement>} */
-  DomApiNative.prototype.children;
-  /** @type {?DOMTokenList} */
-  DomApiNative.prototype.classList;
-
-  /** @type {string} */
-  DomApiNative.prototype.textContent;
-  /** @type {string} */
-  DomApiNative.prototype.innerHTML;
 
   let DomApiImpl = DomApiNative;
 
@@ -17516,6 +18765,170 @@
   }
 
   /**
+   * @fileoverview
+   * @suppress {checkPrototypalTypes}
+   * @license Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt The complete set of authors may be found
+   * at http://polymer.github.io/AUTHORS.txt The complete set of contributors may
+   * be found at http://polymer.github.io/CONTRIBUTORS.txt Code distributed by
+   * Google as part of the polymer project is also subject to an additional IP
+   * rights grant found at http://polymer.github.io/PATENTS.txt
+   */
+
+  const DISABLED_ATTR = 'disable-upgrade';
+
+  const findObservedAttributesGetter = (ctor) => {
+    while (ctor) {
+      const desc = Object.getOwnPropertyDescriptor(ctor, 'observedAttributes');
+      if (desc) {
+        return desc.get;
+      }
+      ctor = Object.getPrototypeOf(ctor.prototype).constructor;
+    }
+    return () => [];
+  };
+
+  /**
+   * Element class mixin that allows the element to boot up in a non-enabled
+   * state when the `disable-upgrade` attribute is present. This mixin is
+   * designed to be used with element classes like PolymerElement that perform
+   * initial startup work when they are first connected. When the
+   * `disable-upgrade` attribute is removed, if the element is connected, it
+   * boots up and "enables" as it otherwise would; if it is not connected, the
+   * element boots up when it is next connected.
+   *
+   * Using `disable-upgrade` with PolymerElement prevents any data propagation
+   * to the element, any element DOM from stamping, or any work done in
+   * connected/disconnctedCallback from occuring, but it does not prevent work
+   * done in the element constructor.
+   *
+   * Note, this mixin must be applied on top of any element class that
+   * itself implements a `connectedCallback` so that it can control the work
+   * done in `connectedCallback`. For example,
+   *
+   *     MyClass = DisableUpgradeMixin(class extends BaseClass {...});
+   *
+   * @mixinFunction
+   * @polymer
+   * @appliesMixin ElementMixin
+   * @template T
+   * @param {function(new:T)} superClass Class to apply mixin to.
+   * @return {function(new:T)} superClass with mixin applied.
+   */
+  const DisableUpgradeMixin = dedupingMixin((base) => {
+    /**
+     * @constructor
+     * @implements {Polymer_ElementMixin}
+     * @extends {HTMLElement}
+     * @private
+     */
+    const superClass = ElementMixin(base);
+
+    // Work around for closure bug #126934458. Using `super` in a property
+    // getter does not work so instead we search the Base prototype for an
+    // implementation of observedAttributes so that we can override and call
+    // the `super` getter. Note, this is done one time ever because we assume
+    // that `Base` is always comes from `Polymer.LegacyElementMixn`.
+    let observedAttributesGetter = findObservedAttributesGetter(superClass);
+
+    /**
+     * @polymer
+     * @mixinClass
+     * @implements {Polymer_DisableUpgradeMixin}
+     */
+    class DisableUpgradeClass extends superClass {
+
+      constructor() {
+        super();
+        /** @type {boolean|undefined} */
+        this.__isUpgradeDisabled;
+      }
+
+      static get observedAttributes() {
+        return observedAttributesGetter.call(this).concat(DISABLED_ATTR);
+      }
+
+      // Prevent element from initializing properties when it's upgrade disabled.
+      /** @override */
+      _initializeProperties() {
+        if (this.hasAttribute(DISABLED_ATTR)) {
+          this.__isUpgradeDisabled = true;
+        } else {
+          super._initializeProperties();
+        }
+      }
+
+      // Prevent element from enabling properties when it's upgrade disabled.
+      // Normally overriding connectedCallback would be enough, but dom-* elements
+      /** @override */
+      _enableProperties() {
+        if (!this.__isUpgradeDisabled) {
+          super._enableProperties();
+        }
+      }
+
+      // If the element starts upgrade-disabled and a property is set for
+      // which an accessor exists, the default should not be applied.
+      // This additional check is needed because defaults are applied via
+      // `_initializeProperties` which is called after initial properties
+      // have been set when the element starts upgrade-disabled.
+      /** @override */
+      _canApplyPropertyDefault(property) {
+        return super._canApplyPropertyDefault(property) &&
+          !(this.__isUpgradeDisabled && this._isPropertyPending(property));
+      }
+
+      /**
+       * @override
+       * @param {string} name Attribute name.
+       * @param {?string} old The previous value for the attribute.
+       * @param {?string} value The new value for the attribute.
+       * @param {?string} namespace The XML namespace for the attribute.
+       * @return {void}
+       */
+      attributeChangedCallback(name, old, value, namespace) {
+        if (name == DISABLED_ATTR) {
+          // When disable-upgrade is removed, intialize properties and
+          // provoke connectedCallback if the element is already connected.
+          if (this.__isUpgradeDisabled && value == null) {
+            super._initializeProperties();
+            this.__isUpgradeDisabled = false;
+            if (wrap(this).isConnected) {
+              super.connectedCallback();
+            }
+          }
+        } else {
+          super.attributeChangedCallback(
+              name, old, value, /** @type {null|string} */ (namespace));
+        }
+      }
+
+      // Prevent element from connecting when it's upgrade disabled.
+      // This prevents user code in `attached` from being called.
+      /** @override */
+      connectedCallback() {
+        if (!this.__isUpgradeDisabled) {
+          super.connectedCallback();
+        }
+      }
+
+      // Prevent element from disconnecting when it's upgrade disabled.
+      // This avoids allowing user code `detached` from being called without a
+      // paired call to `attached`.
+      /** @override */
+      disconnectedCallback() {
+        if (!this.__isUpgradeDisabled) {
+          super.disconnectedCallback();
+        }
+      }
+
+    }
+
+    return DisableUpgradeClass;
+  });
+
+  /**
   @license
   Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
   This code may only be used under the BSD style license found at http://polymer.github.io/LICENSE.txt
@@ -17524,6 +18937,8 @@
   Code distributed by Google as part of the polymer project is also
   subject to an additional IP rights grant found at http://polymer.github.io/PATENTS.txt
   */
+
+  const DISABLED_ATTR$1 = 'disable-upgrade';
 
   let styleInterface = window.ShadyCSS;
 
@@ -17537,11 +18952,15 @@
    * @polymer
    * @appliesMixin ElementMixin
    * @appliesMixin GestureEventListeners
+   * @appliesMixin DirMixin
    * @property isAttached {boolean} Set to `true` in this element's
    *   `connectedCallback` and `false` in `disconnectedCallback`
    * @summary Element class mixin that provides Polymer's "legacy" API
    */
   const LegacyElementMixin = dedupingMixin((base) => {
+
+    // TODO(kschaaf): Note, the `@implements {Polymer_DirMixin}` is required here
+    // (rather than on legacyElementBase) for unknown reasons.
     /**
      * @constructor
      * @implements {Polymer_ElementMixin}
@@ -17550,7 +18969,20 @@
      * @extends {HTMLElement}
      * @private
      */
-    const legacyElementBase = DirMixin(GestureEventListeners(ElementMixin(base)));
+    const GesturesElement = GestureEventListeners(ElementMixin(base));
+
+    // Note, the DirMixin does nothing if css is built so avoid including it
+    // in that case.
+
+    /**
+     * @constructor
+     * @extends {GesturesElement}
+     * @private
+     */
+    const legacyElementBase = builtCSS ? GesturesElement :
+      DirMixin$1(GesturesElement);
+
+    const observedAttributesGetter = findObservedAttributesGetter(legacyElementBase);
 
     /**
      * Map of simple names to touch action names
@@ -17580,6 +19012,13 @@
         this.__boundListeners;
         /** @type {?Object<string, ?Function>} */
         this._debouncers;
+        // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+        /** @type {boolean|undefined} */
+        this.__isUpgradeDisabled;
+        /** @type {boolean|undefined} */
+        this.__needsAttributesAtConnected;
+        /** @type {boolean|undefined} */
+        this._legacyForceObservedAttributes;
       }
 
       /**
@@ -17604,15 +19043,103 @@
       created() {}
 
       /**
+       * Processes an attribute reaction when the `legacyNoObservedAttributes`
+       * setting is in use.
+       * @param {string} name Name of attribute that changed
+       * @param {?string} old Old attribute value
+       * @param {?string} value New attribute value
+       * @return {void}
+       */
+      __attributeReaction(name, old, value) {
+        if ((this.__dataAttributes && this.__dataAttributes[name]) || name === DISABLED_ATTR$1) {
+          this.attributeChangedCallback(name, old, value, null);
+        }
+      }
+
+      /**
+       * Sets the value of an attribute.
+       * @override
+       * @param {string} name The name of the attribute to change.
+       * @param {string|number|boolean|!TrustedHTML|!TrustedScriptURL|!TrustedURL} value The new attribute value.
+       */
+      setAttribute(name, value) {
+        if (legacyNoObservedAttributes && !this._legacyForceObservedAttributes) {
+          const oldValue = this.getAttribute(name);
+          super.setAttribute(name, value);
+          // value coerced to String for closure's benefit
+          this.__attributeReaction(name, oldValue, String(value));
+        } else {
+          super.setAttribute(name, value);
+        }
+      }
+
+      /**
+       * Removes an attribute.
+       * @override
+       * @param {string} name The name of the attribute to remove.
+       */
+      removeAttribute(name) {
+        if (legacyNoObservedAttributes && !this._legacyForceObservedAttributes) {
+          const oldValue = this.getAttribute(name);
+          super.removeAttribute(name);
+          this.__attributeReaction(name, oldValue, null);
+        } else {
+          super.removeAttribute(name);
+        }
+      }
+
+      // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+      static get observedAttributes() {
+        if (legacyNoObservedAttributes && !this.prototype._legacyForceObservedAttributes) {
+          // Ensure this element is property registered with the telemetry system.
+          if (!this.hasOwnProperty(JSCompiler_renameProperty('__observedAttributes', this))) {
+            this.__observedAttributes = [];
+            register(this.prototype);
+          }
+          return this.__observedAttributes;
+        } else {
+          return observedAttributesGetter.call(this).concat(DISABLED_ATTR$1);
+        }
+      }
+
+      // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+      // Prevent element from enabling properties when it's upgrade disabled.
+      // Normally overriding connectedCallback would be enough, but dom-* elements
+      /** @override */
+      _enableProperties() {
+        if (!this.__isUpgradeDisabled) {
+          super._enableProperties();
+        }
+      }
+
+      // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+      // If the element starts upgrade-disabled and a property is set for
+      // which an accessor exists, the default should not be applied.
+      // This additional check is needed because defaults are applied via
+      // `_initializeProperties` which is called after initial properties
+      // have been set when the element starts upgrade-disabled.
+      /** @override */
+      _canApplyPropertyDefault(property) {
+        return super._canApplyPropertyDefault(property) &&
+          !(this.__isUpgradeDisabled && this._isPropertyPending(property));
+      }
+
+      /**
        * Provides an implementation of `connectedCallback`
        * which adds Polymer legacy API's `attached` method.
        * @return {void}
        * @override
        */
       connectedCallback() {
-        super.connectedCallback();
-        this.isAttached = true;
-        this.attached();
+        if (this.__needsAttributesAtConnected) {
+          this._takeAttributes();
+        }
+        // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+        if (!this.__isUpgradeDisabled) {
+          super.connectedCallback();
+          this.isAttached = true;
+          this.attached();
+        }
       }
 
       /**
@@ -17630,9 +19157,12 @@
        * @override
        */
       disconnectedCallback() {
-        super.disconnectedCallback();
-        this.isAttached = false;
-        this.detached();
+        // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+        if (!this.__isUpgradeDisabled) {
+          super.disconnectedCallback();
+          this.isAttached = false;
+          this.detached();
+        }
       }
 
       /**
@@ -17655,8 +19185,21 @@
        */
       attributeChangedCallback(name, old, value, namespace) {
         if (old !== value) {
-          super.attributeChangedCallback(name, old, value, namespace);
-          this.attributeChanged(name, old, value);
+          // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+          if (name == DISABLED_ATTR$1) {
+            // When disable-upgrade is removed, intialize properties and
+            // provoke connectedCallback if the element is already connected.
+            if (this.__isUpgradeDisabled && value == null) {
+              this._initializeProperties();
+              this.__isUpgradeDisabled = false;
+              if (wrap(this).isConnected) {
+                this.connectedCallback();
+              }
+            }
+          } else {
+            super.attributeChangedCallback(name, old, value, namespace);
+            this.attributeChanged(name, old, value);
+          }
         }
       }
 
@@ -17681,20 +19224,43 @@
        * @suppress {invalidCasts}
        */
       _initializeProperties() {
-        let proto = Object.getPrototypeOf(this);
-        if (!proto.hasOwnProperty('__hasRegisterFinished')) {
-          this._registered();
-          // backstop in case the `_registered` implementation does not set this
-          proto.__hasRegisterFinished = true;
+        // NOTE: Inlined for perf from version of DisableUpgradeMixin.
+        // Only auto-use disable-upgrade if legacyOptimizations is set.
+        if (legacyOptimizations && this.hasAttribute(DISABLED_ATTR$1)) {
+          this.__isUpgradeDisabled = true;
+        } else {
+          let proto = Object.getPrototypeOf(this);
+          if (!proto.hasOwnProperty(JSCompiler_renameProperty('__hasRegisterFinished', proto))) {
+            this._registered();
+            // backstop in case the `_registered` implementation does not set this
+            proto.__hasRegisterFinished = true;
+          }
+          super._initializeProperties();
+          this.root = /** @type {HTMLElement} */(this);
+          this.created();
+          // Pull all attribute values 1x if `legacyNoObservedAttributes` is set.
+          if (legacyNoObservedAttributes && !this._legacyForceObservedAttributes) {
+            if (this.hasAttributes()) {
+              this._takeAttributes();
+            // Element created from scratch or parser generated
+            } else if (!this.parentNode) {
+              this.__needsAttributesAtConnected = true;
+            }
+          }
+          // Ensure listeners are applied immediately so that they are
+          // added before declarative event listeners. This allows an element to
+          // decorate itself via an event prior to any declarative listeners
+          // seeing the event. Note, this ensures compatibility with 1.x ordering.
+          this._applyListeners();
         }
-        super._initializeProperties();
-        this.root = /** @type {HTMLElement} */(this);
-        this.created();
-        // Ensure listeners are applied immediately so that they are
-        // added before declarative event listeners. This allows an element to
-        // decorate itself via an event prior to any declarative listeners
-        // seeing the event. Note, this ensures compatibility with 1.x ordering.
-        this._applyListeners();
+      }
+
+      _takeAttributes() {
+        const a = this.attributes;
+        for (let i=0, l=a.length; i < l; i++) {
+          const attr = a[i];
+          this.__attributeReaction(attr.name, null, attr.value);
+        }
       }
 
       /**
@@ -18554,7 +20120,7 @@
        *
        * @param {string} methodName Method name to associate with message
        * @param {...*} args Array of strings or objects to log
-       * @return {Array} Array with formatting information for `console`
+       * @return {!Array} Array with formatting information for `console`
        *   logging.
        * @override
        */
@@ -18743,6 +20309,8 @@
     }
   }
 
+  const LegacyElement = LegacyElementMixin(HTMLElement);
+
   /* Note about construction and extension of legacy classes.
     [Changed in Q4 2018 to optimize performance.]
 
@@ -18869,7 +20437,7 @@
         */
         // only proceed if the generated class' prototype has not been registered.
         const generatedProto = PolymerGenerated.prototype;
-        if (!generatedProto.hasOwnProperty('__hasRegisterFinished')) {
+        if (!generatedProto.hasOwnProperty(JSCompiler_renameProperty('__hasRegisterFinished', generatedProto))) {
           generatedProto.__hasRegisterFinished = true;
           // ensure superclass is registered first.
           super._registered();
@@ -19098,8 +20666,8 @@
     if (!info) {
       console.warn('Polymer.Class requires `info` argument');
     }
-    let klass = mixin ? mixin(LegacyElementMixin(HTMLElement)) :
-        LegacyElementMixin(HTMLElement);
+    let klass = mixin ? mixin(LegacyElement) :
+        LegacyElement;
     klass = GenerateClassFromInfo(info, klass, info.behaviors);
     // decorate klass with registration info
     klass.is = klass.prototype.is = info.is;
@@ -19143,6 +20711,10 @@
       klass = info;
     } else {
       klass = Polymer.Class(info);
+    }
+    // Copy opt out for `legacyNoObservedAttributes` from info object to class.
+    if (info._legacyForceObservedAttributes) {
+      klass.prototype._legacyForceObservedAttributes = info._legacyForceObservedAttributes;
     }
     customElements.define(klass.is, /** @type {!HTMLElement} */(klass));
     return klass;
@@ -19408,10 +20980,49 @@
    * @implements {Polymer_PropertyEffects}
    * @private
    */
-  const templateInstanceBase = PropertyEffects(
-      // This cast shouldn't be neccessary, but Closure doesn't understand that
-      // "class {}" is a constructor function.
-      /** @type {function(new:Object)} */(class {}));
+  const templateInstanceBase = PropertyEffects(class {});
+
+  function showHideChildren(hide, children) {
+    for (let i=0; i<children.length; i++) {
+      let n = children[i];
+      // Ignore non-changes
+      if (Boolean(hide) != Boolean(n.__hideTemplateChildren__)) {
+        // clear and restore text
+        if (n.nodeType === Node.TEXT_NODE) {
+          if (hide) {
+            n.__polymerTextContent__ = n.textContent;
+            n.textContent = '';
+          } else {
+            n.textContent = n.__polymerTextContent__;
+          }
+        // remove and replace slot
+        } else if (n.localName === 'slot') {
+          if (hide) {
+            n.__polymerReplaced__ = document.createComment('hidden-slot');
+            wrap(wrap(n).parentNode).replaceChild(n.__polymerReplaced__, n);
+          } else {
+            const replace = n.__polymerReplaced__;
+            if (replace) {
+              wrap(wrap(replace).parentNode).replaceChild(n, replace);
+            }
+          }
+        }
+        // hide and show nodes
+        else if (n.style) {
+          if (hide) {
+            n.__polymerDisplay__ = n.style.display;
+            n.style.display = 'none';
+          } else {
+            n.style.display = n.__polymerDisplay__;
+          }
+        }
+      }
+      n.__hideTemplateChildren__ = hide;
+      if (n._showHideChildren) {
+        n._showHideChildren(hide);
+      }
+    }
+  }
 
   /**
    * @polymer
@@ -19518,45 +21129,7 @@
      * @protected
      */
     _showHideChildren(hide) {
-      let c = this.children;
-      for (let i=0; i<c.length; i++) {
-        let n = c[i];
-        // Ignore non-changes
-        if (Boolean(hide) != Boolean(n.__hideTemplateChildren__)) {
-          if (n.nodeType === Node.TEXT_NODE) {
-            if (hide) {
-              n.__polymerTextContent__ = n.textContent;
-              n.textContent = '';
-            } else {
-              n.textContent = n.__polymerTextContent__;
-            }
-          // remove and replace slot
-          } else if (n.localName === 'slot') {
-            if (hide) {
-              n.__polymerReplaced__ = document.createComment('hidden-slot');
-              wrap(wrap(n).parentNode).replaceChild(n.__polymerReplaced__, n);
-            } else {
-              const replace = n.__polymerReplaced__;
-              if (replace) {
-                wrap(wrap(replace).parentNode).replaceChild(n, replace);
-              }
-            }
-          }
-
-          else if (n.style) {
-            if (hide) {
-              n.__polymerDisplay__ = n.style.display;
-              n.style.display = 'none';
-            } else {
-              n.style.display = n.__polymerDisplay__;
-            }
-          }
-        }
-        n.__hideTemplateChildren__ = hide;
-        if (n._showHideChildren) {
-          n._showHideChildren(hide);
-        }
-      }
+      showHideChildren(hide, this.children);
     }
     /**
      * Overrides default property-effects implementation to intercept
@@ -19613,17 +21186,6 @@
     }
   }
 
-  /** @type {!DataTemplate} */
-  TemplateInstanceBase.prototype.__dataHost;
-  /** @type {!TemplatizeOptions} */
-  TemplateInstanceBase.prototype.__templatizeOptions;
-  /** @type {!Polymer_PropertyEffects} */
-  TemplateInstanceBase.prototype._methodHost;
-  /** @type {!Object} */
-  TemplateInstanceBase.prototype.__templatizeOwner;
-  /** @type {!Object} */
-  TemplateInstanceBase.prototype.__hostProps;
-
   /**
    * @constructor
    * @extends {TemplateInstanceBase}
@@ -19631,9 +21193,9 @@
    * @private
    */
   const MutableTemplateInstanceBase = MutableData(
-      // This cast shouldn't be necessary, but Closure doesn't seem to understand
-      // this constructor.
-      /** @type {function(new:TemplateInstanceBase)} */(TemplateInstanceBase));
+      // This cast shouldn't be neccessary, but Closure doesn't understand that
+      // TemplateInstanceBase is a constructor function.
+      /** @type {function(new:TemplateInstanceBase)} */ (TemplateInstanceBase));
 
   function findMethodHost(template) {
     // Technically this should be the owner of the outermost template.
@@ -19678,23 +21240,51 @@
   /**
    * Adds propagate effects from the template to the template instance for
    * properties that the host binds to the template using the `_host_` prefix.
-   * 
+   *
    * @suppress {missingProperties} class.prototype is not defined for some reason
    */
-  function addPropagateEffects(template, templateInfo, options) {
+  function addPropagateEffects(target, templateInfo, options, methodHost) {
     let userForwardHostProp = options.forwardHostProp;
     if (userForwardHostProp && templateInfo.hasHostProps) {
+      // Under the `removeNestedTemplates` optimization, a custom element like
+      // `dom-if` or `dom-repeat` can itself be treated as the "template"; this
+      // flag is used to switch between upgrading a `<template>` to be a property
+      // effects client vs. adding the effects directly to the custom element
+      const isTemplate = target.localName == 'template';
       // Provide data API and property effects on memoized template class
       let klass = templateInfo.templatizeTemplateClass;
       if (!klass) {
-        /**
-         * @constructor
-         * @extends {DataTemplate}
-         */
-        let templatizedBase = options.mutableData ? MutableDataTemplate : DataTemplate;
-        /** @private */
-        klass = templateInfo.templatizeTemplateClass =
-          class TemplatizedTemplate extends templatizedBase {};
+        if (isTemplate) {
+          /**
+           * @constructor
+           * @extends {DataTemplate}
+           */
+          let templatizedBase =
+              options.mutableData ? MutableDataTemplate : DataTemplate;
+
+          // NOTE: due to https://github.com/google/closure-compiler/issues/2928,
+          // combining the next two lines into one assignment causes a spurious
+          // type error.
+          /** @private */
+          class TemplatizedTemplate extends templatizedBase {}
+          klass = templateInfo.templatizeTemplateClass = TemplatizedTemplate;
+        } else {
+          /**
+           * @constructor
+           * @extends {PolymerElement}
+           */
+          const templatizedBase = target.constructor;
+
+          // Create a cached subclass of the base custom element class onto which
+          // to put the template-specific propagate effects
+          // NOTE: due to https://github.com/google/closure-compiler/issues/2928,
+          // combining the next two lines into one assignment causes a spurious
+          // type error.
+          /** @private */
+          class TemplatizedTemplateExtension extends templatizedBase {}
+          klass = templateInfo.templatizeTemplateClass =
+              TemplatizedTemplateExtension;
+        }
         // Add template - >instances effects
         // and host <- template effects
         let hostProps = templateInfo.hostProps;
@@ -19704,20 +21294,40 @@
             {fn: createForwardHostPropEffect(prop, userForwardHostProp)});
           klass.prototype._createNotifyingProperty('_host_' + prop);
         }
+        if (legacyWarnings && methodHost) {
+          warnOnUndeclaredProperties(templateInfo, options, methodHost);
+        }
       }
-      upgradeTemplate(template, klass);
       // Mix any pre-bound data into __data; no need to flush this to
       // instances since they pull from the template at instance-time
-      if (template.__dataProto) {
+      if (target.__dataProto) {
         // Note, generally `__dataProto` could be chained, but it's guaranteed
         // to not be since this is a vanilla template we just added effects to
-        Object.assign(template.__data, template.__dataProto);
+        Object.assign(target.__data, target.__dataProto);
       }
-      // Clear any pending data for performance
-      template.__dataTemp = {};
-      template.__dataPending = null;
-      template.__dataOld = null;
-      template._enableProperties();
+      if (isTemplate) {
+        upgradeTemplate(target, klass);
+        // Clear any pending data for performance
+        target.__dataTemp = {};
+        target.__dataPending = null;
+        target.__dataOld = null;
+        target._enableProperties();
+      } else {
+        // Swizzle the cached subclass prototype onto the custom element
+        Object.setPrototypeOf(target, klass.prototype);
+        // Check for any pre-bound instance host properties, and do the
+        // instance property delete/assign dance for those (directly into data;
+        // not need to go through accessor since they are pulled at instance time)
+        const hostProps = templateInfo.hostProps;
+        for (let prop in hostProps) {
+          prop = '_host_' + prop;
+          if (prop in target) {
+            const val = target[prop];
+            delete target[prop];
+            target.__data[prop] = val;
+          }
+        }
+      }
     }
   }
   /* eslint-enable valid-jsdoc */
@@ -19871,13 +21481,14 @@
       baseClass = createTemplatizerClass(template, templateInfo, options);
       templateInfo.templatizeInstanceClass = baseClass;
     }
+    const methodHost = findMethodHost(template);
     // Host property forwarding must be installed onto template instance
-    addPropagateEffects(template, templateInfo, options);
+    addPropagateEffects(template, templateInfo, options, methodHost);
     // Subclass base class and add reference for this specific template
     /** @private */
     let klass = class TemplateInstance extends baseClass {};
     /** @override */
-    klass.prototype._methodHost = findMethodHost(template);
+    klass.prototype._methodHost = methodHost;
     /** @override */
     klass.prototype.__dataHost = /** @type {!DataTemplate} */ (template);
     /** @override */
@@ -19886,6 +21497,27 @@
     klass.prototype.__hostProps = templateInfo.hostProps;
     klass = /** @type {function(new:TemplateInstanceBase)} */(klass); //eslint-disable-line no-self-assign
     return klass;
+  }
+
+  function warnOnUndeclaredProperties(templateInfo, options, methodHost) {
+    const declaredProps = methodHost.constructor._properties;
+    const {propertyEffects} = templateInfo;
+    const {instanceProps} = options;
+    for (let prop in propertyEffects) {
+      // Ensure properties with template effects are declared on the outermost
+      // host (`methodHost`), unless they are instance props or static functions
+      if (!declaredProps[prop] && !(instanceProps && instanceProps[prop])) {
+        const effects = propertyEffects[prop];
+        for (let i=0; i<effects.length; i++) {
+          const {part} = effects[i].info;
+          if (!(part.signature && part.signature.static)) {
+            console.warn(`Property '${prop}' used in template but not ` +
+              `declared in 'properties'; attribute will not be observed.`);
+            break;
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -19902,8 +21534,10 @@
    *     model.set('item.checked', true);
    *   }
    *
-   * @param {HTMLTemplateElement} template The model will be returned for
-   *   elements stamped from this template
+   * @param {HTMLElement} template The model will be returned for
+   *   elements stamped from this template (accepts either an HTMLTemplateElement)
+   *   or a `<dom-if>`/`<dom-repeat>` element when using `removeNestedTemplates`
+   *   optimization.
    * @param {Node=} node Node for which to return a template model.
    * @return {TemplateInstanceBase} Template instance representing the
    *   binding scope for the element
@@ -19914,7 +21548,7 @@
       // An element with a __templatizeInstance marks the top boundary
       // of a scope; walk up until we find one, and then ensure that
       // its __dataHost matches `this`, meaning this dom-repeat stamped it
-      if ((model = node.__templatizeInstance)) {
+      if ((model = node.__dataHost ? node : node.__templatizeInstance)) {
         // Found an element stamped by another template; keep walking up
         // from its __dataHost
         if (model.__dataHost != template) {
@@ -20068,7 +21702,7 @@
     render() {
       let template;
       if (!this.__children) {
-        template = /** @type {HTMLTemplateElement} */(template || this.querySelector('template'));
+        template = /** @type {?HTMLTemplateElement} */(template || this.querySelector('template'));
         if (!template) {
           // Wait until childList changes and template should be there by then
           let observer = new MutationObserver(() => {
@@ -20334,20 +21968,20 @@
          */
         renderedItemCount: {
           type: Number,
-          notify: true,
+          notify: !suppressTemplateNotifications,
           readOnly: true
         },
 
         /**
-         * Defines an initial count of template instances to render after setting
-         * the `items` array, before the next paint, and puts the `dom-repeat`
-         * into "chunking mode".  The remaining items will be created and rendered
-         * incrementally at each animation frame therof until all instances have
-         * been rendered.
+         * When greater than zero, defines an initial count of template instances
+         * to render after setting the `items` array, before the next paint, and
+         * puts the `dom-repeat` into "chunking mode".  The remaining items (and
+         * any future items as a result of pushing onto the array) will be created
+         * and rendered incrementally at each animation frame thereof until all
+         * instances have been rendered.
          */
         initialCount: {
-          type: Number,
-          observer: '__initializeChunking'
+          type: Number
         },
 
         /**
@@ -20370,6 +22004,34 @@
         _targetFrameTime: {
           type: Number,
           computed: '__computeFrameTime(targetFramerate)'
+        },
+
+        /**
+         * When the global `suppressTemplateNotifications` setting is used, setting
+         * `notifyDomChange: true` will enable firing `dom-change` events on this
+         * element.
+         */
+        notifyDomChange: {
+          type: Boolean
+        },
+
+        /**
+         * When chunking is enabled via `initialCount` and the `items` array is
+         * set to a new array, this flag controls whether the previously rendered
+         * instances are reused or not.
+         *
+         * When `true`, any previously rendered template instances are updated in
+         * place to their new item values synchronously in one shot, and then any
+         * further items (if any) are chunked out.  When `false`, the list is
+         * returned back to its `initialCount` (any instances over the initial
+         * count are discarded) and the remainder of the list is chunked back in.
+         * Set this to `true` to avoid re-creating the list and losing scroll
+         * position, although note that when changing the list to completely
+         * different data the render thread will be blocked until all existing
+         * instances are updated to their new data.
+         */
+        reuseChunkedInstances: {
+          type: Boolean
         }
 
       };
@@ -20383,12 +22045,14 @@
     constructor() {
       super();
       this.__instances = [];
-      this.__limit = Infinity;
-      this.__pool = [];
       this.__renderDebouncer = null;
       this.__itemsIdxToInstIdx = {};
       this.__chunkCount = null;
-      this.__lastChunkTime = null;
+      this.__renderStartTime = null;
+      this.__itemsArrayChanged = false;
+      this.__shouldMeasureChunk = false;
+      this.__shouldContinueChunking = false;
+      this.__chunkingId = 0;
       this.__sortFn = null;
       this.__filterFn = null;
       this.__observePaths = null;
@@ -20396,6 +22060,8 @@
       this.__ctor = null;
       this.__isDetached = true;
       this.template = null;
+      /** @type {TemplateInfo} */
+      this._templateInfo;
     }
 
     /**
@@ -20434,9 +22100,15 @@
       // until ready, since won't have its template content handed back to
       // it until then
       if (!this.__ctor) {
-        let template = this.template = /** @type {HTMLTemplateElement} */(this.querySelector('template'));
+        // When `removeNestedTemplates` is true, the "template" is the element
+        // itself, which has been given a `_templateInfo` property
+        const thisAsTemplate = /** @type {!HTMLTemplateElement} */ (
+            /** @type {!HTMLElement} */ (this));
+        let template = this.template = thisAsTemplate._templateInfo ?
+            thisAsTemplate :
+            /** @type {!HTMLTemplateElement} */ (this.querySelector('template'));
         if (!template) {
-          // // Wait until childList changes and template should be there by then
+          // Wait until childList changes and template should be there by then
           let observer = new MutationObserver(() => {
             if (this.querySelector('template')) {
               observer.disconnect();
@@ -20522,55 +22194,9 @@
       return Math.ceil(1000/rate);
     }
 
-    __initializeChunking() {
-      if (this.initialCount) {
-        this.__limit = this.initialCount;
-        this.__chunkCount = this.initialCount;
-        this.__lastChunkTime = performance.now();
-      }
-    }
-
-    __tryRenderChunk() {
-      // Debounced so that multiple calls through `_render` between animation
-      // frames only queue one new rAF (e.g. array mutation & chunked render)
-      if (this.items && this.__limit < this.items.length) {
-        this.__debounceRender(this.__requestRenderChunk);
-      }
-    }
-
-    __requestRenderChunk() {
-      requestAnimationFrame(()=>this.__renderChunk());
-    }
-
-    __renderChunk() {
-      // Simple auto chunkSize throttling algorithm based on feedback loop:
-      // measure actual time between frames and scale chunk count by ratio
-      // of target/actual frame time
-      let currChunkTime = performance.now();
-      let ratio = this._targetFrameTime / (currChunkTime - this.__lastChunkTime);
-      this.__chunkCount = Math.round(this.__chunkCount * ratio) || 1;
-      this.__limit += this.__chunkCount;
-      this.__lastChunkTime = currChunkTime;
-      this.__debounceRender(this.__render);
-    }
-
     __observeChanged() {
       this.__observePaths = this.observe &&
         this.observe.replace('.*', '.').split(' ');
-    }
-
-    __itemsChanged(change) {
-      if (this.items && !Array.isArray(this.items)) {
-        console.warn('dom-repeat expected array for `items`, found', this.items);
-      }
-      // If path was to an item (e.g. 'items.3' or 'items.3.foo'), forward the
-      // path to that instance synchronously (returns false for non-item paths)
-      if (!this.__handleItemPath(change.path, change.value)) {
-        // Otherwise, the array was reset ('items') or spliced ('items.splices'),
-        // so queue a full refresh
-        this.__initializeChunking();
-        this.__debounceRender(this.__render);
-      }
     }
 
     __handleObservedPaths(path) {
@@ -20588,6 +22214,23 @@
             }
           }
         }
+      }
+    }
+
+    __itemsChanged(change) {
+      if (this.items && !Array.isArray(this.items)) {
+        console.warn('dom-repeat expected array for `items`, found', this.items);
+      }
+      // If path was to an item (e.g. 'items.3' or 'items.3.foo'), forward the
+      // path to that instance synchronously (returns false for non-item paths)
+      if (!this.__handleItemPath(change.path, change.value)) {
+        // Otherwise, the array was reset ('items') or spliced ('items.splices'),
+        // so queue a render.  Restart chunking when the items changed (for
+        // backward compatibility), unless `reuseChunkedInstances` option is set
+        if (change.path === 'items') {
+          this.__itemsArrayChanged = true;
+        }
+        this.__debounceRender(this.__render);
       }
     }
 
@@ -20622,26 +22265,36 @@
         // No template found yet
         return;
       }
-      this.__applyFullRefresh();
-      // Reset the pool
-      // TODO(kschaaf): Reuse pool across turns and nested templates
-      // Now that objects/arrays are re-evaluated when set, we can safely
-      // reuse pooled instances across turns, however we still need to decide
-      // semantics regarding how long to hold, how many to hold, etc.
-      this.__pool.length = 0;
+      let items = this.items || [];
+      // Sort and filter the items into a mapping array from instance->item
+      const isntIdxToItemsIdx = this.__sortAndFilterItems(items);
+      // If we're chunking, increase the limit if there are new instances to
+      // create and schedule the next chunk
+      const limit = this.__calculateLimit(isntIdxToItemsIdx.length);
+      // Create, update, and/or remove instances
+      this.__updateInstances(items, limit, isntIdxToItemsIdx);
+      // If we're chunking, schedule a rAF task to measure/continue chunking.     
+      // Do this before any notifying events (renderedItemCount & dom-change)
+      // since those could modify items and enqueue a new full render which will
+      // pre-empt this measurement.
+      if (this.initialCount &&
+         (this.__shouldMeasureChunk || this.__shouldContinueChunking)) {
+        cancelAnimationFrame(this.__chunkingId);
+        this.__chunkingId = requestAnimationFrame(() => this.__continueChunking());
+      }
       // Set rendered item count
       this._setRenderedItemCount(this.__instances.length);
       // Notify users
-      this.dispatchEvent(new CustomEvent('dom-change', {
-        bubbles: true,
-        composed: true
-      }));
-      // Check to see if we need to render more items
-      this.__tryRenderChunk();
+      if (!suppressTemplateNotifications || this.notifyDomChange) {
+        this.dispatchEvent(new CustomEvent('dom-change', {
+          bubbles: true,
+          composed: true
+        }));
+      }
     }
 
-    __applyFullRefresh() {
-      let items = this.items || [];
+    __sortAndFilterItems(items) {
+      // Generate array maping the instance index to the items array index
       let isntIdxToItemsIdx = new Array(items.length);
       for (let i=0; i<items.length; i++) {
         isntIdxToItemsIdx[i] = i;
@@ -20655,12 +22308,69 @@
       if (this.__sortFn) {
         isntIdxToItemsIdx.sort((a, b) => this.__sortFn(items[a], items[b]));
       }
+      return isntIdxToItemsIdx;
+    }
+
+    __calculateLimit(filteredItemCount) {
+      let limit = filteredItemCount;
+      const currentCount = this.__instances.length;
+      // When chunking, we increase the limit from the currently rendered count
+      // by the chunk count that is re-calculated after each rAF (with special
+      // cases for reseting the limit to initialCount after changing items)
+      if (this.initialCount) {
+        let newCount;
+        if (!this.__chunkCount ||
+          (this.__itemsArrayChanged && !this.reuseChunkedInstances)) {
+          // Limit next render to the initial count
+          limit = Math.min(filteredItemCount, this.initialCount);
+          // Subtract off any existing instances to determine the number of
+          // instances that will be created
+          newCount = Math.max(limit - currentCount, 0);
+          // Initialize the chunk size with how many items we're creating
+          this.__chunkCount = newCount || 1;
+        } else {
+          // The number of new instances that will be created is based on the
+          // existing instances, the new list size, and the chunk size
+          newCount = Math.min(
+            Math.max(filteredItemCount - currentCount, 0), 
+            this.__chunkCount);
+          // Update the limit based on how many new items we're making, limited
+          // buy the total size of the list
+          limit = Math.min(currentCount + newCount, filteredItemCount);
+        }
+        // Record some state about chunking for use in `__continueChunking`
+        this.__shouldMeasureChunk = newCount === this.__chunkCount;
+        this.__shouldContinueChunking = limit < filteredItemCount;
+        this.__renderStartTime = performance.now();
+      }
+      this.__itemsArrayChanged = false;
+      return limit;
+    }
+
+    __continueChunking() {
+      // Simple auto chunkSize throttling algorithm based on feedback loop:
+      // measure actual time between frames and scale chunk count by ratio of
+      // target/actual frame time.  Only modify chunk size if our measurement
+      // reflects the cost of a creating a full chunk's worth of instances; this
+      // avoids scaling up the chunk size if we e.g. quickly re-rendered instances
+      // in place
+      if (this.__shouldMeasureChunk) {
+        const renderTime = performance.now() - this.__renderStartTime;
+        const ratio = this._targetFrameTime / renderTime;
+        this.__chunkCount = Math.round(this.__chunkCount * ratio) || 1;
+      }
+      // Enqueue a new render if we haven't reached the full size of the list
+      if (this.__shouldContinueChunking) {
+        this.__debounceRender(this.__render);
+      }
+    }
+    
+    __updateInstances(items, limit, isntIdxToItemsIdx) {
       // items->inst map kept for item path forwarding
       const itemsIdxToInstIdx = this.__itemsIdxToInstIdx = {};
-      let instIdx = 0;
+      let instIdx;
       // Generate instances and assign items
-      const limit = Math.min(isntIdxToItemsIdx.length, this.__limit);
-      for (; instIdx<limit; instIdx++) {
+      for (instIdx=0; instIdx<limit; instIdx++) {
         let inst = this.__instances[instIdx];
         let itemIdx = isntIdxToItemsIdx[instIdx];
         let item = items[itemIdx];
@@ -20697,10 +22407,7 @@
     }
 
     __detachAndRemoveInstance(idx) {
-      let inst = this.__detachInstance(idx);
-      if (inst) {
-        this.__pool.push(inst);
-      }
+      this.__detachInstance(idx);
       this.__instances.splice(idx, 1);
     }
 
@@ -20713,17 +22420,7 @@
     }
 
     __insertInstance(item, instIdx, itemIdx) {
-      let inst = this.__pool.pop();
-      if (inst) {
-        // TODO(kschaaf): If the pool is shared across turns, hostProps
-        // need to be re-set to reused instances in addition to item
-        inst._setPendingProperty(this.as, item);
-        inst._setPendingProperty(this.indexAs, instIdx);
-        inst._setPendingProperty(this.itemsIndexAs, itemIdx);
-        inst._flushProperties();
-      } else {
-        inst = this.__stampInstance(item, instIdx, itemIdx);
-      }
+      const inst = this.__stampInstance(item, instIdx, itemIdx);
       let beforeRow = this.__instances[instIdx + 1];
       let beforeNode = beforeRow ? beforeRow.children[0] : this;
       wrap(wrap(this).parentNode).insertBefore(inst.root, beforeNode);
@@ -20841,27 +22538,13 @@
   */
 
   /**
-   * The `<dom-if>` element will stamp a light-dom `<template>` child when
-   * the `if` property becomes truthy, and the template can use Polymer
-   * data-binding and declarative event features when used in the context of
-   * a Polymer element's template.
-   *
-   * When `if` becomes falsy, the stamped content is hidden but not
-   * removed from dom. When `if` subsequently becomes truthy again, the content
-   * is simply re-shown. This approach is used due to its favorable performance
-   * characteristics: the expense of creating template content is paid only
-   * once and lazily.
-   *
-   * Set the `restamp` property to true to force the stamped content to be
-   * created / destroyed when the `if` condition changes.
-   *
    * @customElement
    * @polymer
    * @extends PolymerElement
-   * @summary Custom element that conditionally stamps and hides or removes
-   *   template content based on a boolean flag.
+   * @summary Base class for dom-if element; subclassed into concrete
+   *   implementation.
    */
-  class DomIf extends PolymerElement {
+  class DomIfBase extends PolymerElement {
 
     // Not needed to find template; can be removed once the analyzer
     // can find the tag name from customElements.define call
@@ -20899,8 +22582,16 @@
         restamp: {
           type: Boolean,
           observer: '__debounceRender'
-        }
+        },
 
+        /**
+         * When the global `suppressTemplateNotifications` setting is used, setting
+         * `notifyDomChange: true` will enable firing `dom-change` events on this
+         * element.
+         */
+        notifyDomChange: {
+          type: Boolean
+        }
       };
 
     }
@@ -20908,11 +22599,12 @@
     constructor() {
       super();
       this.__renderDebouncer = null;
-      this.__invalidProps = null;
-      this.__instance = null;
       this._lastIf = false;
-      this.__ctor = null;
       this.__hideTemplateChildren__ = false;
+      /** @type {!HTMLTemplateElement|undefined} */
+      this.__template;
+      /** @type {!TemplateInfo|undefined} */
+      this._templateInfo;
     }
 
     __debounceRender() {
@@ -20967,31 +22659,120 @@
     }
 
     /**
+     * Ensures a template has been assigned to `this.__template`.  If it has not
+     * yet been, it querySelectors for it in its children and if it does not yet
+     * exist (e.g. in parser-generated case), opens a mutation observer and
+     * waits for it to appear (returns false if it has not yet been found,
+     * otherwise true).  In the `removeNestedTemplates` case, the "template" will
+     * be the `dom-if` element itself.
+     *
+     * @return {boolean} True when a template has been found, false otherwise
+     */
+    __ensureTemplate() {
+      if (!this.__template) {
+        // When `removeNestedTemplates` is true, the "template" is the element
+        // itself, which has been given a `_templateInfo` property
+        const thisAsTemplate = /** @type {!HTMLTemplateElement} */ (
+            /** @type {!HTMLElement} */ (this));
+        let template = thisAsTemplate._templateInfo ?
+            thisAsTemplate :
+            /** @type {!HTMLTemplateElement} */
+            (wrap(thisAsTemplate).querySelector('template'));
+        if (!template) {
+          // Wait until childList changes and template should be there by then
+          let observer = new MutationObserver(() => {
+            if (wrap(this).querySelector('template')) {
+              observer.disconnect();
+              this.__render();
+            } else {
+              throw new Error('dom-if requires a <template> child');
+            }
+          });
+          observer.observe(this, {childList: true});
+          return false;
+        }
+        this.__template = template;
+      }
+      return true;
+    }
+
+    /**
+     * Ensures a an instance of the template has been created and inserted. This
+     * method may return false if the template has not yet been found or if
+     * there is no `parentNode` to insert the template into (in either case,
+     * connection or the template-finding mutation observer firing will queue
+     * another render, causing this method to be called again at a more
+     * appropriate time).
+     *
+     * Subclasses should implement the following methods called here:
+     * - `__hasInstance`
+     * - `__createAndInsertInstance`
+     * - `__getInstanceNodes`
+     *
+     * @return {boolean} True if the instance was created, false otherwise.
+     */
+    __ensureInstance() {
+      let parentNode = wrap(this).parentNode;
+      if (!this.__hasInstance()) {
+        // Guard against element being detached while render was queued
+        if (!parentNode) {
+          return false;
+        }
+        // Find the template (when false, there was no template yet)
+        if (!this.__ensureTemplate()) {
+          return false;
+        }
+        this.__createAndInsertInstance(parentNode);
+      } else {
+        // Move instance children if necessary
+        let children = this.__getInstanceNodes();
+        if (children && children.length) {
+          // Detect case where dom-if was re-attached in new position
+          let lastChild = wrap(this).previousSibling;
+          if (lastChild !== children[children.length-1]) {
+            for (let i=0, n; (i<children.length) && (n=children[i]); i++) {
+              wrap(parentNode).insertBefore(n, this);
+            }
+          }
+        }
+      }
+      return true;
+    }
+
+    /**
      * Forces the element to render its content. Normally rendering is
      * asynchronous to a provoking change. This is done for efficiency so
      * that multiple changes trigger only a single render. The render method
      * should be called if, for example, template rendering is required to
      * validate application state.
+     *
      * @return {void}
      */
     render() {
       flush();
     }
 
+    /**
+     * Performs the key rendering steps:
+     * 1. Ensure a template instance has been stamped (when true)
+     * 2. Remove the template instance (when false and restamp:true)
+     * 3. Sync the hidden state of the instance nodes with the if/restamp state
+     * 4. Fires the `dom-change` event when necessary
+     *
+     * @return {void}
+     */
     __render() {
       if (this.if) {
         if (!this.__ensureInstance()) {
           // No template found yet
           return;
         }
-        this._showHideChildren();
       } else if (this.restamp) {
         this.__teardownInstance();
       }
-      if (!this.restamp && this.__instance) {
-        this._showHideChildren();
-      }
-      if (this.if != this._lastIf) {
+      this._showHideChildren();
+      if ((!suppressTemplateNotifications || this.notifyDomChange)
+          && this.if != this._lastIf) {
         this.dispatchEvent(new CustomEvent('dom-change', {
           bubbles: true,
           composed: true
@@ -21000,81 +22781,323 @@
       }
     }
 
-    __ensureInstance() {
-      let parentNode = wrap(this).parentNode;
-      // Guard against element being detached while render was queued
-      if (parentNode) {
-        if (!this.__ctor) {
-          let template = /** @type {HTMLTemplateElement} */(wrap(this).querySelector('template'));
-          if (!template) {
-            // Wait until childList changes and template should be there by then
-            let observer = new MutationObserver(() => {
-              if (wrap(this).querySelector('template')) {
-                observer.disconnect();
-                this.__render();
-              } else {
-                throw new Error('dom-if requires a <template> child');
-              }
-            });
-            observer.observe(this, {childList: true});
-            return false;
+    // Ideally these would be annotated as abstract methods in an abstract class,
+    // but closure compiler is finnicky
+    /* eslint-disable valid-jsdoc */
+    /**
+     * Abstract API to be implemented by subclass: Returns true if a template
+     * instance has been created and inserted.
+     *
+     * @protected
+     * @return {boolean} True when an instance has been created.
+     */
+    __hasInstance() { }
+
+    /**
+     * Abstract API to be implemented by subclass: Returns the child nodes stamped
+     * from a template instance.
+     *
+     * @protected
+     * @return {Array<Node>} Array of child nodes stamped from the template
+     * instance.
+     */
+    __getInstanceNodes() { }
+
+    /**
+     * Abstract API to be implemented by subclass: Creates an instance of the
+     * template and inserts it into the given parent node.
+     *
+     * @protected
+     * @param {Node} parentNode The parent node to insert the instance into
+     * @return {void}
+     */
+    __createAndInsertInstance(parentNode) { } // eslint-disable-line no-unused-vars
+
+    /**
+     * Abstract API to be implemented by subclass: Removes nodes created by an
+     * instance of a template and any associated cleanup.
+     *
+     * @protected
+     * @return {void}
+     */
+    __teardownInstance() { }
+
+    /**
+     * Abstract API to be implemented by subclass: Shows or hides any template
+     * instance childNodes based on the `if` state of the element and its
+     * `__hideTemplateChildren__` property.
+     *
+     * @protected
+     * @return {void}
+     */
+    _showHideChildren() { }
+    /* eslint-enable valid-jsdoc */
+  }
+
+  /**
+   * The version of DomIf used when `fastDomIf` setting is in use, which is
+   * optimized for first-render (but adds a tax to all subsequent property updates
+   * on the host, whether they were used in a given `dom-if` or not).
+   *
+   * This implementation avoids use of `Templatizer`, which introduces a new scope
+   * (a non-element PropertyEffects instance), which is not strictly necessary
+   * since `dom-if` never introduces new properties to its scope (unlike
+   * `dom-repeat`). Taking advantage of this fact, the `dom-if` reaches up to its
+   * `__dataHost` and stamps the template directly from the host using the host's
+   * runtime `_stampTemplate` API, which binds the property effects of the
+   * template directly to the host. This both avoids the intermediary
+   * `Templatizer` instance, but also avoids the need to bind host properties to
+   * the `<template>` element and forward those into the template instance.
+   *
+   * In this version of `dom-if`, the `this.__instance` method is the
+   * `DocumentFragment` returned from `_stampTemplate`, which also serves as the
+   * handle for later removing it using the `_removeBoundDom` method.
+   */
+  class DomIfFast extends DomIfBase {
+
+    constructor() {
+      super();
+      this.__instance = null;
+      this.__syncInfo = null;
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * @override
+     * @return {boolean} True when an instance has been created.
+     */
+    __hasInstance() {
+      return Boolean(this.__instance);
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * @override
+     * @return {Array<Node>} Array of child nodes stamped from the template
+     * instance.
+     */
+    __getInstanceNodes() {
+      return this.__instance.templateInfo.childNodes;
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * Stamps the template by calling `_stampTemplate` on the `__dataHost` of this
+     * element and then inserts the resulting nodes into the given `parentNode`.
+     *
+     * @override
+     * @param {Node} parentNode The parent node to insert the instance into
+     * @return {void}
+     */
+    __createAndInsertInstance(parentNode) {
+      const host = this.__dataHost || this;
+      if (strictTemplatePolicy) {
+        if (!this.__dataHost) {
+          throw new Error('strictTemplatePolicy: template owner not trusted');
+        }
+      }
+      // Pre-bind and link the template into the effects system
+      const templateInfo = host._bindTemplate(
+          /** @type {!HTMLTemplateElement} */ (this.__template), true);
+      // Install runEffects hook that prevents running property effects
+      // (and any nested template effects) when the `if` is false
+      templateInfo.runEffects = (runEffects, changedProps, hasPaths) => {
+        let syncInfo = this.__syncInfo;
+        if (this.if) {
+          // Mix any props that changed while the `if` was false into `changedProps`
+          if (syncInfo) {
+            // If there were properties received while the `if` was false, it is
+            // important to sync the hidden state with the element _first_, so that
+            // new bindings to e.g. `textContent` do not get stomped on by
+            // pre-hidden values if `_showHideChildren` were to be called later at
+            // the next render. Clearing `__invalidProps` here ensures
+            // `_showHideChildren`'s call to `__syncHostProperties` no-ops, so
+            // that we don't call `runEffects` more often than necessary.
+            this.__syncInfo = null;
+            this._showHideChildren();
+            changedProps = Object.assign(syncInfo.changedProps, changedProps);
           }
-          this.__ctor = templatize(template, this, {
-            // dom-if templatizer instances require `mutable: true`, as
-            // `__syncHostProperties` relies on that behavior to sync objects
-            mutableData: true,
-            /**
-             * @param {string} prop Property to forward
-             * @param {*} value Value of property
-             * @this {DomIf}
-             */
-            forwardHostProp: function(prop, value) {
-              if (this.__instance) {
-                if (this.if) {
-                  this.__instance.forwardHostProp(prop, value);
-                } else {
-                  // If we have an instance but are squelching host property
-                  // forwarding due to if being false, note the invalidated
-                  // properties so `__syncHostProperties` can sync them the next
-                  // time `if` becomes true
-                  this.__invalidProps = this.__invalidProps || Object.create(null);
-                  this.__invalidProps[root(prop)] = true;
+          runEffects(changedProps, hasPaths);
+        } else {
+          // Accumulate any values changed while `if` was false, along with the
+          // runEffects method to sync them, so that we can replay them once `if`
+          // becomes true
+          if (this.__instance) {
+            if (!syncInfo) {
+              syncInfo = this.__syncInfo = { runEffects, changedProps: {} };
+            }
+            if (hasPaths) {
+              // Store root object of any paths; this will ensure direct bindings
+              // like [[obj.foo]] bindings run after a `set('obj.foo', v)`, but
+              // note that path notifications like `set('obj.foo.bar', v)` will
+              // not propagate. Since batched path notifications are not
+              // supported, we cannot simply accumulate path notifications. This
+              // is equivalent to the non-fastDomIf case, which stores root(p) in
+              // __invalidProps.
+              for (const p in changedProps) {
+                const rootProp = root(p);
+                syncInfo.changedProps[rootProp] = this.__dataHost[rootProp];
+              }
+            } else {
+              Object.assign(syncInfo.changedProps, changedProps);
+            }
+          }
+        }
+      };
+      // Stamp the template, and set its DocumentFragment to the "instance"
+      this.__instance = host._stampTemplate(
+          /** @type {!HTMLTemplateElement} */ (this.__template), templateInfo);
+      wrap(parentNode).insertBefore(this.__instance, this);
+    }
+
+    /**
+     * Run effects for any properties that changed while the `if` was false.
+     *
+     * @return {void}
+     */
+    __syncHostProperties() {
+      const syncInfo = this.__syncInfo;
+      if (syncInfo) {
+        this.__syncInfo = null;
+        syncInfo.runEffects(syncInfo.changedProps, false);
+      }
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * Remove the instance and any nodes it created.  Uses the `__dataHost`'s
+     * runtime `_removeBoundDom` method.
+     *
+     * @override
+     * @return {void}
+     */
+    __teardownInstance() {
+      const host = this.__dataHost || this;
+      if (this.__instance) {
+        host._removeBoundDom(this.__instance);
+        this.__instance = null;
+        this.__syncInfo = null;
+      }
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * Shows or hides the template instance top level child nodes. For
+     * text nodes, `textContent` is removed while "hidden" and replaced when
+     * "shown."
+     *
+     * @override
+     * @return {void}
+     * @protected
+     * @suppress {visibility}
+     */
+    _showHideChildren() {
+      const hidden = this.__hideTemplateChildren__ || !this.if;
+      if (this.__instance && Boolean(this.__instance.__hidden) !== hidden) {
+        this.__instance.__hidden = hidden;
+        showHideChildren(hidden, this.__instance.templateInfo.childNodes);
+      }
+      if (!hidden) {
+        this.__syncHostProperties();
+      }
+    }
+  }
+
+  /**
+   * The "legacy" implementation of `dom-if`, implemented using `Templatizer`.
+   *
+   * In this version, `this.__instance` is the `TemplateInstance` returned
+   * from the templatized constructor.
+   */
+  class DomIfLegacy extends DomIfBase {
+
+    constructor() {
+      super();
+      this.__ctor = null;
+      this.__instance = null;
+      this.__invalidProps = null;
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * @override
+     * @return {boolean} True when an instance has been created.
+     */
+    __hasInstance() {
+      return Boolean(this.__instance);
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * @override
+     * @return {Array<Node>} Array of child nodes stamped from the template
+     * instance.
+     */
+    __getInstanceNodes() {
+      return this.__instance.children;
+    }
+
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * Stamps the template by creating a new instance of the templatized
+     * constructor (which is created lazily if it does not yet exist), and then
+     * inserts its resulting `root` doc fragment into the given `parentNode`.
+     *
+     * @override
+     * @param {Node} parentNode The parent node to insert the instance into
+     * @return {void}
+     */
+    __createAndInsertInstance(parentNode) {
+      // Ensure we have an instance constructor
+      if (!this.__ctor) {
+        this.__ctor = templatize(
+            /** @type {!HTMLTemplateElement} */ (this.__template), this, {
+              // dom-if templatizer instances require `mutable: true`, as
+              // `__syncHostProperties` relies on that behavior to sync objects
+              mutableData: true,
+              /**
+               * @param {string} prop Property to forward
+               * @param {*} value Value of property
+               * @this {DomIfLegacy}
+               */
+              forwardHostProp: function(prop, value) {
+                if (this.__instance) {
+                  if (this.if) {
+                    this.__instance.forwardHostProp(prop, value);
+                  } else {
+                    // If we have an instance but are squelching host property
+                    // forwarding due to if being false, note the invalidated
+                    // properties so `__syncHostProperties` can sync them the next
+                    // time `if` becomes true
+                    this.__invalidProps =
+                        this.__invalidProps || Object.create(null);
+                    this.__invalidProps[root(prop)] = true;
+                  }
                 }
               }
-            }
-          });
-        }
-        if (!this.__instance) {
-          this.__instance = new this.__ctor();
-          wrap(parentNode).insertBefore(this.__instance.root, this);
-        } else {
-          this.__syncHostProperties();
-          let c$ = this.__instance.children;
-          if (c$ && c$.length) {
-            // Detect case where dom-if was re-attached in new position
-            let lastChild = wrap(this).previousSibling;
-            if (lastChild !== c$[c$.length-1]) {
-              for (let i=0, n; (i<c$.length) && (n=c$[i]); i++) {
-                wrap(parentNode).insertBefore(n, this);
-              }
-            }
-          }
-        }
+            });
       }
-      return true;
+      // Create and insert the instance
+      this.__instance = new this.__ctor();
+      wrap(parentNode).insertBefore(this.__instance.root, this);
     }
 
-    __syncHostProperties() {
-      let props = this.__invalidProps;
-      if (props) {
-        for (let prop in props) {
-          this.__instance._setPendingProperty(prop, this.__dataHost[prop]);
-        }
-        this.__invalidProps = null;
-        this.__instance._flushProperties();
-      }
-    }
-
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * Removes the instance and any nodes it created.
+     *
+     * @override
+     * @return {void}
+     */
     __teardownInstance() {
       if (this.__instance) {
         let c$ = this.__instance.children;
@@ -21090,27 +23113,75 @@
             }
           }
         }
-        this.__instance = null;
         this.__invalidProps = null;
+        this.__instance = null;
       }
     }
 
     /**
-     * Shows or hides the template instance top level child elements. For
-     * text nodes, `textContent` is removed while "hidden" and replaced when
-     * "shown."
+     * Forwards any properties that changed while the `if` was false into the
+     * template instance and flushes it.
+     *
      * @return {void}
-     * @protected
-     * @suppress {visibility}
      */
-    _showHideChildren() {
-      let hidden = this.__hideTemplateChildren__ || !this.if;
-      if (this.__instance) {
-        this.__instance._showHideChildren(hidden);
+    __syncHostProperties() {
+      let props = this.__invalidProps;
+      if (props) {
+        this.__invalidProps = null;
+        for (let prop in props) {
+          this.__instance._setPendingProperty(prop, this.__dataHost[prop]);
+        }
+        this.__instance._flushProperties();
       }
     }
 
+    /**
+     * Implementation of abstract API needed by DomIfBase.
+     *
+     * Shows or hides the template instance top level child elements. For
+     * text nodes, `textContent` is removed while "hidden" and replaced when
+     * "shown."
+     *
+     * @override
+     * @protected
+     * @return {void}
+     * @suppress {visibility}
+     */
+    _showHideChildren() {
+      const hidden = this.__hideTemplateChildren__ || !this.if;
+      if (this.__instance && Boolean(this.__instance.__hidden) !== hidden) {
+        this.__instance.__hidden = hidden;
+        this.__instance._showHideChildren(hidden);
+      }
+      if (!hidden) {
+        this.__syncHostProperties();
+      }
+    }
   }
+
+  /**
+   * The `<dom-if>` element will stamp a light-dom `<template>` child when
+   * the `if` property becomes truthy, and the template can use Polymer
+   * data-binding and declarative event features when used in the context of
+   * a Polymer element's template.
+   *
+   * When `if` becomes falsy, the stamped content is hidden but not
+   * removed from dom. When `if` subsequently becomes truthy again, the content
+   * is simply re-shown. This approach is used due to its favorable performance
+   * characteristics: the expense of creating template content is paid only
+   * once and lazily.
+   *
+   * Set the `restamp` property to true to force the stamped content to be
+   * created / destroyed when the `if` condition changes.
+   *
+   * @customElement
+   * @polymer
+   * @extends DomIfBase
+   * @constructor
+   * @summary Custom element that conditionally stamps and hides or removes
+   *   template content based on a boolean flag.
+   */
+  const DomIf = fastDomIf ? DomIfFast : DomIfLegacy;
 
   customElements.define(DomIf.is, DomIf);
 
@@ -21859,10 +23930,10 @@
    *
    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.ElementMixin
-   * @mixes Vaadin.ListMixin
-   * @mixes Vaadin.ThemableMixin
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ListMixin
+   * @mixes ThemableMixin
    * @demo demo/index.html
    */
   class TabsElement extends
@@ -21939,6 +24010,16 @@
       :host([orientation="vertical"]) [part="forward-button"] {
         display: none;
       }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part="back-button"]::after {
+        content: '▶';
+      }
+
+      :host([dir="rtl"]) [part="forward-button"]::after {
+        content: '◀';
+      }
     </style>
     <div on-click="_scrollBack" part="back-button"></div>
 
@@ -21955,7 +24036,7 @@
     }
 
     static get version() {
-      return '3.0.4';
+      return '3.1.0';
     }
 
     static get properties() {
@@ -21995,11 +24076,11 @@
     }
 
     _scrollForward() {
-      this._scroll(this._scrollOffset);
+      this._scroll(-this.__direction * this._scrollOffset);
     }
 
     _scrollBack() {
-      this._scroll(-1 * this._scrollOffset);
+      this._scroll(this.__direction * this._scrollOffset);
     }
 
     get _scrollOffset() {
@@ -22010,14 +24091,25 @@
       return this.$.scroll;
     }
 
+    get __direction() {
+      return !this._vertical && this.getAttribute('dir') === 'rtl' ? 1 : -1;
+    }
+
     _updateOverflow() {
-      const scrollPosition = this._vertical ? this._scrollerElement.scrollTop : this._scrollerElement.scrollLeft;
+      const scrollPosition = this._vertical ? this._scrollerElement.scrollTop : this.__getNormalizedScrollLeft(this._scrollerElement);
       let scrollSize = this._vertical ? this._scrollerElement.scrollHeight : this._scrollerElement.scrollWidth;
       // In Edge we need to adjust the size in 1 pixel
       scrollSize -= 1;
 
       let overflow = scrollPosition > 0 ? 'start' : '';
       overflow += scrollPosition + this._scrollOffset < scrollSize ? ' end' : '';
+
+      if (this.__direction == 1) {
+        overflow = overflow.replace(/start|end/gi, matched => {
+          return matched === 'start' ? 'end' : 'start';
+        });
+      }
+
       overflow ? this.setAttribute('overflow', overflow.trim()) : this.removeAttribute('overflow');
 
       this._repaintShadowNodesHack();
@@ -23879,9 +25971,9 @@
    * ---|---|---
    * `--vaadin-form-layout-column-spacing` | Length of the spacing between columns | `2em`
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.ElementMixin
-   * @mixes Vaadin.ThemableMixin
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ThemableMixin
    * @demo demo/index.html
    */
   class FormLayoutElement extends
@@ -23943,7 +26035,7 @@
     }
 
     static get version() {
-      return '2.1.4';
+      return '2.2.0';
     }
 
     static get properties() {
@@ -24073,25 +26165,32 @@
 
       this.__mutationObserver = new MutationObserver(mutationRecord => {
         mutationRecord.forEach(mutation => {
-          if (mutation.type === 'attributes' && mutation.attributeName === 'colspan') {
+          if (mutation.type === 'attributes'
+            && ((mutation.attributeName === 'colspan')
+            || (mutation.attributeName === 'hidden'))) {
             this._invokeUpdateStyles();
           }
         });
       });
 
       this.__childObserver = new FlattenedNodesObserver(this, info => {
-        const ignore = ['template', 'style', 'dom-repeat', 'dom-if'];
-        const nodes = Array.from(info.addedNodes)
-          .filter(node => node.nodeType === Node.ELEMENT_NODE && ignore.indexOf(node.localName.toLowerCase()) === -1);
+        const addedNodes = this._getObservableNodes(info.addedNodes);
+        const removedNodes = this._getObservableNodes(info.removedNodes);
 
-        nodes.forEach(child => {
+        addedNodes.forEach(child => {
           this.__mutationObserver.observe(child, mutationObserverConfig);
         });
 
-        if (nodes.some(node => node.hasAttribute('colspan'))) {
+        if (addedNodes.length > 0 || removedNodes.length > 0) {
           this._invokeUpdateStyles();
         }
       });
+    }
+
+    _getObservableNodes(nodeList) {
+      const ignore = ['template', 'style', 'dom-repeat', 'dom-if'];
+      return Array.from(nodeList)
+        .filter(node => node.nodeType === Node.ELEMENT_NODE && ignore.indexOf(node.localName.toLowerCase()) === -1);
     }
 
     _naturalNumberOrOne(n) {
@@ -24321,6 +26420,14 @@
         display: none;
       }
 
+      :host([readonly]) [part="input-field"] {
+        border: 1px dashed var(--lumo-contrast-30pct);
+      }
+
+      :host([readonly]) [part="input-field"]::after {
+        border: none;
+      }
+
       :host(:hover:not([readonly]):not([focused])) [part="input-field"] {
         background-color: var(--lumo-contrast-20pct);
       }
@@ -24432,6 +26539,29 @@
         max-height: 0;
         overflow: hidden;
       }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part="label"] {
+        margin-left: 0;
+        margin-right: calc(var(--lumo-border-radius-m) / 4);
+      }
+
+      :host([required][dir="rtl"]) [part="label"] {
+        padding-left: 1em;
+        padding-right: 0;
+      }
+
+      :host([dir="rtl"]) [part="label"]::after {
+        right: auto;
+        left: 0;
+      }
+
+      :host([dir="rtl"]) [part="error-message"] {
+        margin-left: 0;
+        margin-right: calc(var(--lumo-border-radius-m) / 4);
+      }
+
     </style>
   </template>
 </dom-module>`;
@@ -24512,8 +26642,8 @@
       }
 
       [part="value"]:focus,
-      [part="input-field"] ::slotted(input):focus,
-      [part="input-field"] ::slotted(textarea):focus {
+      :host([focused]) [part="input-field"] ::slotted(input),
+      :host([focused]) [part="input-field"] ::slotted(textarea) {
         -webkit-mask-image: none;
         mask-image: none;
       }
@@ -24705,6 +26835,11 @@
 
       /* Text align */
 
+      :host([theme~="align-left"]) [part="value"] {
+        text-align: left;
+        --_lumo-text-field-overflow-mask-image: none;
+      }
+
       :host([theme~="align-center"]) [part="value"] {
         text-align: center;
         --_lumo-text-field-overflow-mask-image: none;
@@ -24722,6 +26857,12 @@
         }
       }
 
+      @-moz-document url-prefix() {
+        /* Firefox is smart enough to align overflowing text to right */
+        :host([theme~="align-left"]) [part="value"] {
+          --_lumo-text-field-overflow-mask-image: linear-gradient(to left, transparent 0.25em, #000 1.5em);
+        }
+      }
       /* Slotted content */
 
       [part="input-field"] ::slotted(:not([part]):not(iron-icon):not(input):not(textarea)) {
@@ -24745,6 +26886,60 @@
 
       [part="clear-button"]::before {
         content: var(--lumo-icons-cross);
+      }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part="input-field"]::after {
+        transform-origin: 0% 0;
+      }
+
+      :host([dir="rtl"]) [part="value"],
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input),
+      :host([dir="rtl"]) [part="input-field"] ::slotted(textarea) {
+        --_lumo-text-field-overflow-mask-image: linear-gradient(to right, transparent, #000 1.25em);
+      }
+
+      :host([dir="rtl"]) [part="value"]:focus,
+      :host([focused][dir="rtl"]) [part="input-field"] ::slotted(input),
+      :host([focused][dir="rtl"]) [part="input-field"] ::slotted(textarea) {
+        -webkit-mask-image: none;
+        mask-image: none;
+      }
+
+      @-moz-document url-prefix() {
+        :host([dir="rtl"]) [part="value"],
+        :host([dir="rtl"]) [part="input-field"] ::slotted(input),
+        :host([dir="rtl"]) [part="input-field"] ::slotted(textarea),
+        :host([dir="rtl"]) [part="input-field"] ::slotted([part="value"]) {
+          mask-image: var(--_lumo-text-field-overflow-mask-image);
+        }
+      }
+
+      :host([theme~="align-left"][dir="rtl"]) [part="value"] {
+        --_lumo-text-field-overflow-mask-image: none;
+      }
+
+      :host([theme~="align-center"][dir="rtl"]) [part="value"] {
+        --_lumo-text-field-overflow-mask-image: none;
+      }
+
+      :host([theme~="align-right"][dir="rtl"]) [part="value"] {
+        --_lumo-text-field-overflow-mask-image: none;
+      }
+
+      @-moz-document url-prefix() {
+        /* Firefox is smart enough to align overflowing text to right */
+        :host([theme~="align-right"][dir="rtl"]) [part="value"] {
+          --_lumo-text-field-overflow-mask-image: linear-gradient(to right, transparent 0.25em, #000 1.5em);
+        }
+      }
+
+      @-moz-document url-prefix() {
+        /* Firefox is smart enough to align overflowing text to right */
+        :host([theme~="align-left"][dir="rtl"]) [part="value"] {
+          --_lumo-text-field-overflow-mask-image: linear-gradient(to left, transparent 0.25em, #000 1.5em);
+        }
       }
     </style>
   </template>
@@ -24863,8 +27058,8 @@
 
   const HOST_PROPS = {
     default: ['list', 'autofocus', 'pattern', 'autocapitalize', 'autocorrect', 'maxlength',
-      'minlength', 'name', 'placeholder', 'autocomplete', 'title'],
-    accessible: ['disabled', 'readonly', 'required', 'invalid']
+      'minlength', 'name', 'placeholder', 'autocomplete', 'title', 'disabled', 'readonly', 'required'],
+    accessible: ['invalid']
   };
 
   const PROP_TYPE = {
@@ -24875,7 +27070,7 @@
 
   /**
    * @polymerMixin
-   * @mixes Vaadin.ControlStateMixin
+   * @mixes ControlStateMixin
    */
   const TextFieldMixin = subclass => class VaadinTextFieldMixin extends ControlStateMixin(subclass) {
     static get properties() {
@@ -24935,6 +27130,26 @@
         errorMessage: {
           type: String,
           value: ''
+        },
+
+        /**
+         * Object with translated strings used for localization. Has
+         * the following structure and default values:
+         *
+         * ```
+         * {
+         *   // Translation of the clear icon button accessible label
+         *   clear: 'Clear'
+         * }
+         * ```
+         */
+        i18n: {
+          type: Object,
+          value: () => {
+            return {
+              clear: 'Clear'
+            };
+          }
         },
 
         /**
@@ -25028,13 +27243,23 @@
           type: Boolean
         },
 
-        _labelId: {
-          type: String
-        },
+        /**
+         * A pattern matched against individual characters the user inputs.
+         * When set, the field will prevent:
+         * - `keyDown` events if the entered key doesn't match `/^_enabledCharPattern$/`
+         * - `paste` events if the pasted text doesn't match `/^_enabledCharPattern*$/`
+         * - `drop` events if the dropped text doesn't match `/^_enabledCharPattern*$/`
+         *
+         * For example, to enable entering only numbers and minus signs,
+         * `_enabledCharPattern = "[\\d-]"`
+         */
+        _enabledCharPattern: String,
 
-        _errorId: {
-          type: String
-        }
+        _labelId: String,
+
+        _errorId: String,
+
+        _inputId: String
       };
     }
 
@@ -25043,7 +27268,10 @@
         '_hostPropsChanged(' + HOST_PROPS.default.join(', ') + ')',
         '_hostAccessiblePropsChanged(' + HOST_PROPS.accessible.join(', ') + ')',
         '_getActiveErrorId(invalid, errorMessage, _errorId)',
-        '_getActiveLabelId(label, _labelId)'];
+        '_getActiveLabelId(label, _labelId, _inputId)',
+        '__observeOffsetHeight(errorMessage, invalid, label)',
+        '__enabledCharPatternChanged(_enabledCharPattern)'
+      ];
     }
 
     get focusElement() {
@@ -25068,6 +27296,14 @@
       return 'input';
     }
 
+    _createConstraintsObserver() {
+      // This complex observer needs to be added dynamically here (instead of defining it above in the `get observers()`)
+      // so that it runs after complex observers of inheriting classes. Otherwise e.g. `_stepOrMinChanged()` observer of
+      // vaadin-number-field would run after this and the `min` and `step` properties would not yet be propagated to
+      // the `inputElement` when this runs.
+      this._createMethodObserver('_constraintsChanged(required, minlength, maxlength, pattern)');
+    }
+
     _onInput(e) {
       if (this.__preventInput) {
         e.stopImmediatePropagation();
@@ -25089,8 +27325,13 @@
           return;
         }
       }
-      this.__userInput = true;
+
+      if (!e.__fromClearButton) {
+        this.__userInput = true;
+      }
+
       this.value = e.target.value;
+      this.__userInput = false;
     }
 
     // NOTE(yuriy): Workaround needed for IE11 and Edge for proper displaying
@@ -25137,7 +27378,6 @@
       }
 
       if (this.__userInput) {
-        this.__userInput = false;
         return;
       } else if (newVal !== undefined) {
         this.inputElement.value = newVal;
@@ -25200,10 +27440,10 @@
       const input = this.inputElement;
       const attributeNames = HOST_PROPS[type];
 
-      if (type === 'accessible') {
+      if (type === PROP_TYPE.ACCESSIBLE) {
         attributeNames.forEach((attr, index) => {
           this._setOrToggleAttribute(attr, attributesValues[index], input);
-          this._setOrToggleAttribute(`aria-${attr}`, attributesValues[index], input);
+          this._setOrToggleAttribute(`aria-${attr}`, attributesValues[index] ? 'true' : false, input);
         });
       } else {
         attributeNames.forEach((attr, index) => {
@@ -25224,12 +27464,26 @@
       }
     }
 
+    _constraintsChanged(required, minlength, maxlength, pattern) {
+      if (!this.invalid) {
+        return;
+      }
+
+      if (!required && !minlength && !maxlength && !pattern) {
+        this.invalid = false;
+      } else {
+        this.validate();
+      }
+    }
+
     /**
      * Returns true if the current input value satisfies all constraints (if any)
      * @returns {boolean}
      */
     checkValidity() {
-      if (this.required || this.pattern || this.maxlength || this.minlength) {
+      // Note (Yuriy): `__forceCheckValidity` is used in containing components (i.e. `vaadin-date-picker`) in order
+      // to force the checkValidity instead of returning the previous invalid state.
+      if (this.required || this.pattern || this.maxlength || this.minlength || this.__forceCheckValidity) {
         return this.inputElement.checkValidity();
       } else {
         return !this.invalid;
@@ -25241,6 +27495,9 @@
       node.addEventListener('change', this._boundOnChange);
       node.addEventListener('blur', this._boundOnBlur);
       node.addEventListener('focus', this._boundOnFocus);
+      node.addEventListener('paste', this._boundOnPaste);
+      node.addEventListener('drop', this._boundOnDrop);
+      node.addEventListener('beforeinput', this._boundOnBeforeInput);
     }
 
     _removeInputListeners(node) {
@@ -25248,15 +27505,23 @@
       node.removeEventListener('change', this._boundOnChange);
       node.removeEventListener('blur', this._boundOnBlur);
       node.removeEventListener('focus', this._boundOnFocus);
+      node.removeEventListener('paste', this._boundOnPaste);
+      node.removeEventListener('drop', this._boundOnDrop);
+      node.removeEventListener('beforeinput', this._boundOnBeforeInput);
     }
 
     ready() {
       super.ready();
 
+      this._createConstraintsObserver();
+
       this._boundOnInput = this._onInput.bind(this);
       this._boundOnChange = this._onChange.bind(this);
       this._boundOnBlur = this._onBlur.bind(this);
       this._boundOnFocus = this._onFocus.bind(this);
+      this._boundOnPaste = this._onPaste.bind(this);
+      this._boundOnDrop = this._onDrop.bind(this);
+      this._boundOnBeforeInput = this._onBeforeInput.bind(this);
 
       const defaultInput = this.shadowRoot.querySelector('[part="value"]');
       this._slottedInput = this.querySelector(`${this._slottedTagName}[slot="${this._slottedTagName}"]`);
@@ -25275,17 +27540,26 @@
       }
 
       this.$.clearButton.addEventListener('mousedown', () => this._valueClearing = true);
+      this.$.clearButton.addEventListener('mouseleave', () => this._valueClearing = false);
       this.$.clearButton.addEventListener('click', this._onClearButtonClick.bind(this));
       this.addEventListener('keydown', this._onKeyDown.bind(this));
 
       var uniqueId = TextFieldMixin._uniqueId = 1 + TextFieldMixin._uniqueId || 0;
       this._errorId = `${this.constructor.is}-error-${uniqueId}`;
       this._labelId = `${this.constructor.is}-label-${uniqueId}`;
+      this._inputId = `${this.constructor.is}-input-${uniqueId}`;
+
+      // Lumo theme defines a max-height transition for the "error-message"
+      // part on invalid state change.
+      this.shadowRoot.querySelector('[part="error-message"]')
+        .addEventListener('transitionend', () => {
+          this.__observeOffsetHeight();
+        });
     }
 
     /**
      * Returns true if `value` is valid.
-     * `<iron-form>` uses this to check the validity or all its elements.
+     * `<iron-form>` uses this to check the validity for all its elements.
      *
      * @return {boolean} True if the value is valid.
      */
@@ -25306,23 +27580,84 @@
         this.inputElement.select();
         // iOS 9 workaround: https://stackoverflow.com/a/7436574
         setTimeout(() => {
-          this.inputElement.setSelectionRange(0, 9999);
+          try {
+            this.inputElement.setSelectionRange(0, 9999);
+          } catch (e) {
+            // The workaround may cause errors on different input types.
+            // Needs to be suppressed. See https://github.com/vaadin/flow/issues/6070
+          }
         });
       }
     }
 
     _onClearButtonClick(e) {
+      e.preventDefault();
       // NOTE(yuriy): This line won't affect focus on the host. Cannot be properly tested.
       this.inputElement.focus();
       this.clear();
       this._valueClearing = false;
-      this.inputElement.dispatchEvent(new Event('change', {bubbles: !this._slottedInput}));
+      if (navigator.userAgent.match(/Trident/)) {
+        // Disable IE input" event prevention here, we want the input event from
+        // below to propagate normally.
+        this.__preventInput = false;
+      }
+      const inputEvent = new Event('input', {bubbles: true, composed: true});
+      inputEvent.__fromClearButton = true;
+      const changeEvent = new Event('change', {bubbles: !this._slottedInput});
+      changeEvent.__fromClearButton = true;
+      this.inputElement.dispatchEvent(inputEvent);
+      this.inputElement.dispatchEvent(changeEvent);
     }
 
     _onKeyDown(e) {
       if (e.keyCode === 27 && this.clearButtonVisible) {
+        const dispatchChange = !!this.value;
         this.clear();
+        dispatchChange && this.inputElement.dispatchEvent(new Event('change', {bubbles: !this._slottedInput}));
       }
+
+      if (this._enabledCharPattern && !this.__shouldAcceptKey(e)) {
+        e.preventDefault();
+      }
+    }
+
+    __shouldAcceptKey(event) {
+      return (event.metaKey || event.ctrlKey)
+        || !event.key // allow typing anything if event.key is not supported
+        || event.key.length !== 1 // allow "Backspace", "ArrowLeft" etc.
+        || this.__enabledCharRegExp.test(event.key);
+    }
+
+    _onPaste(e) {
+      if (this._enabledCharPattern) {
+        const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+        if (!this.__enabledTextRegExp.test(pastedText)) {
+          e.preventDefault();
+        }
+      }
+    }
+
+    _onDrop(e) {
+      if (this._enabledCharPattern) {
+        const draggedText = e.dataTransfer.getData('text');
+        if (!this.__enabledTextRegExp.test(draggedText)) {
+          e.preventDefault();
+        }
+      }
+    }
+
+    _onBeforeInput(e) {
+      // The `beforeinput` event covers all the cases for `_enabledCharPattern`: keyboard, pasting and dropping,
+      // but it is still experimental technology so we can't rely on it. It's used here just as an additional check,
+      // because it seems to be the only way to detect and prevent specific keys on mobile devices. See issue #429.
+      if (this._enabledCharPattern && e.data && !this.__enabledTextRegExp.test(e.data)) {
+        e.preventDefault();
+      }
+    }
+
+    __enabledCharPatternChanged(_enabledCharPattern) {
+      this.__enabledCharRegExp = _enabledCharPattern && new RegExp('^' + _enabledCharPattern + '$');
+      this.__enabledTextRegExp = _enabledCharPattern && new RegExp('^' + _enabledCharPattern + '*$');
     }
 
     _addIEListeners(node) {
@@ -25355,17 +27690,35 @@
     _getActiveErrorId(invalid, errorMessage, errorId) {
       this._setOrToggleAttribute('aria-describedby',
         (errorMessage && invalid ? errorId : undefined),
-        this.inputElement);
+        this.focusElement);
     }
 
-    _getActiveLabelId(label, labelId) {
-      this._setOrToggleAttribute('aria-labelledby',
-        (label ? labelId : undefined),
-        this.inputElement);
+    _getActiveLabelId(label, _labelId, _inputId) {
+      let ids = _inputId;
+      if (label) {
+        ids = `${_labelId} ${_inputId}`;
+      }
+      this.focusElement.setAttribute('aria-labelledby', ids);
     }
 
     _getErrorMessageAriaHidden(invalid, errorMessage, errorId) {
       return (!(errorMessage && invalid ? errorId : undefined)).toString();
+    }
+
+    _dispatchIronResizeEventIfNeeded(sizePropertyName, value) {
+      const previousSizePropertyName = '__previous' + sizePropertyName;
+      if (this[previousSizePropertyName] !== undefined
+          && this[previousSizePropertyName] !== value) {
+        this.dispatchEvent(
+          new CustomEvent('iron-resize', {bubbles: true})
+        );
+      }
+
+      this[previousSizePropertyName] = value;
+    }
+
+    __observeOffsetHeight() {
+      this._dispatchIronResizeEventIfNeeded('Height', this.offsetHeight);
     }
 
     /**
@@ -25393,10 +27746,32 @@
       }
     }
 
+    // Workaround for https://github.com/Polymer/polymer/issues/5259
+    get __data() {
+      return this.__dataValue || {};
+    }
+
+    set __data(value) {
+      this.__dataValue = value;
+    }
+
     /**
      * Fired when the user commits a value change.
      *
      * @event change
+     */
+
+    /**
+     * Fired when the value is changed by the user: on every typing keystroke,
+     * and the value is cleared using the clear button.
+     *
+     * @event input
+     */
+
+    /**
+     * Fired when the size of the element changes.
+     *
+     * @event iron-resize
      */
   };
 
@@ -25459,9 +27834,9 @@
    *
    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.TextFieldMixin
-   * @mixes Vaadin.ThemableMixin
+   * @extends PolymerElement
+   * @mixes TextFieldMixin
+   * @mixes ThemableMixin
    * @demo demo/index.html
    */
   class TextFieldElement extends ElementMixin$1(TextFieldMixin(ThemableMixin(PolymerElement))) {
@@ -25475,7 +27850,7 @@
 
       <label part="label" on-click="focus" id="[[_labelId]]">[[label]]</label>
 
-      <div part="input-field">
+      <div part="input-field" id="[[_inputId]]">
 
         <slot name="prefix"></slot>
 
@@ -25483,7 +27858,7 @@
           <input part="value">
         </slot>
 
-        <div part="clear-button" id="clearButton" role="button" aria-label="Clear"></div>
+        <div part="clear-button" id="clearButton" role="button" aria-label\$="[[i18n.clear]]"></div>
         <slot name="suffix"></slot>
 
       </div>
@@ -25499,7 +27874,7 @@
     }
 
     static get version() {
-      return '2.3.8';
+      return '2.6.2';
     }
 
     static get properties() {
@@ -25521,7 +27896,7 @@
         },
 
         /**
-         * Message to show to the user when validation fails.
+         * The text usually displayed in a tooltip popup when the mouse is over the field.
          */
         title: {
           type: String
@@ -25584,9 +27959,9 @@
    *
    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.TextFieldMixin
-   * @mixes Vaadin.ThemableMixin
+   * @extends PolymerElement
+   * @mixes TextFieldMixin
+   * @mixes ThemableMixin
    * @demo demo/index.html
    */
   class TextAreaElement extends ElementMixin$1(TextFieldMixin(ThemableMixin(PolymerElement))) {
@@ -25634,7 +28009,7 @@
 
       <label part="label" on-click="focus" id="[[_labelId]]">[[label]]</label>
 
-      <div part="input-field">
+      <div part="input-field" id="[[_inputId]]">
 
         <slot name="prefix"></slot>
 
@@ -25642,7 +28017,7 @@
           <textarea part="value"></textarea>
         </slot>
 
-        <div part="clear-button" id="clearButton" role="button" aria-label="Clear"></div>
+        <div part="clear-button" id="clearButton" role="button" aria-label\$="[[i18n.clear]]"></div>
         <slot name="suffix"></slot>
 
       </div>
@@ -25658,7 +28033,7 @@
     }
 
     static get version() {
-      return '2.3.8';
+      return '2.6.2';
     }
 
     static get observers() {
@@ -25715,15 +28090,7 @@
       inputField.style.removeProperty('display');
       inputField.scrollTop = scrollTop;
 
-      if (this.__previousInputHeight && this.__previousInputHeight !== inputHeight) {
-        this.dispatchEvent(
-          new CustomEvent('iron-resize', {
-            bubbles: true
-          })
-        );
-      }
-
-      this.__previousInputHeight = inputHeight;
+      this._dispatchIronResizeEventIfNeeded('InputHeight', inputHeight);
     }
 
     /**
@@ -26345,6 +28712,80 @@
 
   document.head.appendChild($_documentContainer$o.content);
 
+  const $_documentContainer$p = html`<dom-module id="lumo-date-picker-text-field" theme-for="vaadin-date-picker-text-field">
+  <template>
+    <style>
+      :not(*):placeholder-shown, /* to prevent broken styles on IE */
+      :host([dir="rtl"]) [part="value"]:placeholder-shown,
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input:placeholder-shown) {
+        --_lumo-text-field-overflow-mask-image: none;
+      }
+
+      :host([dir="rtl"]) [part="value"],
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input) {
+        --_lumo-text-field-overflow-mask-image: linear-gradient(to left, transparent, #000 1.25em);
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$p.content);
+
+  /**
+  @license
+  Copyright (c) 2019 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  const $_documentContainer$q = document.createElement('template');
+
+  $_documentContainer$q.innerHTML = `<dom-module id="vaadin-date-picker-text-field-styles" theme-for="vaadin-date-picker-text-field">
+  <template>
+    <style>
+      :host([dir="rtl"]) [part="input-field"] {
+        direction: ltr;
+      }
+
+      :host([dir="rtl"]) [part="value"]::placeholder {
+        direction: rtl;
+        text-align: left;
+      }
+
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input)::placeholder {
+        direction: rtl;
+        text-align: left;
+      }
+
+      :host([dir="rtl"]) [part="value"]:-ms-input-placeholder,
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input):-ms-input-placeholder {
+        direction: rtl;
+        text-align: left;
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$q.content);
+  /**
+    * The text-field element for date input.
+    *
+    * ### Styling
+    *
+    * See [`<vaadin-text-field>` documentation](https://github.com/vaadin/vaadin-text-field/blob/master/src/vaadin-text-field.html)
+    * for `<vaadin-date-picker-text-field>` parts and available slots (prefix, suffix etc.)
+    *
+    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
+    *
+    * @extends PolymerElement
+    */
+  class DatePickerTextFieldElement extends TextFieldElement {
+    static get is() {
+      return 'vaadin-date-picker-text-field';
+    }
+  }
+
+  customElements.define(DatePickerTextFieldElement.is, DatePickerTextFieldElement);
+
   /**
   @license
   Copyright (c) 2015 The Polymer Project Authors. All rights reserved.
@@ -26463,7 +28904,7 @@
    * That's why we have this helper here.
    * See https://github.com/PolymerElements/iron-overlay-behavior/issues/282
    */
-  const FocusablesHelper = {
+  class FocusablesHelper {
 
     /**
      * Returns a sorted array of tabbable nodes, including the root node.
@@ -26472,7 +28913,7 @@
      * @param {!Node} node
      * @return {!Array<!HTMLElement>}
      */
-    getTabbableNodes: function(node) {
+    static getTabbableNodes(node) {
       const result = [];
       // If there is at least one element with tabindex > 0, we need to sort
       // the final array by tabindex.
@@ -26481,14 +28922,14 @@
         return this._sortByTabIndex(result);
       }
       return result;
-    },
+    }
 
     /**
      * Returns if a element is focusable.
      * @param {!HTMLElement} element
      * @return {boolean}
      */
-    isFocusable: function(element) {
+    static isFocusable(element) {
       // From http://stackoverflow.com/a/1600194/4228703:
       // There isn't a definite list, it's up to the browser. The only
       // standard we have is DOM Level 2 HTML
@@ -26505,7 +28946,7 @@
       }
       // Elements that can be focused even if they have [disabled] attribute.
       return matches$1.call(element, 'a[href], area[href], iframe, [tabindex], [contentEditable]');
-    },
+    }
 
     /**
      * Returns if a element is tabbable. To be tabbable, a element must be
@@ -26513,11 +28954,11 @@
      * @param {!HTMLElement} element
      * @return {boolean}
      */
-    isTabbable: function(element) {
+    static isTabbable(element) {
       return this.isFocusable(element) &&
           matches$1.call(element, ':not([tabindex="-1"])') &&
           this._isVisible(element);
-    },
+    }
 
     /**
      * Returns the normalized element tabindex. If not focusable, returns -1.
@@ -26528,13 +28969,13 @@
      * @return {!number}
      * @private
      */
-    _normalizedTabIndex: function(element) {
+    static _normalizedTabIndex(element) {
       if (this.isFocusable(element)) {
         const tabIndex = element.getAttribute('tabindex') || 0;
         return Number(tabIndex);
       }
       return -1;
-    },
+    }
 
     /**
      * Searches for nodes that are tabbable and adds them to the `result` array.
@@ -26544,7 +28985,7 @@
      * @return {boolean}
      * @private
      */
-    _collectTabbableNodes: function(node, result) {
+    static _collectTabbableNodes(node, result) {
       // If not an element or not visible, no need to explore children.
       if (node.nodeType !== Node.ELEMENT_NODE || !this._isVisible(node)) {
         return false;
@@ -26582,7 +29023,7 @@
         }
       }
       return needsSort;
-    },
+    }
 
     /**
      * Returns false if the element has `visibility: hidden` or `display: none`
@@ -26590,7 +29031,7 @@
      * @return {boolean}
      * @private
      */
-    _isVisible: function(element) {
+    static _isVisible(element) {
       // Check inline style first to save a re-flow. If looks good, check also
       // computed style.
       let style = element.style;
@@ -26599,7 +29040,7 @@
         return (style.visibility !== 'hidden' && style.display !== 'none');
       }
       return false;
-    },
+    }
 
     /**
      * Sorts an array of tabbable elements by tabindex. Returns a new array.
@@ -26607,7 +29048,7 @@
      * @return {!Array<!HTMLElement>}
      * @private
      */
-    _sortByTabIndex: function(tabbables) {
+    static _sortByTabIndex(tabbables) {
       // Implement a merge sort as Array.prototype.sort does a non-stable sort
       // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort
       const len = tabbables.length;
@@ -26618,7 +29059,7 @@
       const left = this._sortByTabIndex(tabbables.slice(0, pivot));
       const right = this._sortByTabIndex(tabbables.slice(pivot));
       return this._mergeSortByTabIndex(left, right);
-    },
+    }
 
     /**
      * Merge sort iterator, merges the two arrays into one, sorted by tab index.
@@ -26627,7 +29068,7 @@
      * @return {!Array<!HTMLElement>}
      * @private
      */
-    _mergeSortByTabIndex: function(left, right) {
+    static _mergeSortByTabIndex(left, right) {
       const result = [];
       while ((left.length > 0) && (right.length > 0)) {
         if (this._hasLowerTabOrder(left[0], right[0])) {
@@ -26638,7 +29079,7 @@
       }
 
       return result.concat(left, right);
-    },
+    }
 
     /**
      * Returns if element `a` has lower tab order compared to element `b`
@@ -26651,14 +29092,14 @@
      * @return {boolean}
      * @private
      */
-    _hasLowerTabOrder: function(a, b) {
+    static _hasLowerTabOrder(a, b) {
       // Normalize tabIndexes
       // e.g. in Firefox `<div contenteditable>` has `tabIndex = -1`
       const ati = Math.max(a.tabIndex, 0);
       const bti = Math.max(b.tabIndex, 0);
       return (ati === 0 || bti === 0) ? bti > ati : ati > bti;
     }
-  };
+  }
 
   /**
   @license
@@ -26688,20 +29129,23 @@
 
     // NOTE(platosha): Have to use an awkward IIFE returning class here
     // to prevent this class from showing up in analysis.json & API docs.
-    /** @private */
-    const klass = (() => class extends HTMLElement {
+    const klass = (() => /** @private */ class extends HTMLElement {
       static get is() {
         return is;
+      }
+
+      constructor() {
+        super();
+
+        if (!this.shadowRoot) {
+          this.attachShadow({mode: 'open'});
+          this.shadowRoot.appendChild(document.importNode(styledTemplate.content, true));
+        }
       }
 
       connectedCallback() {
         if (window.ShadyCSS) {
           window.ShadyCSS.styleElement(this);
-        }
-
-        if (!this.shadowRoot) {
-          this.attachShadow({mode: 'open'});
-          this.shadowRoot.appendChild(document.importNode(styledTemplate.content, true));
         }
       }
     })();
@@ -26802,11 +29246,11 @@
    *
    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.ThemableMixin
+   * @extends PolymerElement
+   * @mixes ThemableMixin
    * @demo demo/index.html
    */
-  class OverlayElement extends ThemableMixin(PolymerElement) {
+  class OverlayElement extends ThemableMixin(DirMixin(PolymerElement)) {
     static get template() {
       return html`
     <style>
@@ -26893,6 +29337,9 @@
 
     static get properties() {
       return {
+        /**
+         * When true, the overlay is visible and attached to body.
+         */
         opened: {
           type: Boolean,
           notify: true,
@@ -26902,6 +29349,7 @@
 
         /**
          * Owner element passed with renderer function
+         * @type {HTMLElement}
          */
         owner: Element,
 
@@ -26912,11 +29360,13 @@
          * - `root` The root container DOM element. Append your content to it.
          * - `owner` The host element of the renderer function.
          * - `model` The object with the properties related with rendering.
+         * @type {OverlayRenderer | null | undefined}
          */
         renderer: Function,
 
         /**
          * The template of the overlay content.
+         * @type {HTMLTemplateElement | null | undefined}
          */
         template: {
           type: Object,
@@ -26932,12 +29382,17 @@
 
         /**
          * References the content container after the template is stamped.
+         * @type {!HTMLElement | undefined}
          */
         content: {
           type: Object,
           notify: true
         },
 
+        /**
+         * When true the overlay has backdrop on top of content when opened.
+         * @type {boolean}
+         */
         withBackdrop: {
           type: Boolean,
           value: false,
@@ -26952,6 +29407,7 @@
         /**
          * When true the overlay won't disable the main content, showing
          * it doesn’t change the functionality of the user interface.
+         * @type {boolean}
          */
         modeless: {
           type: Boolean,
@@ -26963,6 +29419,7 @@
         /**
          * When set to true, the overlay is hidden. This also closes the overlay
          * immediately in case there is a closing animation in progress.
+         * @type {boolean}
          */
         hidden: {
           type: Boolean,
@@ -26973,6 +29430,7 @@
         /**
          * When true move focus to the first focusable element in the overlay,
          * or to the overlay if there are no focusable elements.
+         * @type {boolean}
          */
         focusTrap: {
           type: Boolean,
@@ -26981,38 +29439,50 @@
 
         /**
          * Set to true to enable restoring of focus when overlay is closed.
+         * @type {boolean}
          */
         restoreFocusOnClose: {
           type: Boolean,
           value: false,
         },
 
+        /** @private */
         _mouseDownInside: {
           type: Boolean
         },
 
+        /** @private */
         _mouseUpInside: {
           type: Boolean
         },
 
+        /** @private */
         _instance: {
           type: Object
         },
 
+        /** @private */
         _originalContentPart: Object,
 
+        /** @private */
         _contentNodes: Array,
 
+        /** @private */
         _oldOwner: Element,
 
+        /** @private */
         _oldModel: Object,
 
+        /** @private */
         _oldTemplate: Object,
 
+        /** @private */
         _oldInstanceProps: Object,
 
+        /** @private */
         _oldRenderer: Object,
 
+        /** @private */
         _oldOpened: Boolean
       };
     }
@@ -27055,6 +29525,7 @@
       this.$.backdrop.addEventListener('click', () => {});
     }
 
+    /** @private */
     _detectIosNavbar() {
       if (!this.opened) {
         return;
@@ -27074,11 +29545,16 @@
       }
     }
 
+    /**
+     * @param {!Array<!Element>} nodes
+     * @protected
+     */
     _setTemplateFromNodes(nodes) {
       this.template = nodes.filter(node => node.localName && node.localName === 'template')[0] || this.template;
     }
 
     /**
+     * @param {Event=} sourceEvent
      * @event vaadin-overlay-close
      * fired before the `vaadin-overlay` will be closed. If canceled the closing of the overlay is canceled as well.
      */
@@ -27105,14 +29581,17 @@
       this._boundIosResizeListener && window.removeEventListener('resize', this._boundIosResizeListener);
     }
 
+    /** @private */
     _ironOverlayCanceled(event) {
       event.preventDefault();
     }
 
+    /** @private */
     _mouseDownListener(event) {
       this._mouseDownInside = event.composedPath().indexOf(this.$.overlay) >= 0;
     }
 
+    /** @private */
     _mouseUpListener(event) {
       this._mouseUpInside = event.composedPath().indexOf(this.$.overlay) >= 0;
     }
@@ -27124,6 +29603,8 @@
      *
      * @event vaadin-overlay-outside-click
      * fired before the `vaadin-overlay` will be closed on outside click. If canceled the closing of the overlay is canceled as well.
+     *
+     * @private
      */
     _outsideClickListener(event) {
       if (event.composedPath().indexOf(this.$.overlay) !== -1 ||
@@ -27147,6 +29628,8 @@
     /**
      * @event vaadin-overlay-escape-press
      * fired before the `vaadin-overlay` will be closed on ESC button press. If canceled the closing of the overlay is canceled as well.
+     *
+     * @private
      */
     _keydownListener(event) {
       if (!this._last) {
@@ -27154,7 +29637,7 @@
       }
 
       // TAB
-      if (event.key === 'Tab' && this.focusTrap) {
+      if (event.key === 'Tab' && this.focusTrap && !event.defaultPrevented) {
         // if only tab key is pressed, cycle forward, else cycle backwards.
         this._cycleTab(event.shiftKey ? -1 : 1);
 
@@ -27171,6 +29654,7 @@
       }
     }
 
+    /** @protected */
     _ensureTemplatized() {
       this._setTemplateFromNodes(Array.from(this.children));
     }
@@ -27178,6 +29662,8 @@
     /**
      * @event vaadin-overlay-open
      * fired after the `vaadin-overlay` is opened.
+     *
+     * @private
      */
     _openedChanged(opened, wasOpened) {
       if (!this._instance) {
@@ -27210,21 +29696,34 @@
       }
     }
 
+    /** @private */
     _hiddenChanged(hidden) {
       if (hidden && this.hasAttribute('closing')) {
         this._flushAnimation('closing');
       }
     }
 
+    /**
+     * @return {boolean}
+     * @protected
+     */
     _shouldAnimate() {
       const name = getComputedStyle(this).getPropertyValue('animation-name');
       const hidden = getComputedStyle(this).getPropertyValue('display') === 'none';
       return !hidden && name && name != 'none';
     }
 
+    /**
+     * @param {string} type
+     * @param {Function} callback
+     * @protected
+     */
     _enqueueAnimation(type, callback) {
       const handler = `__${type}Handler`;
-      const listener = () => {
+      const listener = event => {
+        if (event && event.target !== this) {
+          return;
+        }
         callback();
         this.removeEventListener('animationend', listener);
         delete this[handler];
@@ -27233,6 +29732,10 @@
       this.addEventListener('animationend', listener);
     }
 
+    /**
+     * @param {string} type
+     * @protected
+     */
     _flushAnimation(type) {
       const handler = `__${type}Handler`;
       if (typeof this[handler] === 'function') {
@@ -27240,20 +29743,21 @@
       }
     }
 
+    /** @protected */
     _animatedOpening() {
       if (this.parentNode === document.body && this.hasAttribute('closing')) {
         this._flushAnimation('closing');
       }
       this._attachOverlay();
+      if (!this.modeless) {
+        this._enterModalState();
+      }
       this.setAttribute('opening', '');
 
       const finishOpening = () => {
-        this.removeAttribute('opening');
         document.addEventListener('iron-overlay-canceled', this._boundIronOverlayCanceledListener);
 
-        if (!this.modeless) {
-          this._enterModalState();
-        }
+        this.removeAttribute('opening');
       };
 
       if (this._shouldAnimate()) {
@@ -27263,41 +29767,43 @@
       }
     }
 
+    /** @protected */
     _attachOverlay() {
       this._placeholder = document.createComment('vaadin-overlay-placeholder');
       this.parentNode.insertBefore(this._placeholder, this);
       document.body.appendChild(this);
+      this.bringToFront();
     }
 
+    /** @protected */
     _animatedClosing() {
       if (this.hasAttribute('opening')) {
         this._flushAnimation('opening');
       }
       if (this._placeholder) {
+        this._exitModalState();
+
+        if (this.restoreFocusOnClose && this.__restoreFocusNode) {
+          // If the activeElement is `<body>` or inside the overlay,
+          // we are allowed to restore the focus. In all the other
+          // cases focus might have been moved elsewhere by another
+          // component or by the user interaction (e.g. click on a
+          // button outside the overlay).
+          const activeElement = this._getActiveElement();
+
+          if (activeElement === document.body || this._deepContains(activeElement)) {
+            this.__restoreFocusNode.focus();
+          }
+          this.__restoreFocusNode = null;
+        }
+
         this.setAttribute('closing', '');
 
         const finishClosing = () => {
-          this.shadowRoot.querySelector('[part="overlay"]').style.removeProperty('pointer-events');
-
-          this._exitModalState();
-
           document.removeEventListener('iron-overlay-canceled', this._boundIronOverlayCanceledListener);
           this._detachOverlay();
+          this.shadowRoot.querySelector('[part="overlay"]').style.removeProperty('pointer-events');
           this.removeAttribute('closing');
-
-          if (this.restoreFocusOnClose && this.__restoreFocusNode) {
-            // If the activeElement is `<body>` or inside the overlay,
-            // we are allowed to restore the focus. In all the other
-            // cases focus might have been moved elsewhere by another
-            // component or by the user interaction (e.g. click on a
-            // button outside the overlay).
-            const activeElement = this._getActiveElement();
-
-            if (activeElement === document.body || this._deepContains(activeElement)) {
-              this.__restoreFocusNode.focus();
-            }
-            this.__restoreFocusNode = null;
-          }
         };
 
         if (this._shouldAnimate()) {
@@ -27308,25 +29814,32 @@
       }
     }
 
+    /** @protected */
     _detachOverlay() {
       this._placeholder.parentNode.insertBefore(this, this._placeholder);
       this._placeholder.parentNode.removeChild(this._placeholder);
     }
 
     /**
-     * Returns all attached overlays.
+     * Returns all attached overlays in visual stacking order.
+     * @private
      */
     static get __attachedInstances() {
-      return Array.from(document.body.children).filter(el => el instanceof OverlayElement);
+      return Array.from(document.body.children)
+        .filter(el => el instanceof OverlayElement && !el.hasAttribute('closing'))
+        .sort((a, b) => (a.__zIndex - b.__zIndex) || 0);
     }
 
     /**
      * returns true if this is the last one in the opened overlays stack
+     * @return {boolean}
+     * @protected
      */
     get _last() {
       return this === OverlayElement.__attachedInstances.pop();
     }
 
+    /** @private */
     _modelessChanged(modeless) {
       if (!modeless) {
         if (this.opened) {
@@ -27339,6 +29852,7 @@
       }
     }
 
+    /** @protected */
     _addGlobalListeners() {
       document.addEventListener('mousedown', this._boundMouseDownListener);
       document.addEventListener('mouseup', this._boundMouseUpListener);
@@ -27348,6 +29862,7 @@
       document.addEventListener('keydown', this._boundKeydownListener);
     }
 
+    /** @protected */
     _enterModalState() {
       if (document.body.style.pointerEvents !== 'none') {
         // Set body pointer-events to 'none' to disable mouse interactions with
@@ -27358,12 +29873,13 @@
 
       // Disable pointer events in other attached overlays
       OverlayElement.__attachedInstances.forEach(el => {
-        if (el !== this && !el.hasAttribute('opening') && !el.hasAttribute('closing')) {
+        if (el !== this) {
           el.shadowRoot.querySelector('[part="overlay"]').style.pointerEvents = 'none';
         }
       });
     }
 
+    /** @protected */
     _removeGlobalListeners() {
       document.removeEventListener('mousedown', this._boundMouseDownListener);
       document.removeEventListener('mouseup', this._boundMouseUpListener);
@@ -27371,6 +29887,7 @@
       document.removeEventListener('keydown', this._boundKeydownListener);
     }
 
+    /** @protected */
     _exitModalState() {
       if (this._previousDocumentPointerEvents !== undefined) {
         // Restore body pointer-events
@@ -27395,6 +29912,7 @@
       }
     }
 
+    /** @protected */
     _removeOldContent() {
       if (!this.content || !this._contentNodes) {
         return;
@@ -27421,6 +29939,11 @@
       this.content = undefined;
     }
 
+    /**
+     * @param {!HTMLTemplateElement} template
+     * @param {object} instanceProps
+     * @protected
+     */
     _stampOverlayTemplate(template, instanceProps) {
       this._removeOldContent();
 
@@ -27494,6 +30017,7 @@
       }
     }
 
+    /** @private */
     _removeNewRendererOrTemplate(template, oldTemplate, renderer, oldRenderer) {
       if (template !== oldTemplate) {
         this.template = undefined;
@@ -27511,6 +30035,7 @@
       }
     }
 
+    /** @private */
     _templateOrRendererChanged(template, renderer, owner, model, instanceProps, opened) {
       if (template && renderer) {
         this._removeNewRendererOrTemplate(template, this._oldTemplate, renderer, this._oldRenderer);
@@ -27548,15 +30073,30 @@
       }
     }
 
+    /**
+     * @param {Element} element
+     * @return {boolean}
+     * @protected
+     */
     _isFocused(element) {
       return element && element.getRootNode().activeElement === element;
     }
 
+    /**
+     * @param {Element[]} elements
+     * @return {number}
+     * @protected
+     */
     _focusedIndex(elements) {
       elements = elements || this._getFocusableElements();
       return elements.indexOf(elements.filter(this._isFocused).pop());
     }
 
+    /**
+     * @param {number} increment
+     * @param {number | undefined} index
+     * @protected
+     */
     _cycleTab(increment, index) {
       const focusableElements = this._getFocusableElements();
 
@@ -27577,11 +30117,19 @@
       focusableElements[index].focus();
     }
 
+    /**
+     * @return {!Array<!HTMLElement>}
+     * @protected
+     */
     _getFocusableElements() {
       // collect all focusable elements
       return FocusablesHelper.getTabbableNodes(this.$.overlay);
     }
 
+    /**
+     * @return {!Element}
+     * @protected
+     */
     _getActiveElement() {
       let active = document._activeElement || document.activeElement;
       // document.activeElement can be null
@@ -27598,6 +30146,11 @@
       return active;
     }
 
+    /**
+     * @param {!Node} node
+     * @return {boolean}
+     * @protected
+     */
     _deepContains(node) {
       if (this.contains(node)) {
         return true;
@@ -27610,132 +30163,23 @@
       }
       return n === this;
     }
+
+    /**
+     * Brings the overlay as visually the frontmost one
+     */
+    bringToFront() {
+      let zIndex = '';
+      const frontmost = OverlayElement.__attachedInstances.filter(o => o !== this).pop();
+      if (frontmost) {
+        const frontmostZIndex = frontmost.__zIndex;
+        zIndex = frontmostZIndex + 1;
+      }
+      this.style.zIndex = zIndex;
+      this.__zIndex = zIndex || parseFloat(getComputedStyle(this).zIndex);
+    }
   }
 
   customElements.define(OverlayElement.is, OverlayElement);
-
-  /**
-   * @fileoverview
-   * @suppress {checkPrototypalTypes}
-   * @license Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt The complete set of authors may be found
-   * at http://polymer.github.io/AUTHORS.txt The complete set of contributors may
-   * be found at http://polymer.github.io/CONTRIBUTORS.txt Code distributed by
-   * Google as part of the polymer project is also subject to an additional IP
-   * rights grant found at http://polymer.github.io/PATENTS.txt
-   */
-
-  const DISABLED_ATTR = 'disable-upgrade';
-
-  /**
-   * Element class mixin that allows the element to boot up in a non-enabled
-   * state when the `disable-upgrade` attribute is present. This mixin is
-   * designed to be used with element classes like PolymerElement that perform
-   * initial startup work when they are first connected. When the
-   * `disable-upgrade` attribute is removed, if the element is connected, it
-   * boots up and "enables" as it otherwise would; if it is not connected, the
-   * element boots up when it is next connected.
-   *
-   * Using `disable-upgrade` with PolymerElement prevents any data propagation
-   * to the element, any element DOM from stamping, or any work done in
-   * connected/disconnctedCallback from occuring, but it does not prevent work
-   * done in the element constructor.
-   *
-   * Note, this mixin must be applied on top of any element class that
-   * itself implements a `connectedCallback` so that it can control the work
-   * done in `connectedCallback`. For example,
-   *
-   *     MyClass = DisableUpgradeMixin(class extends BaseClass {...});
-   *
-   * @mixinFunction
-   * @polymer
-   * @appliesMixin ElementMixin
-   * @template T
-   * @param {function(new:T)} superClass Class to apply mixin to.
-   * @return {function(new:T)} superClass with mixin applied.
-   */
-  const DisableUpgradeMixin = dedupingMixin((base) => {
-    /**
-     * @constructor
-     * @implements {Polymer_ElementMixin}
-     * @extends {HTMLElement}
-     * @private
-     */
-    const superClass = ElementMixin(base);
-
-    /**
-     * @polymer
-     * @mixinClass
-     * @implements {Polymer_DisableUpgradeMixin}
-     */
-    class DisableUpgradeClass extends superClass {
-
-      /**
-       * @suppress {missingProperties} go/missingfnprops
-       */
-      static get observedAttributes() {
-        return super.observedAttributes.concat(DISABLED_ATTR);
-      }
-
-      /**
-       * @override
-       * @param {string} name Attribute name.
-       * @param {?string} old The previous value for the attribute.
-       * @param {?string} value The new value for the attribute.
-       * @param {?string} namespace The XML namespace for the attribute.
-       * @return {void}
-       */
-      attributeChangedCallback(name, old, value, namespace) {
-        if (name == DISABLED_ATTR) {
-          if (!this.__dataEnabled && value == null && this.isConnected) {
-            super.connectedCallback();
-          }
-        } else {
-          super.attributeChangedCallback(
-              name, old, value, /** @type {null|string} */ (namespace));
-        }
-      }
-
-      /*
-        NOTE: cannot gate on attribute because this is called before
-        attributes are delivered. Therefore, we stub this out and
-        call `super._initializeProperties()` manually.
-      */
-      /** @override */
-      _initializeProperties() {}
-
-      // prevent user code in connected from running
-      /** @override */
-      connectedCallback() {
-        if (this.__dataEnabled || !this.hasAttribute(DISABLED_ATTR)) {
-          super.connectedCallback();
-        }
-      }
-
-      // prevent element from turning on properties
-      /** @override */
-      _enableProperties() {
-        if (!this.hasAttribute(DISABLED_ATTR)) {
-          if (!this.__dataEnabled) {
-            super._initializeProperties();
-          }
-          super._enableProperties();
-        }
-      }
-
-      // only go if "enabled"
-      /** @override */
-      disconnectedCallback() {
-        if (this.__dataEnabled) {
-          super.disconnectedCallback();
-        }
-      }
-
-    }
-
-    return DisableUpgradeClass;
-  });
 
   /**
   @license
@@ -27752,7 +30196,7 @@
    *
    * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
    *
-   * @memberof Vaadin
+   * @extends PolymerElement
    * @private
    */
   class DatePickerOverlayElement extends DisableUpgradeMixin(OverlayElement) {
@@ -28288,10 +30732,10 @@
 
   Note: announcements are only audible if you have a screen reader enabled.
 
-  @group Iron Elements
   @demo demo/index.html
   */
   const IronA11yAnnouncer = Polymer({
+    /** @override */
     _template: html`
     <style>
       :host {
@@ -28314,16 +30758,22 @@
        */
       mode: {type: String, value: 'polite'},
 
-      _text: {type: String, value: ''}
+      /**
+       * The timeout on refreshing the announcement text. Larger timeouts are
+       * needed for certain screen readers to re-announce the same message.
+       */
+      timeout: {type: Number, value: 150},
+
+      _text: {type: String, value: ''},
     },
 
+    /** @override */
     created: function() {
       if (!IronA11yAnnouncer.instance) {
         IronA11yAnnouncer.instance = this;
       }
 
-      document.body.addEventListener(
-          'iron-announce', this._onIronAnnounce.bind(this));
+      document.addEventListener('iron-announce', this._onIronAnnounce.bind(this));
     },
 
     /**
@@ -28335,7 +30785,7 @@
       this._text = '';
       this.async(function() {
         this._text = text;
-      }, 100);
+      }, this.timeout);
     },
 
     _onIronAnnounce: function(event) {
@@ -28352,7 +30802,13 @@
       IronA11yAnnouncer.instance = document.createElement('iron-a11y-announcer');
     }
 
-    document.body.appendChild(IronA11yAnnouncer.instance);
+    if (document.body) {
+      document.body.appendChild(IronA11yAnnouncer.instance);
+    } else {
+      document.addEventListener('load', function() {
+        document.body.appendChild(IronA11yAnnouncer.instance);
+      });
+    }
   };
 
   /**
@@ -28462,7 +30918,7 @@
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
   /**
-   * @memberof Vaadin
+   * @extends PolymerElement
    * @private
    */
   class MonthCalendarElement extends ThemableMixin(GestureEventListeners(PolymerElement)) {
@@ -28806,7 +31262,7 @@
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
   /**
-   * @memberof Vaadin
+   * @extends PolymerElement
    * @private
    */
   class InfiniteScrollerElement extends PolymerElement {
@@ -29165,9 +31621,9 @@
 
   customElements.define(InfiniteScrollerElement.is, InfiniteScrollerElement);
 
-  const $_documentContainer$p = document.createElement('template');
+  const $_documentContainer$r = document.createElement('template');
 
-  $_documentContainer$p.innerHTML = `<dom-module id="vaadin-date-picker-overlay-styles" theme-for="vaadin-date-picker-overlay">
+  $_documentContainer$r.innerHTML = `<dom-module id="vaadin-date-picker-overlay-styles" theme-for="vaadin-date-picker-overlay">
   <template>
     <style>
       :host {
@@ -29183,7 +31639,11 @@
         align-items: flex-end;
       }
 
-      :host([right-aligned][dir="rtl"]) {
+      :host([dir="rtl"]) {
+        align-items: flex-end;
+      }
+
+      :host([dir="rtl"][right-aligned]) {
         align-items: flex-start;
       }
 
@@ -29199,7 +31659,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$p.content);
+  document.head.appendChild($_documentContainer$r.content);
 
   /**
   @license
@@ -29207,13 +31667,14 @@
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
   /**
-   * @memberof Vaadin
+   * @extends PolymerElement
    * @private
    */
   class DatePickerOverlayContentElement extends
     ThemableMixin(
       ThemePropertyMixin(
-        GestureEventListeners(PolymerElement))) {
+        DirMixin(
+          GestureEventListeners(PolymerElement)))) {
     static get template() {
       return html`
     <style>
@@ -29475,6 +31936,10 @@
          */
         label: String
       };
+    }
+
+    get __isRTL() {
+      return this.getAttribute('dir') === 'rtl';
     }
 
     ready() {
@@ -29914,12 +32379,12 @@
             break;
           case 'right':
             if (isScroller) {
-              this._moveFocusByDays(1);
+              this._moveFocusByDays(this.__isRTL ? -1 : 1);
             }
             break;
           case 'left':
             if (isScroller) {
-              this._moveFocusByDays(-1);
+              this._moveFocusByDays(this.__isRTL ? 1 : -1);
             }
             break;
           case 'enter':
@@ -30153,6 +32618,11 @@
         },
 
         /**
+         * Set true to prevent the overlay from opening automatically.
+         */
+        autoOpenDisabled: Boolean,
+
+        /**
          * Set true to display ISO-8601 week numbers in the calendar. Notice that
          * displaying week numbers is only supported when `i18n.firstDayOfWeek`
          * is 1 (Monday).
@@ -30373,7 +32843,6 @@
     static get observers() {
       return [
         '_updateHasValue(value)',
-        '_validateInput(_selectedDate, _minDate, _maxDate)',
         '_selectedDateChanged(_selectedDate, i18n.formatDate)',
         '_focusedDateChanged(_focusedDate, i18n.formatDate)',
         '_announceFocusedDate(_focusedDate, opened, _ignoreAnnounce)'
@@ -30386,25 +32855,50 @@
       this._boundFocus = this._focus.bind(this);
       this._boundUpdateAlignmentAndPosition = this._updateAlignmentAndPosition.bind(this);
 
+      const isClearButton = e => {
+        const path = e.composedPath();
+        const inputIndex = path.indexOf(this._inputElement);
+        return path.slice(0, inputIndex)
+          .filter(el => el.getAttribute && el.getAttribute('part') === 'clear-button')
+          .length === 1;
+      };
+
       addListener(this, 'tap', e => {
         // FIXME(platosha): use preventDefault in the text field clear button,
         // then the following composedPath check could be simplified down
         // to `if (!e.defaultPrevented)`.
         // https://github.com/vaadin/vaadin-text-field/issues/352
-        const inputIndex = e.composedPath().indexOf(this._inputElement);
-        if (
-          e.composedPath().slice(0, inputIndex)
-            .filter(el => el.getAttribute && el.getAttribute('part') === 'clear-button')
-            .length === 0
-        ) {
+        if (!isClearButton(e) && (!this.autoOpenDisabled || this._noInput)) {
           this.open();
         }
       });
 
-      this.addEventListener('touchend', this._preventDefault.bind(this));
+      this.addEventListener('touchend', e => {
+        if (!isClearButton(e)) {
+          e.preventDefault();
+        }
+      });
       this.addEventListener('keydown', this._onKeydown.bind(this));
       this.addEventListener('input', this._onUserInput.bind(this));
       this.addEventListener('focus', e => this._noInput && e.target.blur());
+      this.addEventListener('blur', e => {
+        if (!this.opened) {
+          if (this.autoOpenDisabled) {
+            const parsedDate = this._getParsedDate();
+            if (this._isValidDate(parsedDate)) {
+              this._selectedDate = parsedDate;
+            }
+          }
+
+          if (this._inputElement.value === '' && this.__dispatchChange) {
+            this.validate();
+            this.value = '';
+            this.__dispatchChange = false;
+          } else {
+            this.validate();
+          }
+        }
+      });
     }
 
     _initOverlay() {
@@ -30421,6 +32915,17 @@
       this._overlayContent.addEventListener('focus', () => this.focusElement._setFocused(true));
 
       this.$.overlay.addEventListener('vaadin-overlay-close', this._onVaadinOverlayClose.bind(this));
+
+      const bringToFrontListener = (e) => {
+        if (this.$.overlay.bringToFront) {
+          requestAnimationFrame(() => {
+            this.$.overlay.bringToFront();
+          });
+        }
+      };
+
+      this.addEventListener('mousedown', bringToFrontListener);
+      this.addEventListener('touchstart', bringToFrontListener);
     }
 
     /**
@@ -30457,7 +32962,7 @@
      * Closes the dropdown.
      */
     close() {
-      if (this._overlayInitialized) {
+      if (this._overlayInitialized || this.autoOpenDisabled) {
         this.$.overlay.close();
       }
     }
@@ -30538,16 +33043,19 @@
       if (this.__userInputOccurred) {
         this.__dispatchChange = true;
       }
-      const inputValue = selectedDate && formatDate(DatePickerHelper._extractDateParts(selectedDate));
       const value = this._formatISO(selectedDate);
+
+      this.__keepInputValue || this._applyInputValue(selectedDate);
+
       if (value !== this.value) {
-        this.validate(inputValue);
+        this.validate();
         this.value = value;
       }
       this.__userInputOccurred = false;
       this.__dispatchChange = false;
+      this._ignoreFocusedDateChange = true;
       this._focusedDate = selectedDate;
-      this._inputValue = selectedDate ? inputValue : '';
+      this._ignoreFocusedDateChange = false;
     }
 
     _focusedDateChanged(focusedDate, formatDate) {
@@ -30556,7 +33064,7 @@
       }
       this.__userInputOccurred = true;
       if (!this._ignoreFocusedDateChange && !this._noInput) {
-        this._inputValue = focusedDate ? formatDate(DatePickerHelper._extractDateParts(focusedDate)) : '';
+        this._applyInputValue(focusedDate);
       }
     }
 
@@ -30588,6 +33096,7 @@
       }
       if (!DatePickerHelper._dateEquals(this[property], date)) {
         this[property] = date;
+        this.value && this.validate();
       }
     }
 
@@ -30714,6 +33223,26 @@
       return result;
     }
 
+    _selectParsedOrFocusedDate() {
+      // Select the parsed input or focused date
+      this._ignoreFocusedDateChange = true;
+      if (this.i18n.parseDate) {
+        const inputValue = this._inputValue || '';
+        const parsedDate = this._getParsedDate(inputValue);
+
+        if (this._isValidDate(parsedDate)) {
+          this._selectedDate = parsedDate;
+        } else {
+          this.__keepInputValue = true;
+          this._selectedDate = null;
+          this.__keepInputValue = false;
+        }
+      } else if (this._focusedDate) {
+        this._selectedDate = this._focusedDate;
+      }
+      this._ignoreFocusedDateChange = false;
+    }
+
     _onOverlayClosed() {
       this._ignoreAnnounce = true;
 
@@ -30728,29 +33257,16 @@
 
       this.updateStyles();
 
-      // Select the parsed input or focused date
-      this._ignoreFocusedDateChange = true;
-      if (this.i18n.parseDate) {
-        var inputValue = this._inputValue || '';
-        const dateObject = this.i18n.parseDate(inputValue);
-        const parsedDate = dateObject &&
-          this._parseDate(`${dateObject.year}-${dateObject.month + 1}-${dateObject.day}`);
-
-        if (this._isValidDate(parsedDate)) {
-          this._selectedDate = parsedDate;
-        } else {
-          this._selectedDate = null;
-          this._inputValue = inputValue;
-        }
-      } else if (this._focusedDate) {
-        this._selectedDate = this._focusedDate;
-      }
-      this._ignoreFocusedDateChange = false;
+      this._selectParsedOrFocusedDate();
 
       if (this._nativeInput && this._nativeInput.selectionStart) {
         this._nativeInput.selectionStart = this._nativeInput.selectionEnd;
       }
-      this.validate();
+      // No need to revalidate the value after `_selectedDateChanged`
+      // Needed in case the value was not changed: open and close dropdown.
+      if (!this.value) {
+        this.validate();
+      }
     }
 
     /**
@@ -30759,11 +33275,11 @@
      * @param {string} value Value to validate. Optional, defaults to user's input value.
      * @return {boolean} True if the value is valid and sets the `invalid` flag appropriately
      */
-    validate(value) {
-      // reset invalid state on the underlying text field
-      this.invalid = false;
-      value = value !== undefined ? value : this._inputValue;
-      return !(this.invalid = !this.checkValidity(value));
+    validate() {
+      // Note (Yuriy): Workaround `this._inputValue` is used in order
+      // to avoid breaking change on custom `checkValidity`.
+      // Can be removed with next major.
+      return !(this.invalid = !this.checkValidity(this._inputValue));
     }
 
     /**
@@ -30774,20 +33290,22 @@
      * @param {string} value Value to validate. Optional, defaults to the selected date.
      * @return {boolean} True if the value is valid
      */
-    checkValidity(value) {
-      var inputValid = !value ||
-        (this._selectedDate && value === this.i18n.formatDate(DatePickerHelper._extractDateParts(this._selectedDate)));
-      var minMaxValid = !this._selectedDate ||
+    checkValidity() {
+      const inputValid = !this._inputValue ||
+        (this._selectedDate && this._inputValue === this._getFormattedDate(this.i18n.formatDate, this._selectedDate));
+      const minMaxValid = !this._selectedDate ||
         DatePickerHelper._dateAllowed(this._selectedDate, this._minDate, this._maxDate);
 
-      var inputValidity = true;
+      let inputValidity = true;
       if (this._inputElement) {
         if (this._inputElement.checkValidity) {
           // vaadin native input elements have the checkValidity method
-          inputValidity = this._inputElement.checkValidity(value);
+          this._inputElement.__forceCheckValidity = true;
+          inputValidity = this._inputElement.checkValidity();
+          this._inputElement.__forceCheckValidity = false;
         } else if (this._inputElement.validate) {
           // iron-form-elements have the validate API
-          inputValidity = this._inputElement.validate(value);
+          inputValidity = this._inputElement.validate();
         }
       }
 
@@ -30813,14 +33331,18 @@
       this._setSelectionRange(0, this._inputValue.length);
     }
 
+    _applyInputValue(date) {
+      this._inputValue = date ? this._getFormattedDate(this.i18n.formatDate, date) : '';
+    }
+
+    _getFormattedDate(formatDate, date) {
+      return formatDate(DatePickerHelper._extractDateParts(date));
+    }
+
     _setSelectionRange(a, b) {
       if (this._nativeInput && this._nativeInput.setSelectionRange) {
         this._nativeInput.setSelectionRange(a, b);
       }
-    }
-
-    _preventDefault(e) {
-      e.preventDefault();
     }
 
     /**
@@ -30870,19 +33392,40 @@
 
           break;
         case 'enter': {
-          const dateObject = this.i18n.parseDate(this._inputValue);
-          const parsedDate = dateObject &&
-            this._parseDate(dateObject.year + '-' + (dateObject.month + 1) + '-' + dateObject.day);
-
-          if (this._overlayInitialized && this._overlayContent.focusedDate && this._isValidDate(parsedDate)) {
-            this._selectedDate = this._overlayContent.focusedDate;
+          const parsedDate = this._getParsedDate();
+          const isValidDate = this._isValidDate(parsedDate);
+          if (this.opened) {
+            if (this._overlayInitialized && this._overlayContent.focusedDate && isValidDate) {
+              this._selectedDate = this._overlayContent.focusedDate;
+            }
+            this.close();
+          } else {
+            if (!isValidDate && this._inputElement.value !== '') {
+              this.validate();
+            } else {
+              const oldValue = this.value;
+              this._selectParsedOrFocusedDate();
+              if (oldValue === this.value) {
+                this.validate();
+              }
+            }
           }
-          this.close();
           break;
         }
         case 'esc':
-          this._focusedDate = this._selectedDate;
-          this._close();
+          if (this.opened) {
+            this._focusedDate = this._selectedDate;
+            this._close();
+          } else if (this.autoOpenDisabled) {
+            // Do not restore selected date if Esc was pressed after clearing input field
+            if (this._inputElement.value === '') {
+              this._selectedDate = null;
+            }
+            this._applyInputValue(this._selectedDate);
+          } else {
+            this._focusedDate = this._selectedDate;
+            this._selectParsedOrFocusedDate();
+          }
           break;
         case 'tab':
           if (this.opened) {
@@ -30901,24 +33444,30 @@
       }
     }
 
-    _validateInput(date, min, max) {
-      if (date && (min || max)) {
-        this.invalid = !DatePickerHelper._dateAllowed(date, min, max);
-      }
+    _getParsedDate(inputValue = this._inputValue) {
+      const dateObject = this.i18n.parseDate && this.i18n.parseDate(inputValue);
+      const parsedDate = dateObject &&
+        this._parseDate(dateObject.year + '-' + (dateObject.month + 1) + '-' + dateObject.day);
+      return parsedDate;
     }
 
     _onUserInput(e) {
-      if (!this.opened && this._inputElement.value) {
+      if (!this.opened && this._inputElement.value && !this.autoOpenDisabled) {
         this.open();
       }
       this._userInputValueChanged();
+
+      if (e.__fromClearButton) {
+        this.validate();
+        this.__dispatchChange = true;
+        this.value = '';
+        this.__dispatchChange = false;
+      }
     }
 
     _userInputValueChanged(value) {
       if (this.opened && this._inputValue) {
-        const dateObject = this.i18n.parseDate && this.i18n.parseDate(this._inputValue);
-        const parsedDate = dateObject &&
-          this._parseDate(`${dateObject.year}-${dateObject.month + 1}-${dateObject.day}`);
+        const parsedDate = this._getParsedDate();
 
         if (this._isValidDate(parsedDate)) {
           this._ignoreFocusedDateChange = true;
@@ -31024,13 +33573,13 @@
    * Note: the `theme` attribute value set on `<vaadin-date-picker>` is
    * propagated to the internal themable components listed above.
    *
-   * @memberof Vaadin
-   * @mixes Vaadin.ElementMixin
-   * @mixes Vaadin.ControlStateMixin
-   * @mixes Vaadin.ThemableMixin
-   * @mixes Vaadin.ThemePropertyMixin
-   * @mixes Vaadin.DatePickerMixin
-   * @mixes Polymer.GestureEventListeners
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ControlStateMixin
+   * @mixes ThemableMixin
+   * @mixes ThemePropertyMixin
+   * @mixes DatePickerMixin
+   * @mixes GestureEventListeners
    * @demo demo/index.html
    */
   class DatePickerElement extends
@@ -31062,10 +33611,10 @@
     </style>
 
 
-    <vaadin-text-field id="input" role="application" autocomplete="off" on-focus="_focus" value="{{_userInputValue}}" invalid="[[invalid]]" label="[[label]]" name="[[name]]" placeholder="[[placeholder]]" required="[[required]]" disabled="[[disabled]]" readonly="[[readonly]]" error-message="[[errorMessage]]" clear-button-visible="[[clearButtonVisible]]" aria-label\$="[[label]]" part="text-field" theme\$="[[theme]]">
+    <vaadin-date-picker-text-field id="input" role="application" autocomplete="off" on-focus="_focus" value="{{_userInputValue}}" invalid="[[invalid]]" label="[[label]]" name="[[name]]" placeholder="[[placeholder]]" required="[[required]]" disabled="[[disabled]]" readonly="[[readonly]]" error-message="[[errorMessage]]" clear-button-visible="[[clearButtonVisible]]" aria-label\$="[[label]]" part="text-field" theme\$="[[theme]]">
       <slot name="prefix" slot="prefix"></slot>
       <div part="toggle-button" slot="suffix" on-tap="_toggle" role="button" aria-label\$="[[i18n.calendar]]" aria-expanded\$="[[_getAriaExpanded(opened)]]"></div>
-    </vaadin-text-field>
+    </vaadin-date-picker-text-field>
 
     <vaadin-date-picker-overlay id="overlay" fullscreen\$="[[_fullscreen]]" theme\$="[[__getOverlayTheme(theme, _overlayInitialized)]]" on-vaadin-overlay-open="_onOverlayOpened" on-vaadin-overlay-close="_onOverlayClosed" disable-upgrade="">
       <template>
@@ -31084,7 +33633,7 @@
     }
 
     static get version() {
-      return '4.0.3';
+      return '4.2.0';
     }
 
     static get properties() {
@@ -31152,14 +33701,11 @@
       // In order to have synchronized invalid property, we need to use the same validate logic.
       afterNextRender(this, () => this._inputElement.validate = () => {});
 
-      // FIXME(platosha): dispatch `input` event on
-      // <vaadin-text-field> clear button
-      // https://github.com/vaadin/vaadin-text-field/issues/347
-      this._inputElement.addEventListener('change', () => {
-        if (this._inputElement.value === '') {
+      this._inputElement.addEventListener('change', (e) => {
+        // For change event on text-field blur, after the field is cleared,
+        // we schedule change event to be dispatched on date-picker blur.
+        if (this._inputElement.value === '' && !e.__fromClearButton) {
           this.__dispatchChange = true;
-          this.value = '';
-          this.__dispatchChange = false;
         }
       });
     }
@@ -31221,7 +33767,6 @@
           button.addEventListener('click', function() {
               button.nextElementSibling.textContent = ++i;
           });
-          console.log('sugar', Sugar);
           Sugar.Date.setLocale('pt');
           var datepicker = this.shadowRoot.querySelector('vaadin-date-picker');
           console.log('data', datepicker);
@@ -31267,14 +33812,8869 @@
   }
   customElements.define('vapp-home',VappHome);
 
-  class VappPage2 extends PolymerElement{
-      static get template(){
-          return html `
-            <h2>Page 2</h2>
-           <p>Paragraph at home</p>`     
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const directives = new WeakMap();
+  const isDirective = (o) => {
+      return typeof o === 'function' && directives.has(o);
+  };
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * True if the custom elements polyfill is in use.
+   */
+  const isCEPolyfill = typeof window !== 'undefined' &&
+      window.customElements != null &&
+      window.customElements.polyfillWrapFlushCallback !==
+          undefined;
+  /**
+   * Removes nodes, starting from `start` (inclusive) to `end` (exclusive), from
+   * `container`.
+   */
+  const removeNodes = (container, start, end = null) => {
+      while (start !== end) {
+          const n = start.nextSibling;
+          container.removeChild(start);
+          start = n;
+      }
+  };
+
+  /**
+   * @license
+   * Copyright (c) 2018 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * A sentinel value that signals that a value was handled by a directive and
+   * should not be written to the DOM.
+   */
+  const noChange = {};
+  /**
+   * A sentinel value that signals a NodePart to fully clear its content.
+   */
+  const nothing = {};
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * An expression marker with embedded unique key to avoid collision with
+   * possible text in templates.
+   */
+  const marker = `{{lit-${String(Math.random()).slice(2)}}}`;
+  /**
+   * An expression marker used text-positions, multi-binding attributes, and
+   * attributes with markup-like text values.
+   */
+  const nodeMarker = `<!--${marker}-->`;
+  const markerRegex = new RegExp(`${marker}|${nodeMarker}`);
+  /**
+   * Suffix appended to all bound attribute names.
+   */
+  const boundAttributeSuffix = '$lit$';
+  /**
+   * An updatable Template that tracks the location of dynamic parts.
+   */
+  class Template {
+      constructor(result, element) {
+          this.parts = [];
+          this.element = element;
+          const nodesToRemove = [];
+          const stack = [];
+          // Edge needs all 4 parameters present; IE11 needs 3rd parameter to be null
+          const walker = document.createTreeWalker(element.content, 133 /* NodeFilter.SHOW_{ELEMENT|COMMENT|TEXT} */, null, false);
+          // Keeps track of the last index associated with a part. We try to delete
+          // unnecessary nodes, but we never want to associate two different parts
+          // to the same index. They must have a constant node between.
+          let lastPartIndex = 0;
+          let index = -1;
+          let partIndex = 0;
+          const { strings, values: { length } } = result;
+          while (partIndex < length) {
+              const node = walker.nextNode();
+              if (node === null) {
+                  // We've exhausted the content inside a nested template element.
+                  // Because we still have parts (the outer for-loop), we know:
+                  // - There is a template in the stack
+                  // - The walker will find a nextNode outside the template
+                  walker.currentNode = stack.pop();
+                  continue;
+              }
+              index++;
+              if (node.nodeType === 1 /* Node.ELEMENT_NODE */) {
+                  if (node.hasAttributes()) {
+                      const attributes = node.attributes;
+                      const { length } = attributes;
+                      // Per
+                      // https://developer.mozilla.org/en-US/docs/Web/API/NamedNodeMap,
+                      // attributes are not guaranteed to be returned in document order.
+                      // In particular, Edge/IE can return them out of order, so we cannot
+                      // assume a correspondence between part index and attribute index.
+                      let count = 0;
+                      for (let i = 0; i < length; i++) {
+                          if (endsWith(attributes[i].name, boundAttributeSuffix)) {
+                              count++;
+                          }
+                      }
+                      while (count-- > 0) {
+                          // Get the template literal section leading up to the first
+                          // expression in this attribute
+                          const stringForPart = strings[partIndex];
+                          // Find the attribute name
+                          const name = lastAttributeNameRegex.exec(stringForPart)[2];
+                          // Find the corresponding attribute
+                          // All bound attributes have had a suffix added in
+                          // TemplateResult#getHTML to opt out of special attribute
+                          // handling. To look up the attribute value we also need to add
+                          // the suffix.
+                          const attributeLookupName = name.toLowerCase() + boundAttributeSuffix;
+                          const attributeValue = node.getAttribute(attributeLookupName);
+                          node.removeAttribute(attributeLookupName);
+                          const statics = attributeValue.split(markerRegex);
+                          this.parts.push({ type: 'attribute', index, name, strings: statics });
+                          partIndex += statics.length - 1;
+                      }
+                  }
+                  if (node.tagName === 'TEMPLATE') {
+                      stack.push(node);
+                      walker.currentNode = node.content;
+                  }
+              }
+              else if (node.nodeType === 3 /* Node.TEXT_NODE */) {
+                  const data = node.data;
+                  if (data.indexOf(marker) >= 0) {
+                      const parent = node.parentNode;
+                      const strings = data.split(markerRegex);
+                      const lastIndex = strings.length - 1;
+                      // Generate a new text node for each literal section
+                      // These nodes are also used as the markers for node parts
+                      for (let i = 0; i < lastIndex; i++) {
+                          let insert;
+                          let s = strings[i];
+                          if (s === '') {
+                              insert = createMarker();
+                          }
+                          else {
+                              const match = lastAttributeNameRegex.exec(s);
+                              if (match !== null && endsWith(match[2], boundAttributeSuffix)) {
+                                  s = s.slice(0, match.index) + match[1] +
+                                      match[2].slice(0, -boundAttributeSuffix.length) + match[3];
+                              }
+                              insert = document.createTextNode(s);
+                          }
+                          parent.insertBefore(insert, node);
+                          this.parts.push({ type: 'node', index: ++index });
+                      }
+                      // If there's no text, we must insert a comment to mark our place.
+                      // Else, we can trust it will stick around after cloning.
+                      if (strings[lastIndex] === '') {
+                          parent.insertBefore(createMarker(), node);
+                          nodesToRemove.push(node);
+                      }
+                      else {
+                          node.data = strings[lastIndex];
+                      }
+                      // We have a part for each match found
+                      partIndex += lastIndex;
+                  }
+              }
+              else if (node.nodeType === 8 /* Node.COMMENT_NODE */) {
+                  if (node.data === marker) {
+                      const parent = node.parentNode;
+                      // Add a new marker node to be the startNode of the Part if any of
+                      // the following are true:
+                      //  * We don't have a previousSibling
+                      //  * The previousSibling is already the start of a previous part
+                      if (node.previousSibling === null || index === lastPartIndex) {
+                          index++;
+                          parent.insertBefore(createMarker(), node);
+                      }
+                      lastPartIndex = index;
+                      this.parts.push({ type: 'node', index });
+                      // If we don't have a nextSibling, keep this node so we have an end.
+                      // Else, we can remove it to save future costs.
+                      if (node.nextSibling === null) {
+                          node.data = '';
+                      }
+                      else {
+                          nodesToRemove.push(node);
+                          index--;
+                      }
+                      partIndex++;
+                  }
+                  else {
+                      let i = -1;
+                      while ((i = node.data.indexOf(marker, i + 1)) !== -1) {
+                          // Comment node has a binding marker inside, make an inactive part
+                          // The binding won't work, but subsequent bindings will
+                          // TODO (justinfagnani): consider whether it's even worth it to
+                          // make bindings in comments work
+                          this.parts.push({ type: 'node', index: -1 });
+                          partIndex++;
+                      }
+                  }
+              }
+          }
+          // Remove text binding nodes after the walk to not disturb the TreeWalker
+          for (const n of nodesToRemove) {
+              n.parentNode.removeChild(n);
+          }
       }
   }
-  customElements.define('vapp-page2',VappPage2);
+  const endsWith = (str, suffix) => {
+      const index = str.length - suffix.length;
+      return index >= 0 && str.slice(index) === suffix;
+  };
+  const isTemplatePartActive = (part) => part.index !== -1;
+  // Allows `document.createComment('')` to be renamed for a
+  // small manual size-savings.
+  const createMarker = () => document.createComment('');
+  /**
+   * This regex extracts the attribute name preceding an attribute-position
+   * expression. It does this by matching the syntax allowed for attributes
+   * against the string literal directly preceding the expression, assuming that
+   * the expression is in an attribute-value position.
+   *
+   * See attributes in the HTML spec:
+   * https://www.w3.org/TR/html5/syntax.html#elements-attributes
+   *
+   * " \x09\x0a\x0c\x0d" are HTML space characters:
+   * https://www.w3.org/TR/html5/infrastructure.html#space-characters
+   *
+   * "\0-\x1F\x7F-\x9F" are Unicode control characters, which includes every
+   * space character except " ".
+   *
+   * So an attribute is:
+   *  * The name: any character except a control character, space character, ('),
+   *    ("), ">", "=", or "/"
+   *  * Followed by zero or more space characters
+   *  * Followed by "="
+   *  * Followed by zero or more space characters
+   *  * Followed by:
+   *    * Any character except space, ('), ("), "<", ">", "=", (`), or
+   *    * (") then any non-("), or
+   *    * (') then any non-(')
+   */
+  const lastAttributeNameRegex = 
+  // eslint-disable-next-line no-control-regex
+  /([ \x09\x0a\x0c\x0d])([^\0-\x1F\x7F-\x9F "'>=/]+)([ \x09\x0a\x0c\x0d]*=[ \x09\x0a\x0c\x0d]*(?:[^ \x09\x0a\x0c\x0d"'`<>=]*|"[^"]*|'[^']*))$/;
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * An instance of a `Template` that can be attached to the DOM and updated
+   * with new values.
+   */
+  class TemplateInstance {
+      constructor(template, processor, options) {
+          this.__parts = [];
+          this.template = template;
+          this.processor = processor;
+          this.options = options;
+      }
+      update(values) {
+          let i = 0;
+          for (const part of this.__parts) {
+              if (part !== undefined) {
+                  part.setValue(values[i]);
+              }
+              i++;
+          }
+          for (const part of this.__parts) {
+              if (part !== undefined) {
+                  part.commit();
+              }
+          }
+      }
+      _clone() {
+          // There are a number of steps in the lifecycle of a template instance's
+          // DOM fragment:
+          //  1. Clone - create the instance fragment
+          //  2. Adopt - adopt into the main document
+          //  3. Process - find part markers and create parts
+          //  4. Upgrade - upgrade custom elements
+          //  5. Update - set node, attribute, property, etc., values
+          //  6. Connect - connect to the document. Optional and outside of this
+          //     method.
+          //
+          // We have a few constraints on the ordering of these steps:
+          //  * We need to upgrade before updating, so that property values will pass
+          //    through any property setters.
+          //  * We would like to process before upgrading so that we're sure that the
+          //    cloned fragment is inert and not disturbed by self-modifying DOM.
+          //  * We want custom elements to upgrade even in disconnected fragments.
+          //
+          // Given these constraints, with full custom elements support we would
+          // prefer the order: Clone, Process, Adopt, Upgrade, Update, Connect
+          //
+          // But Safari does not implement CustomElementRegistry#upgrade, so we
+          // can not implement that order and still have upgrade-before-update and
+          // upgrade disconnected fragments. So we instead sacrifice the
+          // process-before-upgrade constraint, since in Custom Elements v1 elements
+          // must not modify their light DOM in the constructor. We still have issues
+          // when co-existing with CEv0 elements like Polymer 1, and with polyfills
+          // that don't strictly adhere to the no-modification rule because shadow
+          // DOM, which may be created in the constructor, is emulated by being placed
+          // in the light DOM.
+          //
+          // The resulting order is on native is: Clone, Adopt, Upgrade, Process,
+          // Update, Connect. document.importNode() performs Clone, Adopt, and Upgrade
+          // in one step.
+          //
+          // The Custom Elements v1 polyfill supports upgrade(), so the order when
+          // polyfilled is the more ideal: Clone, Process, Adopt, Upgrade, Update,
+          // Connect.
+          const fragment = isCEPolyfill ?
+              this.template.element.content.cloneNode(true) :
+              document.importNode(this.template.element.content, true);
+          const stack = [];
+          const parts = this.template.parts;
+          // Edge needs all 4 parameters present; IE11 needs 3rd parameter to be null
+          const walker = document.createTreeWalker(fragment, 133 /* NodeFilter.SHOW_{ELEMENT|COMMENT|TEXT} */, null, false);
+          let partIndex = 0;
+          let nodeIndex = 0;
+          let part;
+          let node = walker.nextNode();
+          // Loop through all the nodes and parts of a template
+          while (partIndex < parts.length) {
+              part = parts[partIndex];
+              if (!isTemplatePartActive(part)) {
+                  this.__parts.push(undefined);
+                  partIndex++;
+                  continue;
+              }
+              // Progress the tree walker until we find our next part's node.
+              // Note that multiple parts may share the same node (attribute parts
+              // on a single element), so this loop may not run at all.
+              while (nodeIndex < part.index) {
+                  nodeIndex++;
+                  if (node.nodeName === 'TEMPLATE') {
+                      stack.push(node);
+                      walker.currentNode = node.content;
+                  }
+                  if ((node = walker.nextNode()) === null) {
+                      // We've exhausted the content inside a nested template element.
+                      // Because we still have parts (the outer for-loop), we know:
+                      // - There is a template in the stack
+                      // - The walker will find a nextNode outside the template
+                      walker.currentNode = stack.pop();
+                      node = walker.nextNode();
+                  }
+              }
+              // We've arrived at our part's node.
+              if (part.type === 'node') {
+                  const part = this.processor.handleTextExpression(this.options);
+                  part.insertAfterNode(node.previousSibling);
+                  this.__parts.push(part);
+              }
+              else {
+                  this.__parts.push(...this.processor.handleAttributeExpressions(node, part.name, part.strings, this.options));
+              }
+              partIndex++;
+          }
+          if (isCEPolyfill) {
+              document.adoptNode(fragment);
+              customElements.upgrade(fragment);
+          }
+          return fragment;
+      }
+  }
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const commentMarker = ` ${marker} `;
+  /**
+   * The return type of `html`, which holds a Template and the values from
+   * interpolated expressions.
+   */
+  class TemplateResult {
+      constructor(strings, values, type, processor) {
+          this.strings = strings;
+          this.values = values;
+          this.type = type;
+          this.processor = processor;
+      }
+      /**
+       * Returns a string of HTML used to create a `<template>` element.
+       */
+      getHTML() {
+          const l = this.strings.length - 1;
+          let html = '';
+          let isCommentBinding = false;
+          for (let i = 0; i < l; i++) {
+              const s = this.strings[i];
+              // For each binding we want to determine the kind of marker to insert
+              // into the template source before it's parsed by the browser's HTML
+              // parser. The marker type is based on whether the expression is in an
+              // attribute, text, or comment position.
+              //   * For node-position bindings we insert a comment with the marker
+              //     sentinel as its text content, like <!--{{lit-guid}}-->.
+              //   * For attribute bindings we insert just the marker sentinel for the
+              //     first binding, so that we support unquoted attribute bindings.
+              //     Subsequent bindings can use a comment marker because multi-binding
+              //     attributes must be quoted.
+              //   * For comment bindings we insert just the marker sentinel so we don't
+              //     close the comment.
+              //
+              // The following code scans the template source, but is *not* an HTML
+              // parser. We don't need to track the tree structure of the HTML, only
+              // whether a binding is inside a comment, and if not, if it appears to be
+              // the first binding in an attribute.
+              const commentOpen = s.lastIndexOf('<!--');
+              // We're in comment position if we have a comment open with no following
+              // comment close. Because <-- can appear in an attribute value there can
+              // be false positives.
+              isCommentBinding = (commentOpen > -1 || isCommentBinding) &&
+                  s.indexOf('-->', commentOpen + 1) === -1;
+              // Check to see if we have an attribute-like sequence preceding the
+              // expression. This can match "name=value" like structures in text,
+              // comments, and attribute values, so there can be false-positives.
+              const attributeMatch = lastAttributeNameRegex.exec(s);
+              if (attributeMatch === null) {
+                  // We're only in this branch if we don't have a attribute-like
+                  // preceding sequence. For comments, this guards against unusual
+                  // attribute values like <div foo="<!--${'bar'}">. Cases like
+                  // <!-- foo=${'bar'}--> are handled correctly in the attribute branch
+                  // below.
+                  html += s + (isCommentBinding ? commentMarker : nodeMarker);
+              }
+              else {
+                  // For attributes we use just a marker sentinel, and also append a
+                  // $lit$ suffix to the name to opt-out of attribute-specific parsing
+                  // that IE and Edge do for style and certain SVG attributes.
+                  html += s.substr(0, attributeMatch.index) + attributeMatch[1] +
+                      attributeMatch[2] + boundAttributeSuffix + attributeMatch[3] +
+                      marker;
+              }
+          }
+          html += this.strings[l];
+          return html;
+      }
+      getTemplateElement() {
+          const template = document.createElement('template');
+          template.innerHTML = this.getHTML();
+          return template;
+      }
+  }
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const isPrimitive = (value) => {
+      return (value === null ||
+          !(typeof value === 'object' || typeof value === 'function'));
+  };
+  const isIterable = (value) => {
+      return Array.isArray(value) ||
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          !!(value && value[Symbol.iterator]);
+  };
+  /**
+   * Writes attribute values to the DOM for a group of AttributeParts bound to a
+   * single attribute. The value is only set once even if there are multiple parts
+   * for an attribute.
+   */
+  class AttributeCommitter {
+      constructor(element, name, strings) {
+          this.dirty = true;
+          this.element = element;
+          this.name = name;
+          this.strings = strings;
+          this.parts = [];
+          for (let i = 0; i < strings.length - 1; i++) {
+              this.parts[i] = this._createPart();
+          }
+      }
+      /**
+       * Creates a single part. Override this to create a differnt type of part.
+       */
+      _createPart() {
+          return new AttributePart(this);
+      }
+      _getValue() {
+          const strings = this.strings;
+          const l = strings.length - 1;
+          let text = '';
+          for (let i = 0; i < l; i++) {
+              text += strings[i];
+              const part = this.parts[i];
+              if (part !== undefined) {
+                  const v = part.value;
+                  if (isPrimitive(v) || !isIterable(v)) {
+                      text += typeof v === 'string' ? v : String(v);
+                  }
+                  else {
+                      for (const t of v) {
+                          text += typeof t === 'string' ? t : String(t);
+                      }
+                  }
+              }
+          }
+          text += strings[l];
+          return text;
+      }
+      commit() {
+          if (this.dirty) {
+              this.dirty = false;
+              this.element.setAttribute(this.name, this._getValue());
+          }
+      }
+  }
+  /**
+   * A Part that controls all or part of an attribute value.
+   */
+  class AttributePart {
+      constructor(committer) {
+          this.value = undefined;
+          this.committer = committer;
+      }
+      setValue(value) {
+          if (value !== noChange && (!isPrimitive(value) || value !== this.value)) {
+              this.value = value;
+              // If the value is a not a directive, dirty the committer so that it'll
+              // call setAttribute. If the value is a directive, it'll dirty the
+              // committer if it calls setValue().
+              if (!isDirective(value)) {
+                  this.committer.dirty = true;
+              }
+          }
+      }
+      commit() {
+          while (isDirective(this.value)) {
+              const directive = this.value;
+              this.value = noChange;
+              directive(this);
+          }
+          if (this.value === noChange) {
+              return;
+          }
+          this.committer.commit();
+      }
+  }
+  /**
+   * A Part that controls a location within a Node tree. Like a Range, NodePart
+   * has start and end locations and can set and update the Nodes between those
+   * locations.
+   *
+   * NodeParts support several value types: primitives, Nodes, TemplateResults,
+   * as well as arrays and iterables of those types.
+   */
+  class NodePart {
+      constructor(options) {
+          this.value = undefined;
+          this.__pendingValue = undefined;
+          this.options = options;
+      }
+      /**
+       * Appends this part into a container.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      appendInto(container) {
+          this.startNode = container.appendChild(createMarker());
+          this.endNode = container.appendChild(createMarker());
+      }
+      /**
+       * Inserts this part after the `ref` node (between `ref` and `ref`'s next
+       * sibling). Both `ref` and its next sibling must be static, unchanging nodes
+       * such as those that appear in a literal section of a template.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      insertAfterNode(ref) {
+          this.startNode = ref;
+          this.endNode = ref.nextSibling;
+      }
+      /**
+       * Appends this part into a parent part.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      appendIntoPart(part) {
+          part.__insert(this.startNode = createMarker());
+          part.__insert(this.endNode = createMarker());
+      }
+      /**
+       * Inserts this part after the `ref` part.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      insertAfterPart(ref) {
+          ref.__insert(this.startNode = createMarker());
+          this.endNode = ref.endNode;
+          ref.endNode = this.startNode;
+      }
+      setValue(value) {
+          this.__pendingValue = value;
+      }
+      commit() {
+          if (this.startNode.parentNode === null) {
+              return;
+          }
+          while (isDirective(this.__pendingValue)) {
+              const directive = this.__pendingValue;
+              this.__pendingValue = noChange;
+              directive(this);
+          }
+          const value = this.__pendingValue;
+          if (value === noChange) {
+              return;
+          }
+          if (isPrimitive(value)) {
+              if (value !== this.value) {
+                  this.__commitText(value);
+              }
+          }
+          else if (value instanceof TemplateResult) {
+              this.__commitTemplateResult(value);
+          }
+          else if (value instanceof Node) {
+              this.__commitNode(value);
+          }
+          else if (isIterable(value)) {
+              this.__commitIterable(value);
+          }
+          else if (value === nothing) {
+              this.value = nothing;
+              this.clear();
+          }
+          else {
+              // Fallback, will render the string representation
+              this.__commitText(value);
+          }
+      }
+      __insert(node) {
+          this.endNode.parentNode.insertBefore(node, this.endNode);
+      }
+      __commitNode(value) {
+          if (this.value === value) {
+              return;
+          }
+          this.clear();
+          this.__insert(value);
+          this.value = value;
+      }
+      __commitText(value) {
+          const node = this.startNode.nextSibling;
+          value = value == null ? '' : value;
+          // If `value` isn't already a string, we explicitly convert it here in case
+          // it can't be implicitly converted - i.e. it's a symbol.
+          const valueAsString = typeof value === 'string' ? value : String(value);
+          if (node === this.endNode.previousSibling &&
+              node.nodeType === 3 /* Node.TEXT_NODE */) {
+              // If we only have a single text node between the markers, we can just
+              // set its value, rather than replacing it.
+              // TODO(justinfagnani): Can we just check if this.value is primitive?
+              node.data = valueAsString;
+          }
+          else {
+              this.__commitNode(document.createTextNode(valueAsString));
+          }
+          this.value = value;
+      }
+      __commitTemplateResult(value) {
+          const template = this.options.templateFactory(value);
+          if (this.value instanceof TemplateInstance &&
+              this.value.template === template) {
+              this.value.update(value.values);
+          }
+          else {
+              // Make sure we propagate the template processor from the TemplateResult
+              // so that we use its syntax extension, etc. The template factory comes
+              // from the render function options so that it can control template
+              // caching and preprocessing.
+              const instance = new TemplateInstance(template, value.processor, this.options);
+              const fragment = instance._clone();
+              instance.update(value.values);
+              this.__commitNode(fragment);
+              this.value = instance;
+          }
+      }
+      __commitIterable(value) {
+          // For an Iterable, we create a new InstancePart per item, then set its
+          // value to the item. This is a little bit of overhead for every item in
+          // an Iterable, but it lets us recurse easily and efficiently update Arrays
+          // of TemplateResults that will be commonly returned from expressions like:
+          // array.map((i) => html`${i}`), by reusing existing TemplateInstances.
+          // If _value is an array, then the previous render was of an
+          // iterable and _value will contain the NodeParts from the previous
+          // render. If _value is not an array, clear this part and make a new
+          // array for NodeParts.
+          if (!Array.isArray(this.value)) {
+              this.value = [];
+              this.clear();
+          }
+          // Lets us keep track of how many items we stamped so we can clear leftover
+          // items from a previous render
+          const itemParts = this.value;
+          let partIndex = 0;
+          let itemPart;
+          for (const item of value) {
+              // Try to reuse an existing part
+              itemPart = itemParts[partIndex];
+              // If no existing part, create a new one
+              if (itemPart === undefined) {
+                  itemPart = new NodePart(this.options);
+                  itemParts.push(itemPart);
+                  if (partIndex === 0) {
+                      itemPart.appendIntoPart(this);
+                  }
+                  else {
+                      itemPart.insertAfterPart(itemParts[partIndex - 1]);
+                  }
+              }
+              itemPart.setValue(item);
+              itemPart.commit();
+              partIndex++;
+          }
+          if (partIndex < itemParts.length) {
+              // Truncate the parts array so _value reflects the current state
+              itemParts.length = partIndex;
+              this.clear(itemPart && itemPart.endNode);
+          }
+      }
+      clear(startNode = this.startNode) {
+          removeNodes(this.startNode.parentNode, startNode.nextSibling, this.endNode);
+      }
+  }
+  /**
+   * Implements a boolean attribute, roughly as defined in the HTML
+   * specification.
+   *
+   * If the value is truthy, then the attribute is present with a value of
+   * ''. If the value is falsey, the attribute is removed.
+   */
+  class BooleanAttributePart {
+      constructor(element, name, strings) {
+          this.value = undefined;
+          this.__pendingValue = undefined;
+          if (strings.length !== 2 || strings[0] !== '' || strings[1] !== '') {
+              throw new Error('Boolean attributes can only contain a single expression');
+          }
+          this.element = element;
+          this.name = name;
+          this.strings = strings;
+      }
+      setValue(value) {
+          this.__pendingValue = value;
+      }
+      commit() {
+          while (isDirective(this.__pendingValue)) {
+              const directive = this.__pendingValue;
+              this.__pendingValue = noChange;
+              directive(this);
+          }
+          if (this.__pendingValue === noChange) {
+              return;
+          }
+          const value = !!this.__pendingValue;
+          if (this.value !== value) {
+              if (value) {
+                  this.element.setAttribute(this.name, '');
+              }
+              else {
+                  this.element.removeAttribute(this.name);
+              }
+              this.value = value;
+          }
+          this.__pendingValue = noChange;
+      }
+  }
+  /**
+   * Sets attribute values for PropertyParts, so that the value is only set once
+   * even if there are multiple parts for a property.
+   *
+   * If an expression controls the whole property value, then the value is simply
+   * assigned to the property under control. If there are string literals or
+   * multiple expressions, then the strings are expressions are interpolated into
+   * a string first.
+   */
+  class PropertyCommitter extends AttributeCommitter {
+      constructor(element, name, strings) {
+          super(element, name, strings);
+          this.single =
+              (strings.length === 2 && strings[0] === '' && strings[1] === '');
+      }
+      _createPart() {
+          return new PropertyPart(this);
+      }
+      _getValue() {
+          if (this.single) {
+              return this.parts[0].value;
+          }
+          return super._getValue();
+      }
+      commit() {
+          if (this.dirty) {
+              this.dirty = false;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              this.element[this.name] = this._getValue();
+          }
+      }
+  }
+  class PropertyPart extends AttributePart {
+  }
+  // Detect event listener options support. If the `capture` property is read
+  // from the options object, then options are supported. If not, then the third
+  // argument to add/removeEventListener is interpreted as the boolean capture
+  // value so we should only pass the `capture` property.
+  let eventOptionsSupported = false;
+  // Wrap into an IIFE because MS Edge <= v41 does not support having try/catch
+  // blocks right into the body of a module
+  (() => {
+      try {
+          const options = {
+              get capture() {
+                  eventOptionsSupported = true;
+                  return false;
+              }
+          };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          window.addEventListener('test', options, options);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          window.removeEventListener('test', options, options);
+      }
+      catch (_e) {
+          // event options not supported
+      }
+  })();
+  class EventPart {
+      constructor(element, eventName, eventContext) {
+          this.value = undefined;
+          this.__pendingValue = undefined;
+          this.element = element;
+          this.eventName = eventName;
+          this.eventContext = eventContext;
+          this.__boundHandleEvent = (e) => this.handleEvent(e);
+      }
+      setValue(value) {
+          this.__pendingValue = value;
+      }
+      commit() {
+          while (isDirective(this.__pendingValue)) {
+              const directive = this.__pendingValue;
+              this.__pendingValue = noChange;
+              directive(this);
+          }
+          if (this.__pendingValue === noChange) {
+              return;
+          }
+          const newListener = this.__pendingValue;
+          const oldListener = this.value;
+          const shouldRemoveListener = newListener == null ||
+              oldListener != null &&
+                  (newListener.capture !== oldListener.capture ||
+                      newListener.once !== oldListener.once ||
+                      newListener.passive !== oldListener.passive);
+          const shouldAddListener = newListener != null && (oldListener == null || shouldRemoveListener);
+          if (shouldRemoveListener) {
+              this.element.removeEventListener(this.eventName, this.__boundHandleEvent, this.__options);
+          }
+          if (shouldAddListener) {
+              this.__options = getOptions(newListener);
+              this.element.addEventListener(this.eventName, this.__boundHandleEvent, this.__options);
+          }
+          this.value = newListener;
+          this.__pendingValue = noChange;
+      }
+      handleEvent(event) {
+          if (typeof this.value === 'function') {
+              this.value.call(this.eventContext || this.element, event);
+          }
+          else {
+              this.value.handleEvent(event);
+          }
+      }
+  }
+  // We copy options because of the inconsistent behavior of browsers when reading
+  // the third argument of add/removeEventListener. IE11 doesn't support options
+  // at all. Chrome 41 only reads `capture` if the argument is an object.
+  const getOptions = (o) => o &&
+      (eventOptionsSupported ?
+          { capture: o.capture, passive: o.passive, once: o.once } :
+          o.capture);
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * Creates Parts when a template is instantiated.
+   */
+  class DefaultTemplateProcessor {
+      /**
+       * Create parts for an attribute-position binding, given the event, attribute
+       * name, and string literals.
+       *
+       * @param element The element containing the binding
+       * @param name  The attribute name
+       * @param strings The string literals. There are always at least two strings,
+       *   event for fully-controlled bindings with a single expression.
+       */
+      handleAttributeExpressions(element, name, strings, options) {
+          const prefix = name[0];
+          if (prefix === '.') {
+              const committer = new PropertyCommitter(element, name.slice(1), strings);
+              return committer.parts;
+          }
+          if (prefix === '@') {
+              return [new EventPart(element, name.slice(1), options.eventContext)];
+          }
+          if (prefix === '?') {
+              return [new BooleanAttributePart(element, name.slice(1), strings)];
+          }
+          const committer = new AttributeCommitter(element, name, strings);
+          return committer.parts;
+      }
+      /**
+       * Create parts for a text-position binding.
+       * @param templateFactory
+       */
+      handleTextExpression(options) {
+          return new NodePart(options);
+      }
+  }
+  const defaultTemplateProcessor = new DefaultTemplateProcessor();
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * The default TemplateFactory which caches Templates keyed on
+   * result.type and result.strings.
+   */
+  function templateFactory(result) {
+      let templateCache = templateCaches.get(result.type);
+      if (templateCache === undefined) {
+          templateCache = {
+              stringsArray: new WeakMap(),
+              keyString: new Map()
+          };
+          templateCaches.set(result.type, templateCache);
+      }
+      let template = templateCache.stringsArray.get(result.strings);
+      if (template !== undefined) {
+          return template;
+      }
+      // If the TemplateStringsArray is new, generate a key from the strings
+      // This key is shared between all templates with identical content
+      const key = result.strings.join(marker);
+      // Check if we already have a Template for this key
+      template = templateCache.keyString.get(key);
+      if (template === undefined) {
+          // If we have not seen this key before, create a new Template
+          template = new Template(result, result.getTemplateElement());
+          // Cache the Template for this key
+          templateCache.keyString.set(key, template);
+      }
+      // Cache all future queries for this TemplateStringsArray
+      templateCache.stringsArray.set(result.strings, template);
+      return template;
+  }
+  const templateCaches = new Map();
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const parts = new WeakMap();
+  /**
+   * Renders a template result or other value to a container.
+   *
+   * To update a container with new values, reevaluate the template literal and
+   * call `render` with the new result.
+   *
+   * @param result Any value renderable by NodePart - typically a TemplateResult
+   *     created by evaluating a template tag like `html` or `svg`.
+   * @param container A DOM parent to render to. The entire contents are either
+   *     replaced, or efficiently updated if the same result type was previous
+   *     rendered there.
+   * @param options RenderOptions for the entire render tree rendered to this
+   *     container. Render options must *not* change between renders to the same
+   *     container, as those changes will not effect previously rendered DOM.
+   */
+  const render = (result, container, options) => {
+      let part = parts.get(container);
+      if (part === undefined) {
+          removeNodes(container, container.firstChild);
+          parts.set(container, part = new NodePart(Object.assign({ templateFactory }, options)));
+          part.appendInto(container);
+      }
+      part.setValue(result);
+      part.commit();
+  };
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  // IMPORTANT: do not change the property name or the assignment expression.
+  // This line will be used in regexes to search for lit-html usage.
+  // TODO(justinfagnani): inject version number at build time
+  if (typeof window !== 'undefined') {
+      (window['litHtmlVersions'] || (window['litHtmlVersions'] = [])).push('1.2.1');
+  }
+  /**
+   * Interprets a template literal as an HTML template that can efficiently
+   * render to and update a container.
+   */
+  const html$1 = (strings, ...values) => new TemplateResult(strings, values, 'html', defaultTemplateProcessor);
+
+  const $_documentContainer$s = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
+  <template>
+    <style include="lumo-checkbox-style lumo-checkbox-effects">
+      /* IE11 only */
+      ::-ms-backdrop,
+      [part="checkbox"] {
+        line-height: 1;
+      }
+    </style>
+  </template>
+</dom-module><dom-module id="lumo-checkbox-style">
+  <template>
+    <style>
+      :host {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        cursor: default;
+        outline: none;
+      }
+
+      [part="label"]:not([empty]) {
+        margin: 0.1875em 0.875em 0.1875em 0.375em;
+      }
+
+      [part="checkbox"] {
+        width: calc(1em + 2px);
+        height: calc(1em + 2px);
+        margin: 0.1875em;
+        position: relative;
+        border-radius: var(--lumo-border-radius-s);
+        background-color: var(--lumo-contrast-20pct);
+        transition: transform 0.2s cubic-bezier(.12, .32, .54, 2), background-color 0.15s;
+        pointer-events: none;
+        line-height: 1.2;
+      }
+
+      :host([indeterminate]) [part="checkbox"],
+      :host([checked]) [part="checkbox"] {
+        background-color: var(--lumo-primary-color);
+      }
+
+      /* Needed to align the checkbox nicely on the baseline */
+      [part="checkbox"]::before {
+        content: "\\2003";
+      }
+
+      /* Checkmark */
+      [part="checkbox"]::after {
+        content: "";
+        display: inline-block;
+        width: 0;
+        height: 0;
+        border: 0 solid var(--lumo-primary-contrast-color);
+        border-width: 0.1875em 0 0 0.1875em;
+        box-sizing: border-box;
+        transform-origin: 0 0;
+        position: absolute;
+        top: 0.8125em;
+        left: 0.5em;
+        transform: scale(0.55) rotate(-135deg);
+        opacity: 0;
+      }
+
+      :host([checked]) [part="checkbox"]::after {
+        opacity: 1;
+        width: 0.625em;
+        height: 1.0625em;
+      }
+
+      /* Indeterminate checkmark */
+
+      :host([indeterminate]) [part="checkbox"]::after {
+        transform: none;
+        opacity: 1;
+        top: 45%;
+        height: 10%;
+        left: 22%;
+        right: 22%;
+        width: auto;
+        border: 0;
+        background-color: var(--lumo-primary-contrast-color);
+        transition: opacity 0.25s;
+      }
+
+      /* Focus ring */
+
+      :host([focus-ring]) [part="checkbox"] {
+        box-shadow: 0 0 0 3px var(--lumo-primary-color-50pct);
+      }
+
+      /* Disabled */
+
+      :host([disabled]) {
+        pointer-events: none;
+        color: var(--lumo-disabled-text-color);
+      }
+
+      :host([disabled]) [part="label"] ::slotted(*) {
+        color: inherit;
+      }
+
+      :host([disabled]) [part="checkbox"] {
+        background-color: var(--lumo-contrast-10pct);
+      }
+
+      :host([disabled]) [part="checkbox"]::after {
+        border-color: var(--lumo-contrast-30pct);
+      }
+
+      :host([indeterminate][disabled]) [part="checkbox"]::after {
+        background-color: var(--lumo-contrast-30pct);
+      }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part="label"]:not([empty]) {
+        margin: 0.1875em 0.375em 0.1875em 0.875em;
+      }
+    </style>
+  </template>
+</dom-module><dom-module id="lumo-checkbox-effects">
+  <template>
+    <style>
+      /* Transition the checkmark if activated with the mouse (disabled for grid select-all this way) */
+      :host(:hover) [part="checkbox"]::after {
+        transition: width 0.1s, height 0.25s;
+      }
+
+      /* Used for activation "halo" */
+      [part="checkbox"]::before {
+        color: transparent;
+        display: inline-block;
+        width: 100%;
+        height: 100%;
+        border-radius: inherit;
+        background-color: inherit;
+        transform: scale(1.4);
+        opacity: 0;
+        transition: transform 0.1s, opacity 0.8s;
+      }
+
+      /* Hover */
+
+      :host(:not([checked]):not([indeterminate]):not([disabled]):hover) [part="checkbox"] {
+        background-color: var(--lumo-contrast-30pct);
+      }
+
+      /* Disable hover for touch devices */
+      @media (pointer: coarse) {
+        :host(:not([checked]):not([indeterminate]):not([disabled]):hover) [part="checkbox"] {
+          background-color: var(--lumo-contrast-20pct);
+        }
+      }
+
+      /* Active */
+
+      :host([active]) [part="checkbox"] {
+        transform: scale(0.9);
+        transition-duration: 0.05s;
+      }
+
+      :host([active][checked]) [part="checkbox"] {
+        transform: scale(1.1);
+      }
+
+      :host([active]:not([checked])) [part="checkbox"]::before {
+        transition-duration: 0.01s, 0.01s;
+        transform: scale(0);
+        opacity: 0.4;
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$s.content);
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * `<vaadin-checkbox>` is a Web Component for customized checkboxes.
+   *
+   * ```html
+   * <vaadin-checkbox>
+   *   Make my profile visible
+   * </vaadin-checkbox>
+   * ```
+   *
+   * ### Styling
+   *
+   * The following shadow DOM parts are available for styling:
+   *
+   * Part name         | Description
+   * ------------------|----------------
+   * `checkbox`        | The wrapper element for the native <input type="checkbox">
+   * `label`           | The wrapper element in which the component's children, namely the label, is slotted
+   *
+   * The following state attributes are available for styling:
+   *
+   * Attribute    | Description | Part name
+   * -------------|-------------|--------------
+   * `active`     | Set when the checkbox is pressed down, either with mouse, touch or the keyboard. | `:host`
+   * `disabled`   | Set when the checkbox is disabled. | `:host`
+   * `focus-ring` | Set when the checkbox is focused using the keyboard. | `:host`
+   * `focused`    | Set when the checkbox is focused. | `:host`
+   * `indeterminate` | Set when the checkbox is in indeterminate mode. | `:host`
+   * `checked` | Set when the checkbox is checked. | `:host`
+   * `empty` | Set when there is no label provided. | `label`
+   *
+   * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
+   *
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ControlStateMixin
+   * @mixes ThemableMixin
+   * @mixes GestureEventListeners
+   * @demo demo/index.html
+   */
+  class CheckboxElement extends
+    ElementMixin$1(
+      ControlStateMixin(
+        ThemableMixin(
+          GestureEventListeners(PolymerElement)))) {
+    static get template() {
+      return html`
+    <style>
+      :host {
+        display: inline-block;
+      }
+
+      :host([hidden]) {
+        display: none !important;
+      }
+
+      label {
+        display: inline-flex;
+        align-items: baseline;
+        outline: none;
+      }
+
+      [part="checkbox"] {
+        position: relative;
+        display: inline-block;
+        flex: none;
+      }
+
+      input[type="checkbox"] {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: inherit;
+        margin: 0;
+      }
+
+      :host([disabled]) {
+        -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+
+    <label>
+      <span part="checkbox">
+        <input type="checkbox" checked="{{checked::change}}" disabled\$="[[disabled]]" indeterminate="{{indeterminate::change}}" role="presentation" tabindex="-1">
+      </span>
+
+      <span part="label">
+        <slot></slot>
+      </span>
+    </label>
+`;
+    }
+
+    static get is() {
+      return 'vaadin-checkbox';
+    }
+
+    static get version() {
+      return '2.3.0';
+    }
+
+    static get properties() {
+      return {
+        /**
+         * True if the checkbox is checked.
+         */
+        checked: {
+          type: Boolean,
+          value: false,
+          notify: true,
+          observer: '_checkedChanged',
+          reflectToAttribute: true
+        },
+
+        /**
+         * Indeterminate state of the checkbox when it's neither checked nor unchecked, but undetermined.
+         * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/checkbox#Indeterminate_state_checkboxes
+         */
+        indeterminate: {
+          type: Boolean,
+          notify: true,
+          observer: '_indeterminateChanged',
+          reflectToAttribute: true,
+          value: false
+        },
+
+        /**
+         * The value given to the data submitted with the checkbox's name to the server when the control is inside a form.
+         */
+        value: {
+          type: String,
+          value: 'on'
+        },
+
+        _nativeCheckbox: {
+          type: Object
+        }
+      };
+    }
+
+    constructor() {
+      super();
+      /**
+       * @type {string}
+       * Name of the element.
+       */
+      this.name;
+    }
+
+    get name() {
+      return this.checked ? this._storedName : '';
+    }
+
+    set name(name) {
+      this._storedName = name;
+    }
+
+    ready() {
+      super.ready();
+
+      this.setAttribute('role', 'checkbox');
+
+      this._nativeCheckbox = this.shadowRoot.querySelector('input[type="checkbox"]');
+
+      this.addEventListener('click', this._handleClick.bind(this));
+
+      this._addActiveListeners();
+
+      const attrName = this.getAttribute('name');
+      if (attrName) {
+        this.name = attrName;
+      }
+
+      this.shadowRoot.querySelector('[part~="label"]').querySelector('slot')
+        .addEventListener('slotchange', this._updateLabelAttribute.bind(this));
+
+      this._updateLabelAttribute();
+    }
+
+    _updateLabelAttribute() {
+      const label = this.shadowRoot.querySelector('[part~="label"]');
+      const assignedNodes = label.firstElementChild.assignedNodes();
+      if (this._isAssignedNodesEmpty(assignedNodes)) {
+        label.setAttribute('empty', '');
+      } else {
+        label.removeAttribute('empty');
+      }
+    }
+
+    _isAssignedNodesEmpty(nodes) {
+      // The assigned nodes considered to be empty if there is no slotted content or only one empty text node
+      return nodes.length === 0 ||
+            (nodes.length == 1
+            && nodes[0].nodeType == Node.TEXT_NODE
+            && nodes[0].textContent.trim() === '');
+    }
+
+    _checkedChanged(checked) {
+      if (this.indeterminate) {
+        this.setAttribute('aria-checked', 'mixed');
+      } else {
+        this.setAttribute('aria-checked', Boolean(checked));
+      }
+    }
+
+    _indeterminateChanged(indeterminate) {
+      if (indeterminate) {
+        this.setAttribute('aria-checked', 'mixed');
+      } else {
+        this.setAttribute('aria-checked', this.checked);
+      }
+    }
+
+    _addActiveListeners() {
+      // DOWN
+      this._addEventListenerToNode(this, 'down', (e) => {
+        if (this.__interactionsAllowed(e)) {
+          this.setAttribute('active', '');
+        }
+      });
+
+      // UP
+      this._addEventListenerToNode(this, 'up', () => this.removeAttribute('active'));
+
+      // KEYDOWN
+      this.addEventListener('keydown', e => {
+        if (this.__interactionsAllowed(e) && e.keyCode === 32) {
+          e.preventDefault();
+          this.setAttribute('active', '');
+        }
+      });
+
+      // KEYUP
+      this.addEventListener('keyup', e => {
+        if (this.__interactionsAllowed(e) && e.keyCode === 32) {
+          e.preventDefault();
+          this._toggleChecked();
+          this.removeAttribute('active');
+
+          if (this.indeterminate) {
+            this.indeterminate = false;
+          }
+        }
+      });
+    }
+
+    /** @protected */
+    get focusElement() {
+      return this.shadowRoot.querySelector('input');
+    }
+
+    /**
+     * True if users' interactions (mouse or keyboard)
+     * should toggle the checkbox
+     */
+    __interactionsAllowed(e) {
+      if (this.disabled) {
+        return false;
+      }
+
+      // https://github.com/vaadin/vaadin-checkbox/issues/63
+      if (e.target.localName === 'a') {
+        return false;
+      }
+
+      return true;
+    }
+
+    _handleClick(e) {
+      if (this.__interactionsAllowed(e)) {
+        if (!this.indeterminate) {
+          if (e.composedPath()[0] !== this._nativeCheckbox) {
+            e.preventDefault();
+            this._toggleChecked();
+          }
+        } else {
+          /*
+           * Required for IE 11 and Edge.
+           * See issue here: https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/7344418/
+           */
+          this.indeterminate = false;
+          e.preventDefault();
+          this._toggleChecked();
+        }
+      }
+    }
+
+    _toggleChecked() {
+      this.checked = !this.checked;
+      this.dispatchEvent(new CustomEvent('change', {composed: false, bubbles: true}));
+    }
+
+    /**
+     * Fired when the user commits a value change.
+     *
+     * @event change
+     */
+  }
+
+  customElements.define(CheckboxElement.is, CheckboxElement);
+
+  const $_documentContainer$t = html`<dom-module id="lumo-grid" theme-for="vaadin-grid">
+  <template>
+    <style>
+      :host {
+        font-family: var(--lumo-font-family);
+        font-size: var(--lumo-font-size-m);
+        line-height: var(--lumo-line-height-s);
+        color: var(--lumo-body-text-color);
+        background-color: var(--lumo-base-color);
+        box-sizing: border-box;
+        -webkit-text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+
+        /* For internal use only */
+        --_lumo-grid-border-color: var(--lumo-contrast-20pct);
+        --_lumo-grid-secondary-border-color: var(--lumo-contrast-10pct);
+        --_lumo-grid-border-width: 1px;
+        --_lumo-grid-selected-row-color: var(--lumo-primary-color-10pct);
+      }
+
+      /* No (outer) border */
+
+      :host(:not([theme~="no-border"])) {
+        border: var(--_lumo-grid-border-width) solid var(--_lumo-grid-border-color);
+      }
+
+      /* Cell styles */
+
+      [part~="cell"] {
+        min-height: var(--lumo-size-m);
+        background-color: var(--lumo-base-color);
+      }
+
+      [part~="cell"] ::slotted(vaadin-grid-cell-content) {
+        cursor: default;
+        padding: var(--lumo-space-xs) var(--lumo-space-m);
+      }
+
+      /* Apply row borders by default and introduce the "no-row-borders" variant */
+      :host(:not([theme~="no-row-borders"])) [part~="cell"]:not([part~="details-cell"]) {
+        border-top: var(--_lumo-grid-border-width) solid var(--_lumo-grid-secondary-border-color);
+      }
+
+      /* Hide first body row top border */
+      :host(:not([theme~="no-row-borders"])) [part="row"][first] [part~="cell"]:not([part~="details-cell"]) {
+        border-top: 0;
+        min-height: calc(var(--lumo-size-m) - var(--_lumo-grid-border-width));
+      }
+
+      /* Focus-ring */
+
+      [part~="cell"]:focus {
+        outline: none;
+      }
+
+      :host([navigating]) [part~="cell"]:focus::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 2px var(--lumo-primary-color-50pct);
+      }
+
+      /* Drag and Drop styles */
+      :host([dragover])::after {
+        content: "";
+        position: absolute;
+        z-index: 100;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        pointer-events: none;
+        box-shadow: inset 0 0 0 2px var(--lumo-primary-color-50pct);
+      }
+
+      [part~="row"][dragover] {
+        z-index: 100 !important;
+      }
+
+      [part~="row"][dragover] [part~="cell"] {
+        overflow: visible;
+      }
+
+      [part~="row"][dragover] [part~="cell"]::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: calc(var(--_lumo-grid-border-width) + 2px);
+        pointer-events: none;
+        background: var(--lumo-primary-color-50pct);
+      }
+
+      :host([theme~="no-row-borders"]) [dragover] [part~="cell"]::after {
+        height: 2px;
+      }
+
+      [part~="row"][dragover="below"] [part~="cell"]::after {
+        top: 100%;
+        bottom: auto;
+        margin-top: -1px;
+      }
+
+      [part~="row"][dragover="above"] [part~="cell"]::after {
+        top: auto;
+        bottom: 100%;
+        margin-bottom: -1px;
+      }
+
+      [part~="row"][details-opened][dragover="below"] [part~="cell"]:not([part~="details-cell"])::after,
+      [part~="row"][details-opened][dragover="above"] [part~="details-cell"]::after {
+        display: none;
+      }
+
+      [part~="row"][dragover][dragover="on-top"] [part~="cell"]::after {
+        height: 100%;
+      }
+
+      [part~="row"][dragstart] {
+        /* Add bottom-space to the row so the drag number doesn't get clipped. Needed for IE/Edge */
+        border-bottom: 100px solid transparent;
+        z-index: 100 !important;
+        opacity: 0.9;
+      }
+
+      [part~="row"][dragstart] [part~="cell"] {
+        border: none !important;
+        box-shadow: none !important;
+      }
+
+      [part~="row"][dragstart] [part~="cell"][last-column] {
+        border-radius: 0 var(--lumo-border-radius-s) var(--lumo-border-radius-s) 0;
+      }
+
+      [part~="row"][dragstart] [part~="cell"][first-column] {
+        border-radius: var(--lumo-border-radius-s) 0 0 var(--lumo-border-radius-s);
+      }
+
+      [ios] [part~="row"][dragstart] [part~="cell"] {
+        background: var(--lumo-primary-color-50pct);
+      }
+
+      #scroller:not([ios]) [part~="row"][dragstart]:not([dragstart=""])::after {
+        display: block;
+        position: absolute;
+        left: var(--_grid-drag-start-x);
+        top: var(--_grid-drag-start-y);
+        z-index: 100;
+        content: attr(dragstart);
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: calc(var(--lumo-space-xs) * 0.8);
+        color: var(--lumo-error-contrast-color);
+        background-color: var(--lumo-error-color);
+        border-radius: var(--lumo-border-radius-m);
+        font-family: var(--lumo-font-family);
+        font-size: var(--lumo-font-size-xxs);
+        line-height: 1;
+        font-weight: 500;
+        text-transform: initial;
+        letter-spacing: initial;
+        min-width: calc(var(--lumo-size-s) * 0.7);
+        text-align: center;
+      }
+
+      /* Headers and footers */
+
+      [part~="header-cell"] ::slotted(vaadin-grid-cell-content),
+      [part~="footer-cell"] ::slotted(vaadin-grid-cell-content),
+      [part~="reorder-ghost"] {
+        font-size: var(--lumo-font-size-s);
+        font-weight: 500;
+      }
+
+      [part~="footer-cell"] ::slotted(vaadin-grid-cell-content) {
+        font-weight: 400;
+      }
+
+      [part="row"]:only-child [part~="header-cell"] {
+        min-height: var(--lumo-size-xl);
+      }
+
+      /* Header borders */
+
+      /* Hide first header row top border */
+      :host(:not([theme~="no-row-borders"])) [part="row"]:first-child [part~="header-cell"] {
+        border-top: 0;
+      }
+
+      [part="row"]:last-child [part~="header-cell"] {
+        border-bottom: var(--_lumo-grid-border-width) solid transparent;
+      }
+
+      :host(:not([theme~="no-row-borders"])) [part="row"]:last-child [part~="header-cell"] {
+        border-bottom-color: var(--_lumo-grid-secondary-border-color);
+      }
+
+      /* Overflow uses a stronger border color */
+      :host([overflow~="top"]) [part="row"]:last-child [part~="header-cell"] {
+        border-bottom-color: var(--_lumo-grid-border-color);
+      }
+
+      /* Footer borders */
+
+      [part="row"]:first-child [part~="footer-cell"] {
+        border-top: var(--_lumo-grid-border-width) solid transparent;
+      }
+
+      :host(:not([theme~="no-row-borders"])) [part="row"]:first-child [part~="footer-cell"] {
+        border-top-color: var(--_lumo-grid-secondary-border-color);
+      }
+
+      /* Overflow uses a stronger border color */
+      :host([overflow~="bottom"]) [part="row"]:first-child [part~="footer-cell"] {
+        border-top-color: var(--_lumo-grid-border-color);
+      }
+
+      /* Column reordering */
+
+      :host([reordering]) [part~="cell"] {
+        background: linear-gradient(var(--lumo-shade-20pct), var(--lumo-shade-20pct)) var(--lumo-base-color);
+      }
+
+      :host([reordering]) [part~="cell"][reorder-status="allowed"] {
+        background: var(--lumo-base-color);
+      }
+
+      :host([reordering]) [part~="cell"][reorder-status="dragging"] {
+        background: linear-gradient(var(--lumo-contrast-5pct), var(--lumo-contrast-5pct)) var(--lumo-base-color);
+      }
+
+      [part~="reorder-ghost"] {
+        opacity: 0.85;
+        box-shadow: var(--lumo-box-shadow-s);
+        /* TODO Use the same styles as for the cell element (reorder-ghost copies styles from the cell element) */
+        padding: var(--lumo-space-s) var(--lumo-space-m) !important;
+      }
+
+      /* Column resizing */
+
+      [part="resize-handle"] {
+        width: 3px;
+        background-color: var(--lumo-primary-color-50pct);
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+
+      :host(:not([reordering])) *:not([column-resizing]) [part~="cell"]:hover [part="resize-handle"],
+      [part="resize-handle"]:active {
+        opacity: 1;
+        transition-delay: 0.15s;
+      }
+
+      /* Column borders */
+
+      :host([theme~="column-borders"]) [part~="cell"]:not([last-column]):not([part~="details-cell"]) {
+        border-right: var(--_lumo-grid-border-width) solid var(--_lumo-grid-secondary-border-color);
+      }
+
+      /* Frozen columns */
+
+      [last-frozen] {
+        border-right: var(--_lumo-grid-border-width) solid transparent;
+        overflow: hidden;
+      }
+
+      :host([overflow~="left"]) [part~="cell"][last-frozen]:not([part~="details-cell"]) {
+        border-right-color: var(--_lumo-grid-border-color);
+      }
+
+      /* Row stripes */
+
+      :host([theme~="row-stripes"]) [part~="row"]:not([odd]) [part~="body-cell"],
+      :host([theme~="row-stripes"]) [part~="row"]:not([odd]) [part~="details-cell"] {
+        background-image: linear-gradient(var(--lumo-contrast-5pct), var(--lumo-contrast-5pct));
+        background-repeat: repeat-x;
+      }
+
+      /* Selected row */
+
+      /* Raise the selected rows above unselected rows (so that box-shadow can cover unselected rows) */
+      :host(:not([reordering])) [part~="row"][selected] {
+        z-index: 1;
+      }
+
+      :host(:not([reordering])) [part~="row"][selected] [part~="body-cell"]:not([part~="details-cell"]) {
+        background-image: linear-gradient(var(--_lumo-grid-selected-row-color), var(--_lumo-grid-selected-row-color));
+        background-repeat: repeat;
+      }
+
+      /* Cover the border of an unselected row */
+      :host(:not([theme~="no-row-borders"])) [part~="row"][selected] [part~="cell"]:not([part~="details-cell"]) {
+        box-shadow: 0 var(--_lumo-grid-border-width) 0 0 var(--_lumo-grid-selected-row-color);
+      }
+
+      /* Compact */
+
+      :host([theme~="compact"]) [part="row"]:only-child [part~="header-cell"] {
+        min-height: var(--lumo-size-m);
+      }
+
+      :host([theme~="compact"]) [part~="cell"] {
+        min-height: var(--lumo-size-s);
+      }
+
+      :host([theme~="compact"]) [part="row"][first] [part~="cell"]:not([part~="details-cell"]) {
+        min-height: calc(var(--lumo-size-s) - var(--_lumo-grid-border-width));
+      }
+
+      :host([theme~="compact"]) [part~="cell"] ::slotted(vaadin-grid-cell-content) {
+        padding: var(--lumo-space-xs) var(--lumo-space-s);
+      }
+
+      /* Wrap cell contents */
+
+      :host([theme~="wrap-cell-content"]) [part~="cell"] ::slotted(vaadin-grid-cell-content) {
+        white-space: normal;
+      }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part~="row"][dragstart] [part~="cell"][last-column] {
+        border-radius: var(--lumo-border-radius-s) 0 0 var(--lumo-border-radius-s);
+      }
+
+      :host([dir="rtl"]) [part~="row"][dragstart] [part~="cell"][first-column] {
+        border-radius: 0 var(--lumo-border-radius-s) var(--lumo-border-radius-s) 0;
+      }
+
+      :host([dir="rtl"][theme~="column-borders"]) [part~="cell"]:not([last-column]):not([part~="details-cell"]) {
+        border-right: none;
+        border-left: var(--_lumo-grid-border-width) solid var(--_lumo-grid-secondary-border-color);
+      }
+
+      :host([dir="rtl"]) [last-frozen] {
+        border-right: none;
+        border-left: var(--_lumo-grid-border-width) solid transparent;
+      }
+
+      :host([dir="rtl"][overflow~="right"]) [part~="cell"][last-frozen]:not([part~="details-cell"]) {
+        border-left-color: var(--_lumo-grid-border-color);
+      }
+    </style>
+  </template>
+</dom-module><dom-module theme-for="vaadin-checkbox" id="vaadin-grid-select-all-checkbox-lumo">
+  <template>
+    <style>
+      :host(.vaadin-grid-select-all-checkbox) {
+        font-size: var(--lumo-font-size-m);
+      }
+   </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$t.content);
+
+  /**
+  @license
+  Copyright (c) 2016 The Polymer Project Authors. All rights reserved.
+  This code may only be used under the BSD style license found at
+  http://polymer.github.io/LICENSE.txt The complete set of authors may be found at
+  http://polymer.github.io/AUTHORS.txt The complete set of contributors may be
+  found at http://polymer.github.io/CONTRIBUTORS.txt Code distributed by Google as
+  part of the polymer project is also subject to an additional IP rights grant
+  found at http://polymer.github.io/PATENTS.txt
+  */
+
+  /**
+   * `Polymer.IronScrollTargetBehavior` allows an element to respond to scroll
+   * events from a designated scroll target.
+   *
+   * Elements that consume this behavior can override the `_scrollHandler`
+   * method to add logic on the scroll event.
+   *
+   * @demo demo/scrolling-region.html Scrolling Region
+   * @demo demo/document.html Document Element
+   * @polymerBehavior
+   */
+  const IronScrollTargetBehavior = {
+
+    properties: {
+
+      /**
+       * Specifies the element that will handle the scroll event
+       * on the behalf of the current element. This is typically a reference to an
+       *element, but there are a few more posibilities:
+       *
+       * ### Elements id
+       *
+       *```html
+       * <div id="scrollable-element" style="overflow: auto;">
+       *  <x-element scroll-target="scrollable-element">
+       *    <!-- Content-->
+       *  </x-element>
+       * </div>
+       *```
+       * In this case, the `scrollTarget` will point to the outer div element.
+       *
+       * ### Document scrolling
+       *
+       * For document scrolling, you can use the reserved word `document`:
+       *
+       *```html
+       * <x-element scroll-target="document">
+       *   <!-- Content -->
+       * </x-element>
+       *```
+       *
+       * ### Elements reference
+       *
+       *```js
+       * appHeader.scrollTarget = document.querySelector('#scrollable-element');
+       *```
+       *
+       * @type {HTMLElement}
+       * @default document
+       */
+      scrollTarget: {
+        type: HTMLElement,
+        value: function() {
+          return this._defaultScrollTarget;
+        }
+      }
+    },
+
+    observers: ['_scrollTargetChanged(scrollTarget, isAttached)'],
+
+    /**
+     * True if the event listener should be installed.
+     */
+    _shouldHaveListener: true,
+
+    _scrollTargetChanged: function(scrollTarget, isAttached) {
+
+      if (this._oldScrollTarget) {
+        this._toggleScrollListener(false, this._oldScrollTarget);
+        this._oldScrollTarget = null;
+      }
+      if (!isAttached) {
+        return;
+      }
+      // Support element id references
+      if (scrollTarget === 'document') {
+        this.scrollTarget = this._doc;
+
+      } else if (typeof scrollTarget === 'string') {
+        var domHost = this.domHost;
+
+        this.scrollTarget = domHost && domHost.$ ?
+            domHost.$[scrollTarget] :
+            dom(this.ownerDocument).querySelector('#' + scrollTarget);
+
+      } else if (this._isValidScrollTarget()) {
+        this._oldScrollTarget = scrollTarget;
+        this._toggleScrollListener(this._shouldHaveListener, scrollTarget);
+      }
+    },
+
+    /**
+     * Runs on every scroll event. Consumer of this behavior may override this
+     * method.
+     *
+     * @protected
+     */
+    _scrollHandler: function scrollHandler() {},
+
+    /**
+     * The default scroll target. Consumers of this behavior may want to customize
+     * the default scroll target.
+     *
+     * @type {Element}
+     */
+    get _defaultScrollTarget() {
+      return this._doc;
+    },
+
+    /**
+     * Shortcut for the document element
+     *
+     * @type {Element}
+     */
+    get _doc() {
+      return this.ownerDocument.documentElement;
+    },
+
+    /**
+     * Gets the number of pixels that the content of an element is scrolled
+     * upward.
+     *
+     * @type {number}
+     */
+    get _scrollTop() {
+      if (this._isValidScrollTarget()) {
+        return this.scrollTarget === this._doc ? window.pageYOffset :
+                                                 this.scrollTarget.scrollTop;
+      }
+      return 0;
+    },
+
+    /**
+     * Gets the number of pixels that the content of an element is scrolled to the
+     * left.
+     *
+     * @type {number}
+     */
+    get _scrollLeft() {
+      if (this._isValidScrollTarget()) {
+        return this.scrollTarget === this._doc ? window.pageXOffset :
+                                                 this.scrollTarget.scrollLeft;
+      }
+      return 0;
+    },
+
+    /**
+     * Sets the number of pixels that the content of an element is scrolled
+     * upward.
+     *
+     * @type {number}
+     */
+    set _scrollTop(top) {
+      if (this.scrollTarget === this._doc) {
+        window.scrollTo(window.pageXOffset, top);
+      } else if (this._isValidScrollTarget()) {
+        this.scrollTarget.scrollTop = top;
+      }
+    },
+
+    /**
+     * Sets the number of pixels that the content of an element is scrolled to the
+     * left.
+     *
+     * @type {number}
+     */
+    set _scrollLeft(left) {
+      if (this.scrollTarget === this._doc) {
+        window.scrollTo(left, window.pageYOffset);
+      } else if (this._isValidScrollTarget()) {
+        this.scrollTarget.scrollLeft = left;
+      }
+    },
+
+    /**
+     * Scrolls the content to a particular place.
+     *
+     * @method scroll
+     * @param {number|!{left: number, top: number}} leftOrOptions The left position or scroll options
+     * @param {number=} top The top position
+     * @return {void}
+     */
+    scroll: function(leftOrOptions, top) {
+      var left;
+
+      if (typeof leftOrOptions === 'object') {
+        left = leftOrOptions.left;
+        top = leftOrOptions.top;
+      } else {
+        left = leftOrOptions;
+      }
+
+      left = left || 0;
+      top = top || 0;
+      if (this.scrollTarget === this._doc) {
+        window.scrollTo(left, top);
+      } else if (this._isValidScrollTarget()) {
+        this.scrollTarget.scrollLeft = left;
+        this.scrollTarget.scrollTop = top;
+      }
+    },
+
+    /**
+     * Gets the width of the scroll target.
+     *
+     * @type {number}
+     */
+    get _scrollTargetWidth() {
+      if (this._isValidScrollTarget()) {
+        return this.scrollTarget === this._doc ? window.innerWidth :
+                                                 this.scrollTarget.offsetWidth;
+      }
+      return 0;
+    },
+
+    /**
+     * Gets the height of the scroll target.
+     *
+     * @type {number}
+     */
+    get _scrollTargetHeight() {
+      if (this._isValidScrollTarget()) {
+        return this.scrollTarget === this._doc ? window.innerHeight :
+                                                 this.scrollTarget.offsetHeight;
+      }
+      return 0;
+    },
+
+    /**
+     * Returns true if the scroll target is a valid HTMLElement.
+     *
+     * @return {boolean}
+     */
+    _isValidScrollTarget: function() {
+      return this.scrollTarget instanceof HTMLElement;
+    },
+
+    _toggleScrollListener: function(yes, scrollTarget) {
+      var eventTarget = scrollTarget === this._doc ? window : scrollTarget;
+      if (yes) {
+        if (!this._boundScrollHandler) {
+          this._boundScrollHandler = this._scrollHandler.bind(this);
+          eventTarget.addEventListener('scroll', this._boundScrollHandler);
+        }
+      } else {
+        if (this._boundScrollHandler) {
+          eventTarget.removeEventListener('scroll', this._boundScrollHandler);
+          this._boundScrollHandler = null;
+        }
+      }
+    },
+
+    /**
+     * Enables or disables the scroll event listener.
+     *
+     * @param {boolean} yes True to add the event, False to remove it.
+     */
+    toggleScrollListener: function(yes) {
+      this._shouldHaveListener = yes;
+      this._toggleScrollListener(yes, this.scrollTarget);
+    }
+
+  };
+
+  /**
+  @license
+  Copyright (c) 2016 The Polymer Project Authors. All rights reserved.
+  This code may only be used under the BSD style license found at http://polymer.github.io/LICENSE.txt
+  The complete set of authors may be found at http://polymer.github.io/AUTHORS.txt
+  The complete set of contributors may be found at http://polymer.github.io/CONTRIBUTORS.txt
+  Code distributed by Google as part of the polymer project is also
+  subject to an additional IP rights grant found at http://polymer.github.io/PATENTS.txt
+  */
+  var IOS = navigator.userAgent.match(/iP(?:hone|ad;(?: U;)? CPU) OS (\d+)/);
+  var IOS_TOUCH_SCROLLING = IOS && IOS[1] >= 8;
+  var DEFAULT_PHYSICAL_COUNT = 3;
+  var ANIMATION_FRAME = animationFrame;
+  var IDLE_TIME = idlePeriod;
+  var MICRO_TASK = microTask;
+
+  const PolymerIronList = Class({
+
+    behaviors: [
+      IronResizableBehavior,
+      IronScrollTargetBehavior
+    ],
+
+    /**
+     * The ratio of hidden tiles that should remain in the scroll direction.
+     * Recommended value ~0.5, so it will distribute tiles evenly in both directions.
+     */
+    _ratio: 0.5,
+
+    /**
+     * The padding-top value for the list.
+     */
+    _scrollerPaddingTop: 0,
+
+    /**
+     * This value is the same as `scrollTop`.
+     */
+    _scrollPosition: 0,
+
+    /**
+     * The sum of the heights of all the tiles in the DOM.
+     */
+    _physicalSize: 0,
+
+    /**
+     * The average `offsetHeight` of the tiles observed till now.
+     */
+    _physicalAverage: 0,
+
+    /**
+     * The number of tiles which `offsetHeight` > 0 observed until now.
+     */
+    _physicalAverageCount: 0,
+
+    /**
+     * The Y position of the item rendered in the `_physicalStart`
+     * tile relative to the scrolling list.
+     */
+    _physicalTop: 0,
+
+    /**
+     * The number of items in the list.
+     */
+    _virtualCount: 0,
+
+    /**
+     * The estimated scroll height based on `_physicalAverage`
+     */
+    _estScrollHeight: 0,
+
+    /**
+     * The scroll height of the dom node
+     */
+    _scrollHeight: 0,
+
+    /**
+     * The height of the list. This is referred as the viewport in the context of list.
+     */
+    _viewportHeight: 0,
+
+    /**
+     * The width of the list. This is referred as the viewport in the context of list.
+     */
+    _viewportWidth: 0,
+
+    /**
+     * An array of DOM nodes that are currently in the tree
+     * @type {?Array<!TemplatizerNode>}
+     */
+    _physicalItems: null,
+
+    /**
+     * An array of heights for each item in `_physicalItems`
+     * @type {?Array<number>}
+     */
+    _physicalSizes: null,
+
+    /**
+     * A cached value for the first visible index.
+     * See `firstVisibleIndex`
+     * @type {?number}
+     */
+    _firstVisibleIndexVal: null,
+
+    /**
+     * A Polymer collection for the items.
+     * @type {?Polymer.Collection}
+     */
+    _collection: null,
+
+    /**
+     * A cached value for the last visible index.
+     * See `lastVisibleIndex`
+     * @type {?number}
+     */
+    _lastVisibleIndexVal: null,
+
+    /**
+     * The max number of pages to render. One page is equivalent to the height of the list.
+     */
+    _maxPages: 2,
+
+    /**
+     * The virtual index of the focused item.
+     */
+    _focusedVirtualIndex: -1,
+
+    /**
+     * The maximum items per row
+     */
+    _itemsPerRow: 1,
+
+    /**
+     * The height of the row in grid layout.
+     */
+    _rowHeight: 0,
+
+    /**
+     * The cost of stamping a template in ms.
+     */
+    _templateCost: 0,
+
+    /**
+     * The bottom of the physical content.
+     */
+    get _physicalBottom() {
+      return this._physicalTop + this._physicalSize;
+    },
+
+    /**
+     * The bottom of the scroll.
+     */
+    get _scrollBottom() {
+      return this._scrollPosition + this._viewportHeight;
+    },
+
+    /**
+     * The n-th item rendered in the last physical item.
+     */
+    get _virtualEnd() {
+      return this._virtualStart + this._physicalCount - 1;
+    },
+
+    /**
+     * The height of the physical content that isn't on the screen.
+     */
+    get _hiddenContentSize() {
+      var size = this.grid ? this._physicalRows * this._rowHeight : this._physicalSize;
+      return size - this._viewportHeight;
+    },
+
+    /**
+     * The maximum scroll top value.
+     */
+    get _maxScrollTop() {
+      return this._estScrollHeight - this._viewportHeight + this._scrollOffset;
+    },
+
+    /**
+     * The largest n-th value for an item such that it can be rendered in `_physicalStart`.
+     */
+    get _maxVirtualStart() {
+      var virtualCount = this._convertIndexToCompleteRow(this._virtualCount);
+      return Math.max(0, virtualCount - this._physicalCount);
+    },
+
+    set _virtualStart(val) {
+      val = this._clamp(val, 0, this._maxVirtualStart);
+      if (this.grid) {
+        val = val - (val % this._itemsPerRow);
+      }
+      this._virtualStartVal = val;
+    },
+
+    get _virtualStart() {
+      return this._virtualStartVal || 0;
+    },
+
+    /**
+     * The k-th tile that is at the top of the scrolling list.
+     */
+    set _physicalStart(val) {
+      val = val % this._physicalCount;
+      if (val < 0) {
+        val = this._physicalCount + val;
+      }
+      if (this.grid) {
+        val = val - (val % this._itemsPerRow);
+      }
+      this._physicalStartVal = val;
+    },
+
+    get _physicalStart() {
+      return this._physicalStartVal || 0;
+    },
+
+    /**
+     * The k-th tile that is at the bottom of the scrolling list.
+     */
+    get _physicalEnd() {
+      return (this._physicalStart + this._physicalCount - 1) % this._physicalCount;
+    },
+
+    set _physicalCount(val) {
+      this._physicalCountVal = val;
+    },
+
+    get _physicalCount() {
+      return this._physicalCountVal || 0;
+    },
+
+    /**
+     * An optimal physical size such that we will have enough physical items
+     * to fill up the viewport and recycle when the user scrolls.
+     *
+     * This default value assumes that we will at least have the equivalent
+     * to a viewport of physical items above and below the user's viewport.
+     */
+    get _optPhysicalSize() {
+      return this._viewportHeight === 0 ? Infinity : this._viewportHeight * this._maxPages;
+    },
+
+    /**
+     * True if the current list is visible.
+     */
+    get _isVisible() {
+      return Boolean(this.offsetWidth || this.offsetHeight);
+    },
+
+    /**
+     * Gets the index of the first visible item in the viewport.
+     *
+     * @type {number}
+     */
+    get firstVisibleIndex() {
+      var idx = this._firstVisibleIndexVal;
+      if (idx == null) {
+        var physicalOffset = this._physicalTop + this._scrollOffset;
+
+        idx = this._iterateItems(function(pidx, vidx) {
+          physicalOffset += this._getPhysicalSizeIncrement(pidx);
+
+          if (physicalOffset > this._scrollPosition) {
+            return this.grid ? vidx - (vidx % this._itemsPerRow) : vidx;
+          }
+          // Handle a partially rendered final row in grid mode
+          if (this.grid && this._virtualCount - 1 === vidx) {
+            return vidx - (vidx % this._itemsPerRow);
+          }
+        }) || 0;
+        this._firstVisibleIndexVal = idx;
+      }
+      return idx;
+    },
+
+    /**
+     * Gets the index of the last visible item in the viewport.
+     *
+     * @type {number}
+     */
+    get lastVisibleIndex() {
+      var idx = this._lastVisibleIndexVal;
+      if (idx == null) {
+        if (this.grid) {
+          idx = Math.min(this._virtualCount, this.firstVisibleIndex + this._estRowsInView * this._itemsPerRow - 1);
+        } else {
+          var physicalOffset = this._physicalTop + this._scrollOffset;
+          this._iterateItems(function(pidx, vidx) {
+            if (physicalOffset < this._scrollBottom) {
+              idx = vidx;
+            }
+            physicalOffset += this._getPhysicalSizeIncrement(pidx);
+          });
+        }
+        this._lastVisibleIndexVal = idx;
+      }
+      return idx;
+    },
+
+    get _scrollOffset() {
+      return this._scrollerPaddingTop;
+    },
+
+    attached: function() {
+      this._debounce('_render', this._render, ANIMATION_FRAME);
+      // `iron-resize` is fired when the list is attached if the event is added
+      // before attached causing unnecessary work.
+      this.listen(this, 'iron-resize', '_resizeHandler');
+    },
+
+    detached: function() {
+      this.unlisten(this, 'iron-resize', '_resizeHandler');
+    },
+
+    /**
+     * Invoke this method if you dynamically update the viewport's
+     * size or CSS padding.
+     *
+     * @method updateViewportBoundaries
+     */
+    updateViewportBoundaries: function() {
+      var styles = window.getComputedStyle(this);
+      this._scrollerPaddingTop = this.scrollTarget === this ? 0 : parseInt(styles['padding-top'], 10);
+      this._isRTL = Boolean(styles.direction === 'rtl');
+      this._viewportWidth = this.$.items.offsetWidth;
+      this._viewportHeight = this._scrollTargetHeight;
+      this.grid && this._updateGridMetrics();
+    },
+
+    /**
+     * Recycles the physical items when needed.
+     */
+    _scrollHandler: function() {
+      var scrollTop = Math.max(0, Math.min(this._maxScrollTop, this._scrollTop));
+      var delta = scrollTop - this._scrollPosition;
+      var isScrollingDown = delta >= 0;
+      // Track the current scroll position.
+      this._scrollPosition = scrollTop;
+      // Clear indexes for first and last visible indexes.
+      this._firstVisibleIndexVal = null;
+      this._lastVisibleIndexVal = null;
+      // Random access.
+      if (Math.abs(delta) > this._physicalSize && this._physicalSize > 0) {
+        delta = delta - this._scrollOffset;
+        var idxAdjustment = Math.round(delta / this._physicalAverage) * this._itemsPerRow;
+        this._virtualStart = this._virtualStart + idxAdjustment;
+        this._physicalStart = this._physicalStart + idxAdjustment;
+        // Estimate new physical offset.
+        this._physicalTop = Math.floor(this._virtualStart / this._itemsPerRow) * this._physicalAverage;
+        this._update();
+      } else if (this._physicalCount > 0) {
+        var reusables = this._getReusables(isScrollingDown);
+        if (isScrollingDown) {
+          this._physicalTop = reusables.physicalTop;
+          this._virtualStart = this._virtualStart + reusables.indexes.length;
+          this._physicalStart = this._physicalStart + reusables.indexes.length;
+        } else {
+          this._virtualStart = this._virtualStart - reusables.indexes.length;
+          this._physicalStart = this._physicalStart - reusables.indexes.length;
+        }
+        this._update(reusables.indexes, isScrollingDown ? null : reusables.indexes);
+        this._debounce('_increasePoolIfNeeded', this._increasePoolIfNeeded.bind(this, 0), MICRO_TASK);
+      }
+    },
+
+    /**
+     * Returns an object that contains the indexes of the physical items
+     * that might be reused and the physicalTop.
+     *
+     * @param {boolean} fromTop If the potential reusable items are above the scrolling region.
+     */
+    _getReusables: function(fromTop) {
+      var ith, offsetContent, physicalItemHeight;
+      var idxs = [];
+      var protectedOffsetContent = this._hiddenContentSize * this._ratio;
+      var virtualStart = this._virtualStart;
+      var virtualEnd = this._virtualEnd;
+      var physicalCount = this._physicalCount;
+      var top = this._physicalTop + this._scrollOffset;
+      var bottom = this._physicalBottom + this._scrollOffset;
+      var scrollTop = this._scrollTop;
+      var scrollBottom = this._scrollBottom;
+
+      if (fromTop) {
+        ith = this._physicalStart;
+        offsetContent = scrollTop - top;
+      } else {
+        ith = this._physicalEnd;
+        offsetContent = bottom - scrollBottom;
+      }
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        physicalItemHeight = this._getPhysicalSizeIncrement(ith);
+        offsetContent = offsetContent - physicalItemHeight;
+        if (idxs.length >= physicalCount || offsetContent <= protectedOffsetContent) {
+          break;
+        }
+        if (fromTop) {
+          // Check that index is within the valid range.
+          if (virtualEnd + idxs.length + 1 >= this._virtualCount) {
+            break;
+          }
+          // Check that the index is not visible.
+          if (top + physicalItemHeight >= scrollTop - this._scrollOffset) {
+            break;
+          }
+          idxs.push(ith);
+          top = top + physicalItemHeight;
+          ith = (ith + 1) % physicalCount;
+        } else {
+          // Check that index is within the valid range.
+          if (virtualStart - idxs.length <= 0) {
+            break;
+          }
+          // Check that the index is not visible.
+          if (top + this._physicalSize - physicalItemHeight <= scrollBottom) {
+            break;
+          }
+          idxs.push(ith);
+          top = top - physicalItemHeight;
+          ith = (ith === 0) ? physicalCount - 1 : ith - 1;
+        }
+      }
+      return {indexes: idxs, physicalTop: top - this._scrollOffset};
+    },
+
+    /**
+     * Update the list of items, starting from the `_virtualStart` item.
+     * @param {!Array<number>=} itemSet
+     * @param {!Array<number>=} movingUp
+     */
+    _update: function(itemSet, movingUp) {
+      if ((itemSet && itemSet.length === 0) || this._physicalCount === 0) {
+        return;
+      }
+      this._manageFocus();
+      this._assignModels(itemSet);
+      this._updateMetrics(itemSet);
+      // Adjust offset after measuring.
+      if (movingUp) {
+        while (movingUp.length) {
+          var idx = movingUp.pop();
+          this._physicalTop -= this._getPhysicalSizeIncrement(idx);
+        }
+      }
+      this._positionItems();
+      this._updateScrollerSize();
+    },
+
+    _isClientFull: function() {
+      return this._scrollBottom != 0 && this._physicalBottom - 1 >= this._scrollBottom &&
+          this._physicalTop <= this._scrollPosition;
+    },
+
+    /**
+     * Increases the pool size.
+     */
+    _increasePoolIfNeeded: function(count) {
+      var nextPhysicalCount = this._clamp(this._physicalCount + count,
+        DEFAULT_PHYSICAL_COUNT, this._virtualCount - this._virtualStart);
+      nextPhysicalCount = this._convertIndexToCompleteRow(nextPhysicalCount);
+      var delta = nextPhysicalCount - this._physicalCount;
+      var nextIncrease = Math.round(this._physicalCount * 0.5);
+
+      if (delta < 0) {
+        return;
+      }
+      if (delta > 0) {
+        var ts = window.performance.now();
+        // Concat arrays in place.
+        [].push.apply(this._physicalItems, this._createPool(delta));
+        // Push 0s into physicalSizes. Can't use Array.fill because IE11 doesn't support it.
+        for (var i = 0; i < delta; i++) {
+          this._physicalSizes.push(0);
+        }
+        this._physicalCount = this._physicalCount + delta;
+        // Update the physical start if it needs to preserve the model of the focused item.
+        // In this situation, the focused item is currently rendered and its model would
+        // have changed after increasing the pool if the physical start remained unchanged.
+        if (this._physicalStart > this._physicalEnd &&
+            this._isIndexRendered(this._focusedVirtualIndex) &&
+            this._getPhysicalIndex(this._focusedVirtualIndex) < this._physicalEnd) {
+          this._physicalStart = this._physicalStart + delta;
+        }
+        this._update();
+        this._templateCost = (window.performance.now() - ts) / delta;
+        nextIncrease = Math.round(this._physicalCount * 0.5);
+      }
+      // The upper bounds is not fixed when dealing with a grid that doesn't
+      // fill it's last row with the exact number of items per row.
+      if (this._virtualEnd >= this._virtualCount - 1 || nextIncrease === 0) ; else if (!this._isClientFull()) {
+        this._debounce(
+          '_increasePoolIfNeeded',
+          this._increasePoolIfNeeded.bind(
+            this,
+            nextIncrease
+          ), MICRO_TASK);
+      } else if (this._physicalSize < this._optPhysicalSize) {
+        // Yield and increase the pool during idle time until the physical size is optimal.
+        this._debounce(
+          '_increasePoolIfNeeded',
+          this._increasePoolIfNeeded.bind(
+            this,
+            this._clamp(Math.round(50 / this._templateCost), 1, nextIncrease)
+          ), IDLE_TIME);
+      }
+    },
+
+    /**
+     * Renders the a new list.
+     */
+    _render: function() {
+      if (!this.isAttached || !this._isVisible) {
+        return;
+      }
+      if (this._physicalCount !== 0) {
+        var reusables = this._getReusables(true);
+        this._physicalTop = reusables.physicalTop;
+        this._virtualStart = this._virtualStart + reusables.indexes.length;
+        this._physicalStart = this._physicalStart + reusables.indexes.length;
+        this._update(reusables.indexes);
+        this._update();
+        this._increasePoolIfNeeded(0);
+      } else if (this._virtualCount > 0) {
+        // Initial render
+        this.updateViewportBoundaries();
+        this._increasePoolIfNeeded(DEFAULT_PHYSICAL_COUNT);
+      }
+    },
+
+    /**
+     * Called when the items have changed. That is, reassignments
+     * to `items`, splices or updates to a single item.
+     */
+    _itemsChanged: function(change) {
+      if (change.path === 'items') {
+        this._virtualStart = 0;
+        this._physicalTop = 0;
+        this._virtualCount = this.items ? this.items.length : 0;
+        this._collection = this.items && undefined ?
+          undefined.get(this.items) : null;
+        this._physicalIndexForKey = {};
+        this._firstVisibleIndexVal = null;
+        this._lastVisibleIndexVal = null;
+        this._physicalCount = this._physicalCount || 0;
+        this._physicalItems = this._physicalItems || [];
+        this._physicalSizes = this._physicalSizes || [];
+        this._physicalStart = 0;
+        if (this._scrollTop > this._scrollOffset) {
+          this._resetScrollPosition(0);
+        }
+        this._removeFocusedItem();
+        this._debounce('_render', this._render, ANIMATION_FRAME);
+      }
+    },
+
+    /**
+     * Executes a provided function per every physical index in `itemSet`
+     * `itemSet` default value is equivalent to the entire set of physical indexes.
+     *
+     * @param {!function(number, number)} fn
+     * @param {!Array<number>=} itemSet
+     */
+    _iterateItems: function(fn, itemSet) {
+      var pidx, vidx, rtn, i;
+
+      if (arguments.length === 2 && itemSet) {
+        for (i = 0; i < itemSet.length; i++) {
+          pidx = itemSet[i];
+          vidx = this._computeVidx(pidx);
+          if ((rtn = fn.call(this, pidx, vidx)) != null) {
+            return rtn;
+          }
+        }
+      } else {
+        pidx = this._physicalStart;
+        vidx = this._virtualStart;
+        for (; pidx < this._physicalCount; pidx++, vidx++) {
+          if ((rtn = fn.call(this, pidx, vidx)) != null) {
+            return rtn;
+          }
+        }
+        for (pidx = 0; pidx < this._physicalStart; pidx++, vidx++) {
+          if ((rtn = fn.call(this, pidx, vidx)) != null) {
+            return rtn;
+          }
+        }
+      }
+    },
+
+    /**
+     * Returns the virtual index for a given physical index
+     *
+     * @param {number} pidx Physical index
+     * @return {number}
+     */
+    _computeVidx: function(pidx) {
+      if (pidx >= this._physicalStart) {
+        return this._virtualStart + (pidx - this._physicalStart);
+      }
+      return this._virtualStart + (this._physicalCount - this._physicalStart) + pidx;
+    },
+
+    /**
+     * Updates the height for a given set of items.
+     *
+     * @param {!Array<number>=} itemSet
+     */
+    _updateMetrics: function(itemSet) {
+      // Make sure we distributed all the physical items
+      // so we can measure them.
+      flush ? flush() : flush();
+
+      var newPhysicalSize = 0;
+      var oldPhysicalSize = 0;
+      var prevAvgCount = this._physicalAverageCount;
+      var prevPhysicalAvg = this._physicalAverage;
+
+      this._iterateItems(function(pidx, vidx) {
+        oldPhysicalSize += this._physicalSizes[pidx];
+        this._physicalSizes[pidx] = this._physicalItems[pidx].offsetHeight;
+        newPhysicalSize += this._physicalSizes[pidx];
+        this._physicalAverageCount += this._physicalSizes[pidx] ? 1 : 0;
+      }, itemSet);
+
+      if (this.grid) {
+        this._updateGridMetrics();
+        this._physicalSize = Math.ceil(this._physicalCount / this._itemsPerRow) * this._rowHeight;
+      } else {
+        oldPhysicalSize = (this._itemsPerRow === 1) ?
+          oldPhysicalSize :
+          Math.ceil(this._physicalCount / this._itemsPerRow) * this._rowHeight;
+        this._physicalSize = this._physicalSize + newPhysicalSize - oldPhysicalSize;
+        this._itemsPerRow = 1;
+      }
+      // Update the average if it measured something.
+      if (this._physicalAverageCount !== prevAvgCount) {
+        this._physicalAverage = Math.round(
+          ((prevPhysicalAvg * prevAvgCount) + newPhysicalSize) /
+          this._physicalAverageCount);
+      }
+    },
+
+    /**
+     * Updates the position of the physical items.
+     */
+    _positionItems: function() {
+      this._adjustScrollPosition();
+
+      var y = this._physicalTop;
+
+      this._iterateItems(function(pidx, vidx) {
+        this.translate3d(0, y + 'px', 0, this._physicalItems[pidx]);
+        y += this._physicalSizes[pidx];
+      });
+    },
+
+    _getPhysicalSizeIncrement: function(pidx) {
+      if (!this.grid) {
+        return this._physicalSizes[pidx];
+      }
+      if (this._computeVidx(pidx) % this._itemsPerRow !== this._itemsPerRow - 1) {
+        return 0;
+      }
+      return this._rowHeight;
+    },
+
+    /**
+     * Adjusts the scroll position when it was overestimated.
+     */
+    _adjustScrollPosition: function() {
+      var deltaHeight = this._virtualStart === 0 ? this._physicalTop : Math.min(this._scrollPosition + this._physicalTop, 0);
+      // Note: the delta can be positive or negative.
+      if (deltaHeight !== 0) {
+        this._physicalTop = this._physicalTop - deltaHeight;
+        var scrollTop = this._scrollTop;
+        // juking scroll position during interial scrolling on iOS is no bueno
+        if (!IOS_TOUCH_SCROLLING && scrollTop > 0) {
+          this._resetScrollPosition(scrollTop - deltaHeight);
+        }
+      }
+    },
+
+    /**
+     * Sets the position of the scroll.
+     */
+    _resetScrollPosition: function(pos) {
+      if (this.scrollTarget && pos >= 0) {
+        this._scrollTop = pos;
+        this._scrollPosition = this._scrollTop;
+      }
+    },
+
+    /**
+     * Sets the scroll height, that's the height of the content,
+     *
+     * @param {boolean=} forceUpdate If true, updates the height no matter what.
+     */
+    _updateScrollerSize: function(forceUpdate) {
+      if (this.grid) {
+        this._estScrollHeight = this._virtualRowCount * this._rowHeight;
+      } else {
+        this._estScrollHeight = (this._physicalBottom +
+            Math.max(this._virtualCount - this._physicalCount - this._virtualStart, 0) * this._physicalAverage);
+      }
+      forceUpdate = forceUpdate || this._scrollHeight === 0;
+      forceUpdate = forceUpdate || this._scrollPosition >= this._estScrollHeight - this._physicalSize;
+      forceUpdate = forceUpdate || this.grid && this.$.items.style.height < this._estScrollHeight;
+      // Amortize height adjustment, so it won't trigger large repaints too often.
+      if (forceUpdate || Math.abs(this._estScrollHeight - this._scrollHeight) >= this._viewportHeight) {
+        this.$.items.style.height = this._estScrollHeight + 'px';
+        this._scrollHeight = this._estScrollHeight;
+      }
+    },
+
+    /**
+     * Scroll to a specific index in the virtual list regardless
+     * of the physical items in the DOM tree.
+     *
+     * @method scrollToIndex
+     * @param {number} idx The index of the item
+     */
+    scrollToIndex: function(idx) {
+      if (typeof idx !== 'number' || idx < 0 || idx > this.items.length - 1) {
+        return;
+      }
+      flush ? flush() : flush();
+      // Items should have been rendered prior scrolling to an index.
+      if (this._physicalCount === 0) {
+        return;
+      }
+      idx = this._clamp(idx, 0, this._virtualCount - 1);
+      // Update the virtual start only when needed.
+      if (!this._isIndexRendered(idx) || idx >= this._maxVirtualStart) {
+        this._virtualStart = this.grid ? (idx - this._itemsPerRow * 2) : (idx - 1);
+      }
+      this._manageFocus();
+      this._assignModels();
+      this._updateMetrics();
+      // Estimate new physical offset.
+      this._physicalTop = Math.floor(this._virtualStart / this._itemsPerRow) * this._physicalAverage;
+
+      var currentTopItem = this._physicalStart;
+      var currentVirtualItem = this._virtualStart;
+      var targetOffsetTop = 0;
+      var hiddenContentSize = this._hiddenContentSize;
+      // scroll to the item as much as we can.
+      while (currentVirtualItem < idx && targetOffsetTop <= hiddenContentSize) {
+        targetOffsetTop = targetOffsetTop + this._getPhysicalSizeIncrement(currentTopItem);
+        currentTopItem = (currentTopItem + 1) % this._physicalCount;
+        currentVirtualItem++;
+      }
+      this._updateScrollerSize(true);
+      this._positionItems();
+      this._resetScrollPosition(this._physicalTop + this._scrollOffset + targetOffsetTop);
+      this._increasePoolIfNeeded(0);
+      // clear cached visible index.
+      this._firstVisibleIndexVal = null;
+      this._lastVisibleIndexVal = null;
+    },
+
+    /**
+     * Reset the physical average and the average count.
+     */
+    _resetAverage: function() {
+      this._physicalAverage = 0;
+      this._physicalAverageCount = 0;
+    },
+
+    /**
+     * A handler for the `iron-resize` event triggered by `IronResizableBehavior`
+     * when the element is resized.
+     */
+    _resizeHandler: function() {
+      this._debounce('_render', function() {
+        // clear cached visible index.
+        this._firstVisibleIndexVal = null;
+        this._lastVisibleIndexVal = null;
+        // Skip the resize event on touch devices when the address bar slides up.
+        this.updateViewportBoundaries();
+        if (this._isVisible) {
+          // Reinstall the scroll event listener.
+          this.toggleScrollListener(true);
+          this._resetAverage();
+          this._render();
+        } else {
+          // Uninstall the scroll event listener.
+          this.toggleScrollListener(false);
+        }
+      }, ANIMATION_FRAME);
+    },
+
+    /**
+     * Converts a random index to the index of the item that completes it's row.
+     * Allows for better order and fill computation when grid == true.
+     */
+    _convertIndexToCompleteRow: function(idx) {
+      // when grid == false _itemPerRow can be unset.
+      this._itemsPerRow = this._itemsPerRow || 1;
+      return this.grid ? Math.ceil(idx / this._itemsPerRow) * this._itemsPerRow : idx;
+    },
+
+    _isIndexRendered: function(idx) {
+      return idx >= this._virtualStart && idx <= this._virtualEnd;
+    },
+
+    _getPhysicalIndex: function(vidx) {
+      return (this._physicalStart + (vidx - this._virtualStart)) % this._physicalCount;
+    },
+
+    _clamp: function(v, min, max) {
+      return Math.min(max, Math.max(min, v));
+    },
+
+    _debounce: function(name, cb, asyncModule) {
+      this._debouncers = this._debouncers || {};
+      this._debouncers[name] = Debouncer.debounce(
+        this._debouncers[name],
+        asyncModule,
+        cb.bind(this));
+      enqueueDebouncer(this._debouncers[name]);
+    }
+
+  });
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * This Element is used internally by vaadin-grid.
+   *
+   * @private
+   */
+  class GridScrollerElement extends PolymerIronList {
+
+    static get is() {
+      return 'vaadin-grid-scroller';
+    }
+
+    static get properties() {
+      return {
+        size: {
+          type: Number,
+          notify: true
+        },
+        _vidxOffset: {
+          value: 0
+        }
+      };
+    }
+
+    static get observers() {
+      return [
+        '_effectiveSizeChanged(_effectiveSize)'
+      ];
+    }
+
+    connectedCallback() {
+      super.connectedCallback();
+      this._scrollHandler();
+    }
+
+    /**
+    * @protected
+    */
+    _updateScrollerItem(item, index) {}
+    /**
+    * @protected
+    */
+    _afterScroll() {}
+    /**
+    * @protected
+    */
+    _getRowTarget() {}
+    /**
+    * @protected
+    */
+    _createScrollerRows() {}
+    /**
+    * @protected
+    */
+    _canPopulate() {}
+
+    /**
+    * @private
+    */
+    scrollToIndex(index) {
+      this._warnPrivateAPIAccess('scrollToIndex');
+
+      if (index > 0) {
+        this._pendingScrollToIndex = null;
+      }
+      if (!parseInt(this.$.items.style.borderTopWidth) && index > 0) {
+        // Schedule another scroll to be invoked once init is complete
+        this._pendingScrollToIndex = index;
+      }
+
+      this._scrollingToIndex = true;
+      index = Math.min(Math.max(index, 0), this._effectiveSize - 1);
+      this.$.table.scrollTop = index / this._effectiveSize * (this.$.table.scrollHeight - this.$.table.offsetHeight);
+      this._scrollHandler();
+
+      if (this._accessIronListAPI(() => this._maxScrollTop) && this._virtualCount < this._effectiveSize) {
+        this._adjustVirtualIndexOffset(1000000);
+      }
+
+      this._accessIronListAPI(() => super.scrollToIndex(index - this._vidxOffset));
+      this._scrollHandler();
+
+      // Ensure scroll position
+      const row = Array.from(this.$.items.children).filter(child => child.index === index)[0];
+      if (row) {
+        const headerOffset = row.getBoundingClientRect().top - this.$.header.getBoundingClientRect().bottom;
+        if (Math.abs(headerOffset) > 1) {
+          this.$.table.scrollTop += headerOffset;
+          this._scrollHandler();
+        }
+      }
+
+      this._scrollingToIndex = false;
+    }
+
+    _effectiveSizeChanged(size) {
+      let fvi; // first visible (adjusted) index
+      let fviOffset = 0;
+      this._iterateItems((pidx, vidx) => {
+        if (vidx === this._firstVisibleIndex) {
+          const row = this._physicalItems[pidx];
+          fvi = row.index;
+          fviOffset = row.getBoundingClientRect().top;
+        }
+      });
+
+      if (this.items && size < this.items.length) {
+        // Size was reduced, scroll to 0 first
+        this._scrollTop = 0;
+      }
+      if (!Array.isArray(this.items)) {
+        // Edge/IE seems to have the lowest maximum
+        const maxVirtualItems = this._edge || this._ie ? 30000 : 100000;
+        this.items = {length: Math.min(size, maxVirtualItems)};
+      }
+
+      this._accessIronListAPI(() => super._itemsChanged({path: 'items'}));
+
+      this._virtualCount = Math.min(this.items.length, size) || 0;
+
+      if (this._scrollTop === 0) {
+        this._accessIronListAPI(() => this._scrollToIndex(Math.min(size - 1, fvi)));
+        this._iterateItems((pidx, vidx) => {
+          const row = this._physicalItems[pidx];
+          if (row.index === fvi) {
+            this.$.table.scrollTop += Math.round(row.getBoundingClientRect().top - fviOffset);
+          }
+          // Restore keyboard focus to the right cell
+          if (row.index === this._focusedItemIndex && this._itemsFocusable && this.$.items.contains(this.shadowRoot.activeElement)) {
+            const cellIndex = Array.from(this._itemsFocusable.parentElement.children).indexOf(this._itemsFocusable);
+            row.children[cellIndex].focus();
+          }
+        });
+      }
+      this._assignModels();
+      requestAnimationFrame(() => this._update());
+    }
+
+    _positionItems() {
+      this._adjustScrollPosition();
+
+      let rePosition;
+      if (isNaN(this._physicalTop)) {
+        rePosition = true;
+        this._physicalTop = 0;
+      }
+
+      let y = this._physicalTop;
+      this._iterateItems((pidx, vidx) => {
+        this._physicalItems[pidx].style.transform = `translateY(${y}px)`;
+        y += this._physicalSizes[pidx];
+      });
+
+      if (rePosition) {
+        this._scrollToIndex(0);
+      }
+    }
+
+    _increasePoolIfNeeded(count) {
+      if ((count === 0 && this._scrollingToIndex) || !this._canPopulate() || !this._effectiveSize) {
+        return;
+      }
+
+      if (!this._initialPoolCreated) {
+        this._initialPoolCreated = true;
+        super._increasePoolIfNeeded(25);
+      } else if (this._optPhysicalSize !== Infinity) {
+        this._debounceIncreasePool = Debouncer.debounce(
+          this._debounceIncreasePool,
+          animationFrame,
+          () => {
+            this._updateMetrics();
+            const remainingPhysicalSize = this._optPhysicalSize - this._physicalSize;
+            let estimatedMissingRowCount = Math.ceil(remainingPhysicalSize / this._physicalAverage);
+
+            if (this._physicalCount + estimatedMissingRowCount > this._effectiveSize) {
+              // Do not increase the physical item count above the this._effectiveSize
+              estimatedMissingRowCount = Math.max(0, this._effectiveSize - this._physicalCount);
+            }
+
+            if (this._physicalSize && estimatedMissingRowCount > 0 && this._optPhysicalSize !== Infinity) {
+              super._increasePoolIfNeeded(estimatedMissingRowCount);
+              // Ensure the rows are in order after increasing pool
+              this.__reorderChildNodes();
+            }
+          });
+      }
+    }
+
+    __reorderChildNodes() {
+      const childNodes = Array.from(this.$.items.childNodes);
+      const rowsInOrder = !!childNodes.reduce((inOrder, current, currentIndex, array) => {
+        if (currentIndex === 0 || array[currentIndex - 1].index === current.index - 1) {
+          return inOrder;
+        }
+      }, true);
+
+      if (!rowsInOrder) {
+        childNodes.sort((row1, row2) => {
+          return row1.index - row2.index;
+        }).forEach(row => this.$.items.appendChild(row));
+      }
+    }
+
+    _createPool(size) {
+      const fragment = document.createDocumentFragment();
+      const physicalItems = this._createScrollerRows(size);
+
+      physicalItems.forEach(inst => fragment.appendChild(inst));
+      this._getRowTarget().appendChild(fragment);
+
+      // Weird hack needed to get Safari to actually distribute slots
+      const content = this.querySelector('[slot]');
+      if (content) {
+        const slot = content.getAttribute('slot');
+        content.setAttribute('slot', 'foo-bar');
+        content.setAttribute('slot', slot);
+      }
+
+      this._updateHeaderFooterMetrics();
+
+      afterNextRender(this, () => this.notifyResize());
+      return physicalItems;
+    }
+
+    /**
+     * Assigns the data models to a given set of items.
+     * @param {!Array<number>=} itemSet
+     */
+    _assignModels(itemSet) {
+      this._iterateItems((pidx, vidx) => {
+        const el = this._physicalItems[pidx];
+        this._toggleAttribute('hidden', vidx >= this._effectiveSize, el);
+        this._updateScrollerItem(el, vidx + (this._vidxOffset || 0));
+      }, itemSet);
+    }
+
+    _scrollHandler() {
+      const delta = this.$.table.scrollTop - this._scrollPosition;
+      this._accessIronListAPI(super._scrollHandler);
+      const oldOffset = this._vidxOffset;
+      if (this._accessIronListAPI(() => this._maxScrollTop) && this._virtualCount < this._effectiveSize) {
+        this._adjustVirtualIndexOffset(delta);
+      }
+      if (this._vidxOffset !== oldOffset) {
+        this._update();
+      }
+      this._afterScroll();
+    }
+
+    _adjustVirtualIndexOffset(delta) {
+      if (Math.abs(delta) > 10000) {
+        if (this._noScale) {
+          this._noScale = false;
+          return;
+        }
+        const scale = this.$.table.scrollTop / (this.$.table.scrollHeight - this.$.table.offsetHeight);
+        const offset = scale * this._effectiveSize;
+        this._vidxOffset = Math.round(offset - scale * this._virtualCount);
+      } else {
+        // Make sure user can always swipe/wheel scroll to the start and end
+        const oldOffset = this._vidxOffset || 0;
+        const threshold = 1000;
+        const maxShift = 100;
+        // At start
+        if (this._scrollTop === 0) {
+          this._vidxOffset = 0;
+          if (oldOffset !== this._vidxOffset) {
+            super.scrollToIndex(0);
+          }
+        } else if (this.firstVisibleIndex < threshold && this._vidxOffset > 0) {
+          this._vidxOffset -= Math.min(this._vidxOffset, maxShift);
+          if (oldOffset !== this._vidxOffset) {
+            super.scrollToIndex(this.firstVisibleIndex + (oldOffset - this._vidxOffset));
+          }
+          this._noScale = true;
+        }
+        // At end
+        const maxOffset = this._effectiveSize - this._virtualCount;
+        if (this._scrollTop >= this._maxScrollTop && this._maxScrollTop > 0) {
+          this._vidxOffset = maxOffset;
+          if (oldOffset !== this._vidxOffset) {
+            super.scrollToIndex(this._virtualCount);
+          }
+        } else if (this.firstVisibleIndex > this._virtualCount - threshold && this._vidxOffset < maxOffset) {
+          this._vidxOffset += Math.min(maxOffset - this._vidxOffset, maxShift);
+          if (oldOffset !== this._vidxOffset) {
+            super.scrollToIndex(this.firstVisibleIndex - (this._vidxOffset - oldOffset));
+          }
+          this._noScale = true;
+        }
+      }
+    }
+
+    _accessIronListAPI(cb) {
+      this._warnPrivateAPIAccessAsyncEnabled = false;
+      const returnValue = cb.apply(this);
+      this._debouncerWarnPrivateAPIAccess = Debouncer.debounce(
+        this._debouncerWarnPrivateAPIAccess,
+        animationFrame,
+        () => this._warnPrivateAPIAccessAsyncEnabled = true
+      );
+      return returnValue;
+    }
+
+    /* Allow iron-list to access its APIs from debounced callbacks without warns */
+    _debounceRender(cb, asyncModule) {
+      super._debounceRender(() => this._accessIronListAPI(cb), asyncModule);
+    }
+
+    /* Warn when iron-list APIs are being accessed directly */
+    _warnPrivateAPIAccess(apiName) {
+      if (this._warnPrivateAPIAccessAsyncEnabled) {
+        console.warn(`Accessing private API (${apiName})!`);
+      }
+    }
+
+    _render() {
+      this._accessIronListAPI(super._render);
+    }
+
+    _createFocusBackfillItem() { /* Ignore */ }
+    _multiSelectionChanged() { /* Ignore */ }
+    clearSelection() { /* Ignore */ }
+    _itemsChanged() { /* Ignore */ }
+    _manageFocus() { /* Ignore */ }
+    _removeFocusedItem() { /* Ignore */ }
+
+    get _firstVisibleIndex() {
+      return this._accessIronListAPI(() => super.firstVisibleIndex);
+    }
+    get _lastVisibleIndex() {
+      return this._accessIronListAPI(() => super.lastVisibleIndex);
+    }
+    _scrollToIndex(index) {
+      this._accessIronListAPI(() => this.scrollToIndex(index));
+    }
+    get firstVisibleIndex() {
+      this._warnPrivateAPIAccess('firstVisibleIndex'); return super.firstVisibleIndex;
+    }
+    set firstVisibleIndex(value) {
+      this._warnPrivateAPIAccess('firstVisibleIndex'); super.firstVisibleIndex = value;
+    }
+    get lastVisibleIndex() {
+      this._warnPrivateAPIAccess('lastVisibleIndex'); return super.lastVisibleIndex;
+    }
+    set lastVisibleIndex(value) {
+      this._warnPrivateAPIAccess('lastVisibleIndex'); super.lastVisibleIndex = value;
+    }
+    updateViewportBoundaries() {
+      this._warnPrivateAPIAccess('updateViewportBoundaries'); super.updateViewportBoundaries.apply(this, arguments);
+    }
+    _resizeHandler() {
+      super._resizeHandler();
+      flush();
+    }
+  }
+
+  customElements.define(GridScrollerElement.is, GridScrollerElement);
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * @polymerMixin
+   */
+  const A11yMixin = superClass => class A11yMixin extends superClass {
+    static get observers() {
+      return [
+        '_a11yUpdateGridSize(size, _columnTree, _columnTree.*)'
+      ];
+    }
+
+    _a11yGetHeaderRowCount(_columnTree) {
+      return _columnTree.filter(level => level.some(col => col._headerTemplate || col.headerRenderer || col.path || col.header)).length;
+    }
+
+    _a11yGetFooterRowCount(_columnTree) {
+      return _columnTree.filter(level => level.some(col => col._headerTemplate || col.headerRenderer)).length;
+    }
+
+    _a11yUpdateGridSize(size, _columnTree) {
+      if (size === undefined || _columnTree === undefined) {
+        return;
+      }
+
+      const bodyColumns = _columnTree[_columnTree.length - 1];
+      this.$.table.setAttribute(
+        'aria-rowcount',
+        size + this._a11yGetHeaderRowCount(_columnTree) + this._a11yGetFooterRowCount(_columnTree)
+      );
+      this.$.table.setAttribute('aria-colcount', bodyColumns && bodyColumns.length || 0);
+
+      this._a11yUpdateHeaderRows();
+      this._a11yUpdateFooterRows();
+    }
+
+    _a11yUpdateHeaderRows() {
+      Array.from(this.$.header.children).forEach((headerRow, index) =>
+        headerRow.setAttribute('aria-rowindex', index + 1)
+      );
+    }
+
+    _a11yUpdateFooterRows() {
+      Array.from(this.$.footer.children).forEach((footerRow, index) =>
+        footerRow.setAttribute(
+          'aria-rowindex',
+          this._a11yGetHeaderRowCount(this._columnTree) + this.size + index + 1
+        )
+      );
+    }
+
+    _a11yUpdateRowRowindex(row, index) {
+      row.setAttribute('aria-rowindex', index + this._a11yGetHeaderRowCount(this._columnTree) + 1);
+    }
+
+    _a11yUpdateRowSelected(row, selected) {
+      // Jaws reads selection only for rows, NVDA only for cells
+      row.setAttribute('aria-selected', Boolean(selected));
+      Array.from(row.children).forEach(cell =>
+        cell.setAttribute('aria-selected', Boolean(selected))
+      );
+    }
+
+    _a11yUpdateRowLevel(row, level) {
+      row.setAttribute('aria-level', level + 1);
+    }
+
+    _a11yUpdateRowDetailsOpened(row, detailsOpened) {
+      Array.from(row.children).forEach(cell => {
+        if (typeof detailsOpened === 'boolean') {
+          cell.setAttribute('aria-expanded', detailsOpened);
+        } else {
+          if (cell.hasAttribute('aria-expanded')) {
+            cell.removeAttribute('aria-expanded');
+          }
+        }
+      });
+    }
+
+    _a11ySetRowDetailsCell(row, detailsCell) {
+      Array.from(row.children).forEach(cell => {
+        if (cell !== detailsCell) {
+          cell.setAttribute('aria-controls', detailsCell.id);
+        }
+      });
+    }
+
+    _a11yUpdateCellColspan(cell, colspan) {
+      cell.setAttribute('aria-colspan', Number(colspan));
+    }
+
+    _a11yUpdateSorters() {
+      Array.from(this.querySelectorAll('vaadin-grid-sorter')).forEach(sorter => {
+        let cellContent = sorter.parentNode;
+        while (cellContent && cellContent.localName !== 'vaadin-grid-cell-content') {
+          cellContent = cellContent.parentNode;
+        }
+        if (cellContent && cellContent.assignedSlot) {
+          const cell = cellContent.assignedSlot.parentNode;
+          cell.setAttribute('aria-sort', {
+            'asc': 'ascending',
+            'desc': 'descending'
+          }[String(sorter.direction)] || 'none');
+        }
+      });
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * @polymerMixin
+   */
+  const ActiveItemMixin = superClass => class ActiveItemMixin extends superClass {
+
+    static get properties() {
+      return {
+        /**
+         * The item user has last interacted with. Turns to `null` after user deactivates
+         * the item by re-interacting with the currently active item.
+         */
+        activeItem: {
+          type: Object,
+          notify: true,
+          value: null
+        }
+      };
+    }
+
+    ready() {
+      super.ready();
+
+      this.$.scroller.addEventListener('click', this._onClick.bind(this));
+      this.addEventListener('cell-activate', this._activateItem.bind(this));
+    }
+
+    _activateItem(e) {
+      const model = e.detail.model;
+      const clickedItem = model ? model.item : null;
+
+      if (clickedItem) {
+        this.activeItem = !this._itemsEqual(this.activeItem, clickedItem) ? clickedItem : null;
+      }
+    }
+
+    // we need to listen to click instead of tap because on mobile safari, the
+    // document.activeElement has not been updated (focus has not been shifted)
+    // yet at the point when tap event is being executed.
+    _onClick(e) {
+      if (e.defaultPrevented) {
+        // Something has handled this click already, e. g., <vaadin-grid-sorter>
+        return;
+      }
+
+      const path = e.composedPath();
+      const cell = path[path.indexOf(this.$.table) - 3];
+      if (!cell || cell.getAttribute('part').indexOf('details-cell') > -1) {
+        return;
+      }
+      const cellContent = cell._content;
+
+      const activeElement = this.getRootNode().activeElement;
+      const cellContentHasFocus = cellContent.contains(activeElement) &&
+        // MSIE bug: flex children receive focus. Make type & attributes check.
+        (!this._ie || this._isFocusable(activeElement));
+      if (!cellContentHasFocus && !this._isFocusable(e.target)) {
+        this.dispatchEvent(new CustomEvent('cell-activate', {detail: {
+          model: this.__getRowModel(cell.parentElement)
+        }}));
+      }
+    }
+
+    _isFocusable(target) {
+      if (!target.parentNode) {
+        return false;
+      }
+      const focusables = Array.from(target.parentNode
+        .querySelectorAll('[tabindex], button, input, select, textarea, object, iframe, label, a[href], area[href]'))
+        .filter(element => element.getAttribute('part') !== 'cell body-cell');
+
+      const isFocusableElement = focusables.indexOf(target) !== -1;
+      return !target.disabled && isFocusableElement;
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const ArrayDataProviderMixin = superClass => class ArrayDataProviderMixin extends superClass {
+
+    static get properties() {
+
+      return {
+        /**
+         * An array containing the items which will be stamped to the column template
+         * instances.
+         */
+        items: Array
+
+      };
+    }
+
+    static get observers() {
+      return [
+        '_itemsChanged(items, items.*, isAttached)'
+      ];
+    }
+
+    _itemsChanged(items, splices, isAttached) {
+      if (!isAttached) {
+        return;
+      }
+      if (!Array.isArray(items)) {
+        if (items === undefined || items === null) {
+          this.size = 0;
+        }
+        if (this.dataProvider === this._arrayDataProvider) {
+          this.dataProvider = undefined;
+        }
+        return;
+      }
+
+      this.size = items.length;
+      this.dataProvider = this.dataProvider || this._arrayDataProvider;
+      this.clearCache();
+      this._ensureFirstPageLoaded();
+    }
+
+    _arrayDataProvider(opts, cb) {
+      let items = (Array.isArray(this.items) ? this.items : []).slice(0);
+
+      if (this._filters && this._checkPaths(this._filters, 'filtering', items)) {
+        items = this._filter(items);
+      }
+
+      this.size = items.length;
+
+      if (opts.sortOrders.length && this._checkPaths(this._sorters, 'sorting', items)) {
+        items = items.sort(this._multiSort.bind(this));
+      }
+
+      const start = opts.page * opts.pageSize;
+      const end = start + opts.pageSize;
+      const slice = items.slice(start, end);
+      cb(slice, items.length);
+    }
+
+    /**
+     * Check array of filters/sorters for paths validity, console.warn invalid items
+     * @param {Array}  arrayToCheck The array of filters/sorters to check
+     * @param {string} action       The name of action to include in warning (filtering, sorting)
+     * @param {Array}  items
+     */
+    _checkPaths(arrayToCheck, action, items) {
+      if (!items.length) {
+        return false;
+      }
+
+      let result = true;
+
+      for (var i in arrayToCheck) {
+        const path = arrayToCheck[i].path;
+
+        // skip simple paths
+        if (!path || path.indexOf('.') === -1) {
+          continue;
+        }
+
+        const parentProperty = path.replace(/\.[^\.]*$/, ''); // a.b.c -> a.b
+        if (Base.get(parentProperty, items[0]) === undefined) {
+          console.warn(`Path "${path}" used for ${action} does not exist in all of the items, ${action} is disabled.`);
+          result = false;
+        }
+      }
+
+      return result;
+    }
+
+    _multiSort(a, b) {
+      return this._sorters.map(sort => {
+        if (sort.direction === 'asc') {
+          return this._compare(Base.get(sort.path, a), Base.get(sort.path, b));
+        } else if (sort.direction === 'desc') {
+          return this._compare(Base.get(sort.path, b), Base.get(sort.path, a));
+        }
+        return 0;
+      }).reduce((p, n) => {
+        return p ? p : n;
+      }, 0);
+    }
+
+    _normalizeEmptyValue(value) {
+      if ([undefined, null].indexOf(value) >= 0) {
+        return '';
+      } else if (isNaN(value)) {
+        return value.toString();
+      } else {
+        return value;
+      }
+    }
+
+    _compare(a, b) {
+      a = this._normalizeEmptyValue(a);
+      b = this._normalizeEmptyValue(b);
+
+      if (a < b) {
+        return -1;
+      }
+      if (a > b) {
+        return 1;
+      }
+      return 0;
+    }
+
+    _filter(items) {
+      return items.filter((item, index) => {
+        return this._filters.filter(filter => {
+          const value = this._normalizeEmptyValue(Base.get(filter.path, item));
+          const filterValueLowercase = this._normalizeEmptyValue(filter.value).toString().toLowerCase();
+          return value.toString().toLowerCase().indexOf(filterValueLowercase) === -1;
+        }).length === 0;
+      });
+    }
+
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const ColumnResizingMixin = superClass => class ColumnResizingMixin extends GestureEventListeners(superClass) {
+
+    ready() {
+      super.ready();
+      const scroller = this.$.scroller;
+      addListener(scroller, 'track', this._onHeaderTrack.bind(this));
+
+      // Disallow scrolling while resizing
+      scroller.addEventListener('touchmove', e => scroller.hasAttribute('column-resizing') && e.preventDefault());
+
+      // Disable contextmenu on any resize separator.
+      scroller.addEventListener('contextmenu', e => e.target.getAttribute('part') == 'resize-handle' && e.preventDefault());
+
+      // Disable native cell focus when resizing
+      scroller.addEventListener('mousedown', e => e.target.getAttribute('part') === 'resize-handle' && e.preventDefault());
+    }
+
+    _onHeaderTrack(e) {
+      const handle = e.target;
+      if (handle.getAttribute('part') === 'resize-handle') {
+        const cell = handle.parentElement;
+        let column = cell._column;
+
+        this._toggleAttribute('column-resizing', true, this.$.scroller);
+
+        // Get the target column to resize
+        while (column.localName === 'vaadin-grid-column-group') {
+          column = Array.prototype.slice.call(column._childColumns, 0)
+            .sort(function(a, b) {
+              return a._order - b._order;
+            })
+            .filter(function(column) {
+              return !column.hidden;
+            }).pop();
+        }
+
+        const columnRowCells = Array.from(this.$.header.querySelectorAll('[part~="row"]:last-child [part~="cell"]'));
+        var targetCell = columnRowCells.filter(cell => cell._column === column)[0];
+        // Resize the target column
+        if (targetCell.offsetWidth) {
+          var style = window.getComputedStyle(targetCell);
+          var minWidth = 10 + parseInt(style.paddingLeft) + parseInt(style.paddingRight) + parseInt(style.borderLeftWidth)
+            + parseInt(style.borderRightWidth) + parseInt(style.marginLeft) + parseInt(style.marginRight);
+          const maxWidth = targetCell.offsetWidth + (this.__isRTL ? targetCell.getBoundingClientRect().left - e.detail.x :
+            e.detail.x - targetCell.getBoundingClientRect().right);
+          column.width = Math.max(minWidth, maxWidth) + 'px';
+          column.flexGrow = 0;
+        }
+        // Fix width and flex-grow for all preceding columns
+        columnRowCells
+          .sort(
+            function(a, b) {
+              return a._column._order - b._column._order;
+            })
+          .forEach(function(cell, index, array) {
+            if (index < array.indexOf(targetCell)) {
+              cell._column.width = cell.offsetWidth + 'px';
+              cell._column.flexGrow = 0;
+            }
+          });
+
+        if (e.detail.state === 'end') {
+          this._toggleAttribute('column-resizing', false, this.$.scroller);
+          this.dispatchEvent(new CustomEvent('column-resize', {
+            detail: {resizedColumn: column}
+          }));
+        }
+
+        // Notify resize
+        this._resizeHandler();
+      }
+    }
+
+    /**
+    * Fired when a column in the grid is resized by the user.
+    *
+    * @event column-resize
+    * @param {Object} detail
+    * @param {Object} detail.resizedColumn the column that was resized
+    */
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  const ItemCache = class ItemCache {
+
+    constructor(grid, parentCache, parentItem) {
+      this.grid = grid;
+      this.parentCache = parentCache;
+      this.parentItem = parentItem;
+      this.itemCaches = {};
+      this.items = {};
+      this.effectiveSize = 0;
+      this.size = 0;
+      this.pendingRequests = {};
+    }
+
+    isLoading() {
+      return Object.keys(this.pendingRequests).length || Object.keys(this.itemCaches).filter(index => {
+        return this.itemCaches[index].isLoading();
+      })[0];
+    }
+
+    getItemForIndex(index) {
+      const {cache, scaledIndex} = this.getCacheAndIndex(index);
+      return cache.items[scaledIndex];
+    }
+
+    updateSize() {
+      this.effectiveSize = (!this.parentItem || this.grid._isExpanded(this.parentItem)) ?
+        this.size + Object.keys(this.itemCaches).reduce((prev, curr) => {
+          const subCache = this.itemCaches[curr];
+          subCache.updateSize();
+          return prev + subCache.effectiveSize;
+        }, 0) :
+        0;
+    }
+
+    ensureSubCacheForScaledIndex(scaledIndex) {
+      if (!this.itemCaches[scaledIndex]) {
+        const subCache = new ItemCache(this.grid, this, this.items[scaledIndex]);
+        this.itemCaches[scaledIndex] = subCache;
+        this.grid._loadPage(0, subCache);
+      }
+    }
+
+    getCacheAndIndex(index) {
+      let thisLevelIndex = index;
+      const keys = Object.keys(this.itemCaches);
+      for (var i = 0; i < keys.length; i++) {
+        const expandedIndex = Number(keys[i]);
+        const subCache = this.itemCaches[expandedIndex];
+        if (thisLevelIndex <= expandedIndex) {
+          return {cache: this, scaledIndex: thisLevelIndex};
+        } else if (thisLevelIndex <= expandedIndex + subCache.effectiveSize) {
+          return subCache.getCacheAndIndex(thisLevelIndex - expandedIndex - 1);
+        }
+        thisLevelIndex -= subCache.effectiveSize;
+      }
+      return {cache: this, scaledIndex: thisLevelIndex};
+    }
+
+  };
+
+  /**
+   * @polymerMixin
+   */
+  const DataProviderMixin = superClass => class DataProviderMixin extends superClass {
+
+    static get properties() {
+      return {
+
+        /**
+         * Number of items fetched at a time from the dataprovider.
+         */
+        pageSize: {
+          type: Number,
+          value: 50,
+          observer: '_pageSizeChanged'
+        },
+
+        /**
+         * Function that provides items lazily. Receives arguments `params`, `callback`
+         *
+         * `params.page` Requested page index
+         *
+         * `params.pageSize` Current page size
+         *
+         * `params.filters` Currently applied filters
+         *
+         * `params.sortOrders` Currently applied sorting orders
+         *
+         * `params.parentItem` When tree is used, and sublevel items
+         * are requested, reference to parent item of the requested sublevel.
+         * Otherwise `undefined`.
+         *
+         * `callback(items, size)` Callback function with arguments:
+         *   - `items` Current page of items
+         *   - `size` Total number of items. When tree sublevel items
+         *     are requested, total number of items in the requested sublevel.
+         *     Optional when tree is not used, required for tree.
+         */
+        dataProvider: {
+          type: Object,
+          notify: true,
+          observer: '_dataProviderChanged'
+        },
+
+        /**
+         * `true` while data is being requested from the data provider.
+         */
+        loading: {
+          type: Boolean,
+          notify: true,
+          readOnly: true,
+          reflectToAttribute: true
+        },
+
+        _cache: {
+          type: Object,
+          value: function() {
+            const cache = new ItemCache(this);
+            return cache;
+          }
+        },
+
+        /**
+         * Path to an item sub-property that identifies the item.
+         */
+        itemIdPath: {
+          type: String,
+          value: null
+        },
+
+        /**
+         * An array that contains the expanded items.
+         */
+        expandedItems: {
+          type: Object,
+          notify: true,
+          value: () => []
+        }
+
+      };
+    }
+
+    static get observers() {
+      return [
+        '_sizeChanged(size)',
+        '_itemIdPathChanged(itemIdPath)',
+        '_expandedItemsChanged(expandedItems.*)'
+      ];
+    }
+
+    _sizeChanged(size) {
+      const delta = size - this._cache.size;
+      this._cache.size += delta;
+      this._cache.effectiveSize += delta;
+      this._effectiveSize = this._cache.effectiveSize;
+    }
+
+    _getItem(index, el) {
+      if (index >= this._effectiveSize) {
+        return;
+      }
+
+      el.index = index;
+      const {cache, scaledIndex} = this._cache.getCacheAndIndex(index);
+      const item = cache.items[scaledIndex];
+      if (item) {
+        this._toggleAttribute('loading', false, el);
+        this._updateItem(el, item);
+        if (this._isExpanded(item)) {
+          cache.ensureSubCacheForScaledIndex(scaledIndex);
+        }
+      } else {
+        this._toggleAttribute('loading', true, el);
+        this._loadPage(this._getPageForIndex(scaledIndex), cache);
+      }
+
+    }
+
+    _expandedInstanceChangedCallback(inst, value) {
+      if (inst.item === undefined) {
+        return;
+      }
+      if (value) {
+        this.expandItem(inst.item);
+      } else {
+        this.collapseItem(inst.item);
+      }
+    }
+
+    /**
+     * Returns a value that identifies the item. Uses `itemIdPath` if available.
+     * Can be customized by overriding.
+     */
+    getItemId(item) {
+      return this.itemIdPath ? this.get(this.itemIdPath, item) : item;
+    }
+
+    _isExpanded(item) {
+      return this.__expandedKeys.has(this.getItemId(item));
+    }
+
+    _expandedItemsChanged(e) {
+      this.__cacheExpandedKeys();
+      this._cache.updateSize();
+      this._effectiveSize = this._cache.effectiveSize;
+      this._assignModels();
+    }
+
+    _itemIdPathChanged(e) {
+      this.__cacheExpandedKeys();
+    }
+
+    __cacheExpandedKeys() {
+      if (this.expandedItems) {
+        this.__expandedKeys = new Set();
+        this.expandedItems.forEach(item => {
+          this.__expandedKeys.add(this.getItemId(item));
+        });
+      }
+    }
+
+    /**
+     * Expands the given item tree.
+     */
+    expandItem(item) {
+      if (!this._isExpanded(item)) {
+        this.push('expandedItems', item);
+      }
+    }
+
+    /**
+     * Collapses the given item tree.
+     */
+    collapseItem(item) {
+      if (this._isExpanded(item)) {
+        this.splice('expandedItems', this._getItemIndexInArray(item, this.expandedItems), 1);
+      }
+    }
+
+    _getIndexLevel(index) {
+      let {cache} = this._cache.getCacheAndIndex(index);
+      let level = 0;
+      while (cache.parentCache) {
+        cache = cache.parentCache;
+        level++;
+      }
+      return level;
+    }
+
+    _canPopulate() {
+      return this._hasData && this._columnTree;
+    }
+
+    _loadPage(page, cache) {
+      // make sure same page isn't requested multiple times.
+      if (!cache.pendingRequests[page] && this.dataProvider) {
+        this._setLoading(true);
+        cache.pendingRequests[page] = true;
+        const params = {
+          page,
+          pageSize: this.pageSize,
+          sortOrders: this._mapSorters(),
+          filters: this._mapFilters(),
+          parentItem: cache.parentItem
+        };
+
+        this.dataProvider(params, (items, size) => {
+          if (size !== undefined) {
+            cache.size = size;
+          } else {
+            if (params.parentItem) {
+              cache.size = items.length;
+            }
+          }
+
+          const currentItems = Array.from(this.$.items.children).map(row => row._item);
+
+          // Populate the cache with new items
+          items.forEach((item, itemsIndex) => {
+            const itemIndex = page * this.pageSize + itemsIndex;
+            cache.items[itemIndex] = item;
+            if (this._isExpanded(item) && currentItems.indexOf(item) > -1) {
+              // Force synchronous data request for expanded item sub-cache
+              cache.ensureSubCacheForScaledIndex(itemIndex);
+            }
+          });
+
+          this._hasData = true;
+
+          delete cache.pendingRequests[page];
+
+          this._setLoading(false);
+          this._cache.updateSize();
+          this._effectiveSize = this._cache.effectiveSize;
+
+          Array.from(this.$.items.children)
+            .filter(row => !row.hidden)
+            .forEach(row => {
+              const cachedItem = this._cache.getItemForIndex(row.index);
+              if (cachedItem) {
+                this._toggleAttribute('loading', false, row);
+                this._updateItem(row, cachedItem);
+              }
+            });
+
+          this._increasePoolIfNeeded(0);
+
+          this.__itemsReceived();
+        });
+      }
+    }
+
+    _getPageForIndex(index) {
+      return Math.floor(index / this.pageSize);
+    }
+
+    /**
+     * Clears the cached pages and reloads data from dataprovider when needed.
+     */
+    clearCache() {
+      this._cache = new ItemCache(this);
+      Array.from(this.$.items.children).forEach(row => {
+        Array.from(row.children).forEach(cell => {
+          // Force data system to pick up subproperty changes
+          cell._instance && cell._instance._setPendingProperty('item', {}, false);
+        });
+      });
+      this._cache.size = this.size || 0;
+      this._cache.updateSize();
+      this._hasData = false;
+      this._assignModels();
+
+      if (!this._effectiveSize) {
+        this._loadPage(0, this._cache);
+      }
+    }
+
+    _pageSizeChanged(pageSize, oldPageSize) {
+      if (oldPageSize !== undefined && pageSize !== oldPageSize) {
+        this.clearCache();
+      }
+    }
+
+    _checkSize() {
+      if (this.size === undefined && this._effectiveSize === 0) {
+        console.warn(
+          'The <vaadin-grid> needs the total number of items' +
+          ' in order to display rows. Set the total number of items' +
+          ' to the `size` property, or provide the total number of items' +
+          ' in the second argument of the `dataProvider`’s `callback` call.'
+        );
+      }
+    }
+
+    _dataProviderChanged(dataProvider, oldDataProvider) {
+      if (oldDataProvider !== undefined) {
+        this.clearCache();
+      }
+
+      if (dataProvider && this.items && this.items.length) {
+        // Fixes possibly invalid cached lastVisibleIndex value in <iron-list>
+        this._scrollToIndex(this._firstVisibleIndex);
+      }
+
+      this._ensureFirstPageLoaded();
+
+      this._debouncerCheckSize = Debouncer.debounce(
+        this._debouncerCheckSize,
+        timeOut.after(2000),
+        this._checkSize.bind(this));
+
+      this._scrollHandler();
+    }
+
+    _ensureFirstPageLoaded() {
+      if (!this._hasData) {
+        // load data before adding rows to make sure they have content when
+        // rendered for the first time.
+        this._loadPage(0, this._cache, () => {
+          const hadData = this._hasData;
+          this._hasData = true;
+          if (!hadData) {
+            this.notifyResize();
+          }
+        });
+      }
+    }
+
+    _itemsEqual(item1, item2) {
+      return this.getItemId(item1) === this.getItemId(item2);
+    }
+
+    _getItemIndexInArray(item, array) {
+      let result = -1;
+      array.forEach((i, idx) => {
+        if (this._itemsEqual(i, item)) {
+          result = idx;
+        }
+      });
+      return result;
+    }
+
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const DynamicColumnsMixin = superClass => class DynamicColumnsMixin extends superClass {
+
+    ready() {
+      super.ready();
+      this._addNodeObserver();
+    }
+
+    _hasColumnGroups(columns) {
+      for (let i = 0; i < columns.length; i++) {
+        if (columns[i].localName === 'vaadin-grid-column-group') {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    _getChildColumns(el) {
+      return FlattenedNodesObserver.getFlattenedNodes(el).filter(this._isColumnElement);
+    }
+
+    _flattenColumnGroups(columns) {
+      return columns.map(col => {
+        if (col.localName === 'vaadin-grid-column-group') {
+          return this._getChildColumns(col);
+        } else {
+          return [col];
+        }
+      }).reduce((prev, curr) => {
+        return prev.concat(curr);
+      }, []);
+    }
+
+    _getColumnTree() {
+      var rootColumns = FlattenedNodesObserver.getFlattenedNodes(this).filter(this._isColumnElement);
+      var _columnTree = [];
+
+      for (var c = rootColumns; ;) {
+        _columnTree.push(c);
+        if (!this._hasColumnGroups(c)) {
+          break;
+        }
+        c = this._flattenColumnGroups(c);
+      }
+
+      return _columnTree;
+    }
+
+    _updateColumnTree() {
+      var columnTree = this._getColumnTree();
+      if (!this._arrayEquals(columnTree, this._columnTree)) {
+        this._columnTree = columnTree;
+      }
+    }
+
+    _addNodeObserver() {
+      this._observer = new FlattenedNodesObserver(this, info => {
+
+        const rowDetailsTemplate = info.addedNodes.filter(n => n.localName === 'template' && n.classList.contains('row-details'))[0];
+        if (rowDetailsTemplate && this._rowDetailsTemplate !== rowDetailsTemplate) {
+          this._rowDetailsTemplate = rowDetailsTemplate;
+        }
+
+        if (info.addedNodes.filter(this._isColumnElement).length > 0 ||
+          info.removedNodes.filter(this._isColumnElement).length > 0) {
+          this._updateColumnTree();
+        }
+
+        this._debouncerCheckImports = Debouncer.debounce(
+          this._debouncerCheckImports,
+          timeOut.after(2000),
+          this._checkImports.bind(this));
+
+        this._ensureFirstPageLoaded();
+      });
+    }
+
+    _arrayEquals(arr1, arr2) {
+      if (!arr1 || !arr2 || arr1.length != arr2.length) {
+        return false;
+      }
+
+      for (var i = 0, l = arr1.length; i < l; i++) {
+        // Check if we have nested arrays
+        if (arr1[i] instanceof Array && arr2[i] instanceof Array) {
+          // recurse into the nested arrays
+          if (!this._arrayEquals(arr1[i], arr2[i])) {
+            return false;
+          }
+        } else if (arr1[i] != arr2[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    _checkImports() {
+      [
+        'vaadin-grid-column-group',
+        'vaadin-grid-filter',
+        'vaadin-grid-filter-column',
+        'vaadin-grid-tree-toggle',
+        'vaadin-grid-selection-column',
+        'vaadin-grid-sort-column',
+        'vaadin-grid-sorter'
+      ].forEach(elementName => {
+        var element = this.querySelector(elementName);
+        if (element && !(element instanceof PolymerElement)) {
+          console.warn(`Make sure you have imported the required module for <${elementName}> element.`);
+        }
+      });
+    }
+
+    _updateFirstAndLastColumn() {
+      Array.from(this.shadowRoot.querySelectorAll('tr')).forEach(row => this._updateFirstAndLastColumnForRow(row));
+    }
+
+    _updateFirstAndLastColumnForRow(row) {
+      Array.from(row.querySelectorAll('[part~="cell"]:not([part~="details-cell"])'))
+        .sort((a, b) => {
+          return a._column._order - b._column._order;
+        }).forEach((cell, cellIndex, children) => {
+          this._toggleAttribute('first-column', cellIndex === 0, cell);
+          this._toggleAttribute('last-column', cellIndex === children.length - 1, cell);
+        });
+    }
+
+    _isColumnElement(node) {
+      return node.nodeType === Node.ELEMENT_NODE && /\bcolumn\b/.test(node.localName);
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2018 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * @polymerMixin
+   */
+  const EventContextMixin = superClass => class EventContextMixin extends superClass {
+
+    /**
+     * Returns an object with context information about the event target:
+     * - `item`: the data object corresponding to the targeted row (not specified when targeting header or footer)
+     * - `column`: the column element corresponding to the targeted cell (not specified when targeting row details)
+     * - `section`: whether the event targeted the body, header, footer or details of the grid
+     *
+     * These additional properties are included when `item` is specified:
+     * - `index`: the index of the item
+     * - `selected`: the selected state of the item
+     * - `detailsOpened`: whether the row details are open for the item
+     * - `expanded`: the expanded state of the tree toggle
+     * - `level`: the tree hierarchy level
+     *
+     * The returned object is populated only when a grid cell, header, footer or row details is found in `event.composedPath()`.
+     * This means mostly mouse and keyboard events. If such a grid part is not found in the path, an empty object is returned.
+     * This may be the case eg. if the event is fired on the `<vaadin-grid>` element and not any deeper in the DOM, or if
+     * the event targets the empty part of the grid body.
+     */
+    getEventContext(event) {
+
+      const context = {};
+
+      const path = event.composedPath();
+      const cell = path[path.indexOf(this.$.table) - 3];
+
+      if (!cell) {
+        return context;
+      }
+
+      context.section = ['body', 'header', 'footer', 'details']
+        .filter(section => cell.getAttribute('part').indexOf(section) > -1)[0];
+
+      if (cell._column) {
+        context.column = cell._column;
+      }
+
+      if (context.section === 'body' || context.section === 'details') {
+        Object.assign(context, this.__getRowModel(cell.parentElement));
+      }
+
+      return context;
+    }
+
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * @polymerMixin
+   */
+  const FilterMixin = superClass => class FilterMixin extends superClass {
+
+    static get properties() {
+      return {
+        _filters: {
+          type: Array,
+          value: function() {
+            return [];
+          }
+        }
+      };
+    }
+
+    ready() {
+      super.ready();
+      this.addEventListener('filter-changed', this._filterChanged.bind(this));
+    }
+
+    _filterChanged(e) {
+      if (this._filters.indexOf(e.target) === -1) {
+        this._filters.push(e.target);
+      }
+
+      e.stopPropagation();
+
+      if (this.dataProvider) {
+        this.clearCache();
+      }
+    }
+
+    _mapFilters() {
+      return this._filters.map(filter => {
+        return {
+          path: filter.path,
+          value: filter.value
+        };
+      });
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * `vaadin-grid-templatizer` is a helper element for the `vaadin-grid` that is preparing and
+   * stamping instances of cells and columns templates
+   *
+   * @extends PolymerElement
+   * @private
+   */
+  class GridTemplatizer extends (class extends PolymerElement {}) {
+    static get is() {
+      return 'vaadin-grid-templatizer';
+    }
+
+    static get properties() {
+      return {
+        dataHost: Object,
+
+        template: Object,
+
+        _templateInstances: {
+          type: Array,
+          value: function() {
+            return [];
+          }
+        },
+
+        _parentPathValues: {
+          value: function() {
+            return {};
+          }
+        },
+
+        _grid: Object
+      };
+    }
+
+    static get observers() {
+      return [
+        '_templateInstancesChanged(_templateInstances.*, _parentPathValues.*)'
+      ];
+    }
+
+    constructor() {
+      super();
+
+      this._instanceProps = {
+        detailsOpened: true,
+        index: true,
+        item: true,
+        selected: true,
+        expanded: true,
+        level: true
+      };
+    }
+
+    createInstance() {
+      this._ensureTemplatized();
+      const instance = new this._TemplateClass({});
+      this.addInstance(instance);
+
+      return instance;
+    }
+
+    addInstance(instance) {
+      if (this._templateInstances.indexOf(instance) === -1) {
+        this._templateInstances.push(instance);
+        requestAnimationFrame(() => this.notifyPath('_templateInstances.*', this._templateInstances));
+      }
+    }
+
+    removeInstance(instance) {
+      const index = this._templateInstances.indexOf(instance);
+      this.splice('_templateInstances', index, 1);
+    }
+
+    _ensureTemplatized() {
+      if (!this._TemplateClass) {
+        this._TemplateClass = templatize(this.template, this, {
+          instanceProps: this._instanceProps,
+          parentModel: true,
+
+          forwardHostProp: function(prop, value) {
+            this._forwardParentProp(prop, value);
+
+            if (this._templateInstances) {
+              this._templateInstances.forEach(inst => inst.notifyPath(prop, value));
+            }
+          },
+
+          notifyInstanceProp: function(inst, prop, value) {
+            if (prop === 'index' || prop === 'item') {
+              // We don’t need a change notification for these.
+              return;
+            }
+
+            const originalProp = `__${prop}__`;
+
+            // Notify for only user-action changes, not for scrolling updates. E. g.,
+            // if `detailsOpened` is different from `__detailsOpened__`, which was set during render.
+            if (inst[originalProp] === value) {
+              return;
+            }
+            inst[originalProp] = value;
+
+            const row = Array.from(this._grid.$.items.children).filter(row => this._grid._itemsEqual(row._item, inst.item))[0];
+            if (row) {
+              Array.from(row.children).forEach(cell => {
+                if (cell._instance) {
+                  cell._instance[originalProp] = value;
+                  cell._instance.notifyPath(prop, value);
+                }
+              });
+            }
+
+            const itemPrefix = 'item.';
+            if (Array.isArray(this._grid.items) && prop.indexOf(itemPrefix) === 0) {
+              const itemsIndex = this._grid.items.indexOf(inst.item);
+              const path = prop.slice(itemPrefix.length);
+              this._grid.notifyPath(`items.${itemsIndex}.${path}`, value);
+            }
+
+            const gridCallback = `_${prop}InstanceChangedCallback`;
+            if (this._grid && this._grid[gridCallback]) {
+              this._grid[gridCallback](inst, value);
+            }
+          }
+
+        });
+      }
+    }
+
+    _forwardParentProp(prop, value) {
+      this._parentPathValues[prop] = value;
+      this._templateInstances.forEach(inst => inst.notifyPath(prop, value));
+    }
+
+    _templateInstancesChanged(t, p) {
+      let index, count;
+      if (t.path === '_templateInstances') {
+        // Iterate all instances
+        index = 0;
+        count = this._templateInstances.length;
+      } else if (t.path === '_templateInstances.splices') {
+        // Iterate only new instances
+        index = t.value.index;
+        count = t.value.addedCount;
+      } else {
+        return;
+      }
+      Object.keys(this._parentPathValues || {}).forEach(keyName => {
+        for (var i = index; i < index + count; i++) {
+          this._templateInstances[i].set(keyName, this._parentPathValues[keyName]);
+        }
+      });
+    }
+
+  }
+
+  customElements.define(GridTemplatizer.is, GridTemplatizer);
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const RowDetailsMixin = superClass => class RowDetailsMixin extends superClass {
+    static get properties() {
+      return {
+        /**
+         * An array containing references to items with open row details.
+         */
+        detailsOpenedItems: {
+          type: Array,
+          value: function() {
+            return [];
+          }
+        },
+
+        _rowDetailsTemplate: Object,
+
+        /**
+         * Custom function for rendering the content of the row details.
+         * Receives three arguments:
+         *
+         * - `root` The row details content DOM element. Append your content to it.
+         * - `grid` The `<vaadin-grid>` element.
+         * - `rowData` The object with the properties related with
+         *   the rendered item, contains:
+         *   - `rowData.index` The index of the item.
+         *   - `rowData.item` The item.
+         */
+        rowDetailsRenderer: Function,
+
+        _detailsCells: {
+          type: Array,
+        }
+      };
+    }
+
+    static get observers() {
+      return [
+        '_detailsOpenedItemsChanged(detailsOpenedItems.*, _rowDetailsTemplate, rowDetailsRenderer)',
+        '_rowDetailsTemplateOrRendererChanged(_rowDetailsTemplate, rowDetailsRenderer)'
+      ];
+    }
+
+    _rowDetailsTemplateOrRendererChanged(rowDetailsTemplate, rowDetailsRenderer) {
+      if (rowDetailsTemplate && rowDetailsRenderer) {
+        throw new Error('You should only use either a renderer or a template for row details');
+      }
+      if (rowDetailsTemplate || rowDetailsRenderer) {
+        if (rowDetailsTemplate && !rowDetailsTemplate.templatizer) {
+          var templatizer = new GridTemplatizer();
+          templatizer._grid = this;
+          templatizer.dataHost = this.dataHost;
+          templatizer.template = rowDetailsTemplate;
+          rowDetailsTemplate.templatizer = templatizer;
+        }
+
+        if (this._columnTree) {
+          // Only update the rows if the column tree has already been initialized
+          Array.from(this.$.items.children).forEach(row => {
+            if (!row.querySelector('[part~=details-cell]')) {
+              this._updateRow(row, this._columnTree[this._columnTree.length - 1]);
+              this._a11yUpdateRowDetailsOpened(row, false);
+            }
+            // Clear any old template instances
+            delete row.querySelector('[part~=details-cell]')._instance;
+          });
+        }
+
+        if (this.detailsOpenedItems.length) {
+          Array.from(this.$.items.children).forEach(this._toggleDetailsCell, this);
+          this._update();
+        }
+      }
+    }
+
+    _detailsOpenedItemsChanged(changeRecord, rowDetailsTemplate, rowDetailsRenderer) {
+      if (changeRecord.path === 'detailsOpenedItems.length' || !changeRecord.value) {
+        // Let’s avoid duplicate work of both “.splices” and “.length” updates.
+        return;
+      }
+      Array.from(this.$.items.children).forEach(row => {
+        this._toggleDetailsCell(row, row._item);
+        this._a11yUpdateRowDetailsOpened(row, this._isDetailsOpened(row._item));
+        this._toggleAttribute('details-opened', this._isDetailsOpened(row._item), row);
+      });
+    }
+
+    _configureDetailsCell(cell) {
+      cell.setAttribute('part', 'cell details-cell');
+      // Freeze the details cell, so that it does not scroll horizontally
+      // with the normal cells. This way it looks less weird.
+      this._toggleAttribute('frozen', true, cell);
+    }
+
+    _toggleDetailsCell(row, item) {
+      const cell = row.querySelector('[part~="details-cell"]');
+      if (!cell) {
+        return;
+      }
+      const detailsHidden = !this._isDetailsOpened(item);
+      const hiddenChanged = !!cell.hidden !== detailsHidden;
+
+      if (!cell._instance && !cell._renderer || cell.hidden !== detailsHidden) {
+        cell.hidden = detailsHidden;
+        if (detailsHidden) {
+          row.style.removeProperty('padding-bottom');
+        } else {
+          if (this.rowDetailsRenderer) {
+            cell._renderer = this.rowDetailsRenderer;
+            cell._renderer.call(this, cell._content, this, {index: row.index, item: item});
+          } else if (this._rowDetailsTemplate && !cell._instance) {
+            // Stamp the template
+            cell._instance = this._rowDetailsTemplate.templatizer.createInstance();
+            cell._content.innerHTML = '';
+            cell._content.appendChild(cell._instance.root);
+            this._updateItem(row, item);
+          }
+
+          flush();
+          row.style.setProperty('padding-bottom', `${cell.offsetHeight}px`);
+
+          requestAnimationFrame(() => this.notifyResize());
+        }
+      }
+      if (hiddenChanged) {
+        this._updateMetrics();
+        this._positionItems();
+      }
+    }
+
+    _updateDetailsCellHeights() {
+      Array.from(this.$.items.querySelectorAll('[part~="details-cell"]:not([hidden])')).forEach(cell => {
+        cell.parentElement.style.setProperty('padding-bottom', `${cell.offsetHeight}px`);
+      });
+    }
+
+    _isDetailsOpened(item) {
+      return this.detailsOpenedItems && this._getItemIndexInArray(item, this.detailsOpenedItems) !== -1;
+    }
+
+    /**
+     * Open the details row of a given item.
+     */
+    openItemDetails(item) {
+      if (!this._isDetailsOpened(item)) {
+        this.push('detailsOpenedItems', item);
+      }
+    }
+
+    /**
+     * Close the details row of a given item.
+     */
+    closeItemDetails(item) {
+      if (this._isDetailsOpened(item)) {
+        this.splice('detailsOpenedItems', this._getItemIndexInArray(item, this.detailsOpenedItems), 1);
+      }
+    }
+
+    _detailsOpenedInstanceChangedCallback(instance, value) {
+      if (super._detailsOpenedInstanceChangedCallback) {
+        super._detailsOpenedInstanceChangedCallback(instance, value);
+      }
+      if (value) {
+        this.openItemDetails(instance.item);
+      } else {
+        this.closeItemDetails(instance.item);
+      }
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const ScrollMixin = superClass => class ScrollMixin extends superClass {
+
+    get _timeouts() {
+      return {
+        SCROLL_PERIOD: 1000,
+        WHEEL_SCROLLING: 200,
+        SCROLLING: 100,
+        IGNORE_WHEEL: 500
+      };
+    }
+
+    static get properties() {
+      return {
+
+        // Cached array of frozen cells
+        _frozenCells: {
+          type: Array,
+          value: function() {
+            return [];
+          },
+        },
+
+        _scrollbarWidth: {
+          type: Number,
+          value: function() {
+            // Create the measurement node
+            var scrollDiv = document.createElement('div');
+            scrollDiv.style.width = '100px';
+            scrollDiv.style.height = '100px';
+            scrollDiv.style.overflow = 'scroll';
+            scrollDiv.style.position = 'absolute';
+            scrollDiv.style.top = '-9999px';
+            document.body.appendChild(scrollDiv);
+            // Get the scrollbar width
+            var scrollbarWidth = scrollDiv.offsetWidth - scrollDiv.clientWidth;
+            // Delete the DIV
+            document.body.removeChild(scrollDiv);
+            return scrollbarWidth;
+          }
+        },
+
+        _rowWithFocusedElement: Element,
+
+        _deltaYAcc: {
+          type: Number,
+          value: 0
+        }
+
+      };
+    }
+
+    static get observers() {
+      return [
+        '_scrollHeightUpdated(_estScrollHeight)',
+        '_scrollViewportHeightUpdated(_viewportHeight)'
+      ];
+    }
+
+    // Override (from iron-scroll-target-behavior) to avoid document scroll
+    set _scrollTop(top) {
+      this.$.table.scrollTop = top;
+    }
+
+    get _scrollTop() {
+      return this.$.table.scrollTop;
+    }
+
+    constructor() {
+      super();
+      this._scrollLineHeight = this._getScrollLineHeight();
+    }
+
+    /**
+     * @returns {Number|undefined} - The browser's default font-size in pixels
+     */
+    _getScrollLineHeight() {
+      const el = document.createElement('div');
+      el.style.fontSize = 'initial';
+      el.style.display = 'none';
+      document.body.appendChild(el);
+      const fontSize = window.getComputedStyle(el).fontSize;
+      document.body.removeChild(el);
+      return fontSize ? window.parseInt(fontSize) : undefined;
+    }
+
+    _scrollViewportHeightUpdated(_viewportHeight) {
+      this._scrollPageHeight = _viewportHeight - this.$.header.clientHeight - this.$.footer.clientHeight - this._scrollLineHeight;
+    }
+
+    ready() {
+      super.ready();
+      this.scrollTarget = this.$.table;
+
+      this.addEventListener('wheel', e => {
+        this._wheelScrolling = true;
+        this._debouncerWheelScrolling = Debouncer.debounce(
+          this._debouncerWheelScrolling,
+          timeOut.after(this._timeouts.WHEEL_SCROLLING),
+          () => this._wheelScrolling = false
+        );
+        this._onWheel(e);
+      });
+
+      this.$.table.addEventListener('scroll', e => {
+        if (this.$.outerscroller.outerScrolling) {
+          e.stopImmediatePropagation();
+        }
+      }, true);
+
+      this.$.items.addEventListener('focusin', (e) => {
+        const itemsIndex = e.composedPath().indexOf(this.$.items);
+        this._rowWithFocusedElement = e.composedPath()[itemsIndex - 1];
+      });
+      this.$.items.addEventListener('focusout', () => this._rowWithFocusedElement = undefined);
+    }
+
+    /**
+     * Scroll to a specific row index in the virtual list. Note that the row index is
+     * not always the same for any particular item. For example, sorting/filtering/expanding
+     * or collapsing hierarchical items can affect the row index related to an item.
+     *
+     * @param {number} index Row index to scroll to
+     */
+    scrollToIndex(index) {
+      this._accessIronListAPI(() => super.scrollToIndex(index));
+    }
+
+    _onWheel(e) {
+      if (e.ctrlKey || this._hasScrolledAncestor(e.target, e.deltaX, e.deltaY)) {
+        return;
+      }
+
+      const table = this.$.table;
+
+      let deltaY = e.deltaY;
+      if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+        // Scrolling by "lines of text" instead of pixels
+        deltaY *= this._scrollLineHeight;
+      } else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+        // Scrolling by "pages" instead of pixels
+        deltaY *= this._scrollPageHeight;
+      }
+
+      if (this._wheelAnimationFrame) {
+        // Skip new wheel events while one is being processed
+        this._deltaYAcc += deltaY;
+        e.preventDefault();
+        return;
+      }
+
+      deltaY += this._deltaYAcc;
+      this._deltaYAcc = 0;
+
+      this._wheelAnimationFrame = true;
+      this._debouncerWheelAnimationFrame = Debouncer.debounce(
+        this._debouncerWheelAnimationFrame,
+        animationFrame,
+        () => this._wheelAnimationFrame = false
+      );
+
+      var momentum = Math.abs(e.deltaX) + Math.abs(deltaY);
+
+      if (this._canScroll(table, e.deltaX, deltaY)) {
+        e.preventDefault();
+        table.scrollTop += deltaY;
+        table.scrollLeft += e.deltaX;
+        this._scrollHandler();
+        this._hasResidualMomentum = true;
+
+        this._ignoreNewWheel = true;
+        this._debouncerIgnoreNewWheel = Debouncer.debounce(
+          this._debouncerIgnoreNewWheel,
+          timeOut.after(this._timeouts.IGNORE_WHEEL),
+          () => this._ignoreNewWheel = false
+        );
+      } else if (this._hasResidualMomentum && momentum <= this._previousMomentum || this._ignoreNewWheel) {
+        e.preventDefault();
+      } else if (momentum > this._previousMomentum) {
+        this._hasResidualMomentum = false;
+      }
+      this._previousMomentum = momentum;
+    }
+
+    /**
+     * Determines if the element has an ancestor prior to this
+     * cell content that handles the scroll delta
+     */
+    _hasScrolledAncestor(el, deltaX, deltaY) {
+      if (el.localName === 'vaadin-grid-cell-content') {
+        return false;
+      } else if (this._canScroll(el, deltaX, deltaY)
+        && ['auto', 'scroll'].indexOf(getComputedStyle(el).overflow) !== -1) {
+        return true;
+      } else if (el !== this && el.parentElement) {
+        return this._hasScrolledAncestor(el.parentElement, deltaX, deltaY);
+      }
+    }
+
+    /**
+     * Determines if the the given scroll deltas can be applied to the element
+     * (fully or partially)
+     */
+    _canScroll(el, deltaX, deltaY) {
+      return (deltaY > 0 && el.scrollTop < el.scrollHeight - el.offsetHeight) ||
+      (deltaY < 0 && el.scrollTop > 0) ||
+      (deltaX > 0 && el.scrollLeft < el.scrollWidth - el.offsetWidth) ||
+      (deltaX < 0 && el.scrollLeft > 0);
+    }
+
+    _scheduleScrolling() {
+      if (!this._scrollingFrame) {
+        // Defer setting state attributes to avoid Edge hiccups
+        this._scrollingFrame = requestAnimationFrame(() => this._toggleAttribute('scrolling', true, this.$.scroller));
+      }
+      this._debounceScrolling = Debouncer.debounce(
+        this._debounceScrolling,
+        timeOut.after(this._timeouts.SCROLLING),
+        () => {
+          cancelAnimationFrame(this._scrollingFrame);
+          delete this._scrollingFrame;
+          this._toggleAttribute('scrolling', false, this.$.scroller);
+          if (!this.$.outerscroller.outerScrolling) {
+            this._reorderRows();
+          }
+        }
+      );
+
+      if (!this._scrollPeriodFrame) {
+        this._scrollPeriodFrame = requestAnimationFrame(() => this._toggleAttribute('scroll-period', true, this.$.scroller));
+      }
+      this._debounceScrollPeriod = Debouncer.debounce(
+        this._debounceScrollPeriod,
+        timeOut.after(this._timeouts.SCROLL_PERIOD),
+        () => {
+          cancelAnimationFrame(this._scrollPeriodFrame);
+          delete this._scrollPeriodFrame;
+          this._toggleAttribute('scroll-period', false, this.$.scroller);
+        }
+      );
+    }
+
+    _afterScroll() {
+      this._translateStationaryElements();
+
+      if (!this.hasAttribute('reordering')) {
+        this._scheduleScrolling();
+      }
+
+      const os = this.$.outerscroller;
+      if (!this._ios && (this._wheelScrolling || os.passthrough)) {
+        os.syncOuterScroller();
+      }
+
+      if (this._ios) {
+        // Enable vertical rubberband feedback
+        const overScroll = Math.max(-os.scrollTop, 0) ||
+          Math.min(0, os.scrollHeight - os.scrollTop - os.offsetHeight);
+        this.$.items.style.transform = `translateY(${overScroll}px)`;
+      }
+
+      this._updateOverflow();
+    }
+
+    _updateOverflow() {
+      // Set overflow styling attributes
+      let overflow = '';
+      const table = this.$.table;
+      if (table.scrollTop < table.scrollHeight - table.clientHeight) {
+        overflow += ' bottom';
+      }
+
+      if (table.scrollTop > 0) {
+        overflow += ' top';
+      }
+
+      if (table.scrollLeft < table.scrollWidth - table.clientWidth) {
+        overflow += ' right';
+      }
+
+      if (table.scrollLeft > 0) {
+        overflow += ' left';
+      }
+
+      this._debounceOverflow = Debouncer.debounce(
+        this._debounceOverflow,
+        animationFrame,
+        () => {
+          const value = overflow.trim();
+          if (value.length > 0 && this.getAttribute('overflow') !== value) {
+            this.setAttribute('overflow', value);
+          } else if (value.length == 0 && this.hasAttribute('overflow')) {
+            this.removeAttribute('overflow');
+          }
+        }
+      );
+    }
+
+    // correct order needed for preserving correct tab order between cell contents.
+    _reorderRows() {
+      const body = this.$.items;
+      const items = body.querySelectorAll('tr');
+      if (!items.length) {
+        return;
+      }
+
+      const adjustedVirtualStart = this._virtualStart + this._vidxOffset;
+
+      // Which row to use as a target?
+      const targetRow = this._rowWithFocusedElement || Array.from(items).filter(row => !row.hidden)[0];
+      if (!targetRow) {
+        // All rows are hidden, don't reorder
+        return;
+      }
+
+      // Where the target row should be?
+      const targetPhysicalIndex = targetRow.index - adjustedVirtualStart;
+
+      // Reodrer the DOM elements to keep the target row at the target physical index
+      const delta = Array.from(items).indexOf(targetRow) - targetPhysicalIndex;
+      if (delta > 0) {
+        for (let i = 0; i < delta; i++) {
+          body.appendChild(items[i]);
+        }
+      } else if (delta < 0) {
+        for (let i = items.length + delta; i < items.length; i++) {
+          body.insertBefore(items[i], items[0]);
+        }
+      }
+    }
+
+    _frozenCellsChanged() {
+      this._debouncerCacheElements = Debouncer.debounce(
+        this._debouncerCacheElements,
+        microTask,
+        () => {
+          Array.from(this.root.querySelectorAll('[part~="cell"]')).forEach(function(cell) {
+            cell.style.transform = '';
+          });
+          this._frozenCells = Array.prototype.slice.call(this.$.table.querySelectorAll('[frozen]'));
+          this._updateScrollerMeasurements();
+          this._translateStationaryElements();
+        }
+      );
+      this._updateLastFrozen();
+    }
+
+    _updateScrollerMeasurements() {
+      if (this._frozenCells.length > 0 && this.__isRTL) {
+        this.__scrollerMetrics = {
+          scrollWidth: this.$.outerscroller.scrollWidth,
+          clientWidth: this.$.outerscroller.clientWidth
+        };
+      }
+    }
+
+    _updateLastFrozen() {
+      if (!this._columnTree) {
+        return;
+      }
+
+      const columnsRow = this._columnTree[this._columnTree.length - 1].slice(0);
+      columnsRow.sort((a, b) => {
+        return a._order - b._order;
+      });
+      const lastFrozen = columnsRow.reduce((prev, col, index) => {
+        col._lastFrozen = false;
+        return col.frozen && !col.hidden ? index : prev;
+      }, undefined);
+      if (lastFrozen !== undefined) {
+        columnsRow[lastFrozen]._lastFrozen = true;
+      }
+    }
+
+    _translateStationaryElements() {
+      if (this._edge && !this._scrollbarWidth) {
+        // Fixed mode (Tablet Edge)
+        this.$.items.style.transform =
+        this._getTranslate(-this._scrollLeft || 0, -this._scrollTop || 0);
+
+        this.$.footer.style.transform = this.$.header.style.transform =
+        this._getTranslate(-this._scrollLeft || 0, 0);
+      } else {
+        this.$.footer.style.transform = this.$.header.style.transform = this._getTranslate(0, this._scrollTop);
+      }
+
+      if (this._frozenCells.length > 0) {
+        const x = this.__isRTL ?
+          this.__getNormalizedScrollLeft(this.$.table) + this.__scrollerMetrics.clientWidth -
+          this.__scrollerMetrics.scrollWidth
+          : this._scrollLeft;
+        var frozenCellTransform = this._getTranslate(x, 0);
+        for (var i = 0; i < this._frozenCells.length; i++) {
+          this._frozenCells[i].style.transform = frozenCellTransform;
+        }
+      }
+    }
+
+    _getTranslate(x, y) {
+      return 'translate(' + x + 'px,' + y + 'px)';
+    }
+
+    _scrollHeightUpdated(_estScrollHeight) {
+      this.$.outersizer.style.top = this.$.fixedsizer.style.top = _estScrollHeight + 'px';
+    }
+
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * @polymerMixin
+   */
+  const SelectionMixin = superClass => class SelectionMixin extends superClass {
+
+    static get properties() {
+      return {
+        /**
+         * An array that contains the selected items.
+         */
+        selectedItems: {
+          type: Object,
+          notify: true,
+          value: () => []
+        }
+      };
+    }
+
+    static get observers() {
+      return [
+        '_selectedItemsChanged(selectedItems.*)'
+      ];
+    }
+
+    _isSelected(item) {
+      return this.selectedItems && this._getItemIndexInArray(item, this.selectedItems) > -1;
+    }
+
+    /**
+     * Selects the given item.
+     *
+     * @method selectItem
+     * @param {Object} item The item object
+     */
+    selectItem(item) {
+      if (!this._isSelected(item)) {
+        this.push('selectedItems', item);
+      }
+    }
+
+    /**
+     * Deselects the given item if it is already selected.
+     *
+     * @method deselect
+     * @param {Object} item The item object
+     */
+    deselectItem(item) {
+      const index = this._getItemIndexInArray(item, this.selectedItems);
+      if (index > -1) {
+        this.splice('selectedItems', index, 1);
+      }
+    }
+
+    /**
+     * Toggles the selected state of the given item.
+     *
+     * @method toggle
+     * @param {Object} item The item object
+     */
+    _toggleItem(item) {
+      const index = this._getItemIndexInArray(item, this.selectedItems);
+      if (index === -1) {
+        this.selectItem(item);
+      } else {
+        this.deselectItem(item);
+      }
+    }
+
+    _selectedItemsChanged(e) {
+      if (this.$.items.children.length && (e.path === 'selectedItems' || e.path === 'selectedItems.splices')) {
+        Array.from(this.$.items.children).forEach(row => {
+          this._updateItem(row, row._item);
+        });
+      }
+    }
+
+    _selectedInstanceChangedCallback(instance, value) {
+      if (super._selectedInstanceChangedCallback) {
+        super._selectedInstanceChangedCallback(instance, value);
+      }
+      if (value) {
+        this.selectItem(instance.item);
+      } else {
+        this.deselectItem(instance.item);
+      }
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const SortMixin = superClass => class SortMixin extends superClass {
+    static get properties() {
+      return {
+        /**
+         * When `true`, all `<vaadin-grid-sorter>` are applied for sorting.
+         */
+        multiSort: {
+          type: Boolean,
+          value: false
+        },
+
+        _sorters: {
+          type: Array,
+          value: function() {
+            return [];
+          }
+        },
+
+        _previousSorters: {
+          type: Array,
+          value: function() {
+            return [];
+          }
+        }
+      };
+    }
+
+    ready() {
+      super.ready();
+      this.addEventListener('sorter-changed', this._onSorterChanged);
+
+      // With Polymer 2 & shady the 'sorter-changed' listener isn't guaranteed to be registered
+      // before child <vaadin-grid-sorter>'s upgrade and fire the events. The following
+      // makes sure that 'sorter-changed' is fired for all <vaadin-grid-sorter> elements
+      // after this (<vaadin-grid>) is ready (and the listeners are active).
+      if (window.ShadyDOM) {
+        microTask.run(() => {
+          const sorters = this.querySelectorAll('vaadin-grid-sorter');
+          Array.from(sorters).forEach((sorter) => {
+            // Don't try to fire if the sorter hasn't been upgraded yet
+            if (sorter instanceof PolymerElement) {
+              sorter.dispatchEvent(new CustomEvent('sorter-changed', {bubbles: true, composed: true}));
+            }
+          });
+        });
+      }
+    }
+
+    _onSorterChanged(e) {
+      const sorter = e.target;
+
+      this._removeArrayItem(this._sorters, sorter);
+      sorter._order = null;
+
+      if (this.multiSort) {
+        if (sorter.direction) {
+          this._sorters.unshift(sorter);
+        }
+
+        this._sorters.forEach((sorter, index) => sorter._order = this._sorters.length > 1 ? index : null, this);
+      } else {
+        if (sorter.direction) {
+          this._sorters.forEach(sorter => {
+            sorter._order = null;
+            sorter.direction = null;
+          });
+          this._sorters = [sorter];
+        }
+      }
+
+      e.stopPropagation();
+
+      if (this.dataProvider &&
+        // No need to clear cache if sorters didn't change
+        JSON.stringify(this._previousSorters) !== JSON.stringify(this._mapSorters())) {
+        this.clearCache();
+      }
+
+      this._a11yUpdateSorters();
+
+      this._previousSorters = this._mapSorters();
+    }
+
+    _mapSorters() {
+      return this._sorters.map(sorter => {
+        return {
+          path: sorter.path,
+          direction: sorter.direction
+        };
+      });
+    }
+
+    _removeArrayItem(array, item) {
+      const index = array.indexOf(item);
+      if (index > -1) {
+        array.splice(index, 1);
+      }
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2018 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * @polymerMixin
+   */
+  const StylingMixin = superClass => class StylingMixin extends superClass {
+
+    static get properties() {
+      return {
+        /**
+         * A function that allows generating CSS class names for grid cells
+         * based on their row and column. The return value should be the generated
+         * class name as a string, or multiple class names separated by whitespace
+         * characters.
+         *
+         * Receives two arguments:
+         * - `column` The `<vaadin-grid-column>` element (`undefined` for details-cell).
+         * - `rowData` The object with the properties related with
+         *   the rendered item, contains:
+         *   - `rowData.index` The index of the item.
+         *   - `rowData.item` The item.
+         *   - `rowData.expanded` Sublevel toggle state.
+         *   - `rowData.level` Level of the tree represented with a horizontal offset of the toggle button.
+         *   - `rowData.selected` Selected state.
+         */
+        cellClassNameGenerator: Function
+      };
+    }
+
+    static get observers() {
+      return [
+        '__cellClassNameGeneratorChanged(cellClassNameGenerator)'
+      ];
+    }
+
+    __cellClassNameGeneratorChanged(cellClassGenerator) {
+      this.generateCellClassNames();
+    }
+
+    /**
+     * Runs the `cellClassNameGenerator` for the visible cells.
+     * If the generator depends on varying conditions, you need to
+     * call this function manually in order to update the styles when
+     * the conditions change.
+     */
+    generateCellClassNames() {
+      Array.from(this.$.items.children).filter(row => !row.hidden).forEach(
+        row => this._generateCellClassNames(row, this.__getRowModel(row)));
+    }
+
+    _generateCellClassNames(row, rowData) {
+      Array.from(row.children).forEach(cell => {
+        if (cell.__generatedClasses) {
+          cell.__generatedClasses.forEach(className => cell.classList.remove(className));
+        }
+        if (this.cellClassNameGenerator) {
+          const result = this.cellClassNameGenerator(cell._column, rowData);
+          cell.__generatedClasses = result && result.split(' ').filter(className => className.length > 0);
+          if (cell.__generatedClasses) {
+            cell.__generatedClasses.forEach(className => cell.classList.add(className));
+          }
+        }
+      });
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2019 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const DropMode = {
+    BETWEEN: 'between',
+    ON_TOP: 'on-top',
+    ON_TOP_OR_BETWEEN: 'on-top-or-between',
+    ON_GRID: 'on-grid'
+  };
+
+  const DropLocation = {
+    ON_TOP: 'on-top',
+    ABOVE: 'above',
+    BELOW: 'below',
+    EMPTY: 'empty'
+  };
+
+  /**
+   * @polymerMixin
+   */
+  const DragAndDropMixin = superClass => class DragAndDropMixin extends superClass {
+
+    static get properties() {
+      return {
+        /**
+         * Defines the locations within the Grid row where an element can be dropped.
+         *
+         * Possible values are:
+         * - `between`: The drop event can happen between Grid rows.
+         * - `on-top`: The drop event can happen on top of Grid rows.
+         * - `on-top-or-between`: The drop event can happen either on top of or between Grid rows.
+         * - `on-grid`: The drop event will not happen on any specific row, it will show the drop target outline around the whole grid.
+         */
+        dropMode: String,
+
+        /**
+         * Marks the grid's rows to be available for dragging.
+         */
+        rowsDraggable: Boolean,
+
+        /**
+         * A function that filters dragging of specific grid rows. The return value should be false
+         * if dragging of the row should be disabled.
+         *
+         * Receives one argument:
+         * - `rowData` The object with the properties related with
+         *   the rendered item, contains:
+         *   - `rowData.index` The index of the item.
+         *   - `rowData.item` The item.
+         *   - `rowData.expanded` Sublevel toggle state.
+         *   - `rowData.level` Level of the tree represented with a horizontal offset of the toggle button.
+         *   - `rowData.selected` Selected state.
+         */
+        dragFilter: Function,
+
+        /**
+         * A function that filters dropping on specific grid rows. The return value should be false
+         * if dropping on the row should be disabled.
+         *
+         * Receives one argument:
+         * - `rowData` The object with the properties related with
+         *   the rendered item, contains:
+         *   - `rowData.index` The index of the item.
+         *   - `rowData.item` The item.
+         *   - `rowData.expanded` Sublevel toggle state.
+         *   - `rowData.level` Level of the tree represented with a horizontal offset of the toggle button.
+         *   - `rowData.selected` Selected state.
+         */
+        dropFilter: Function,
+
+        __dndAutoScrollThreshold: {
+          value: 50
+        }
+
+      };
+    }
+
+    static get observers() {
+      return [
+        '_dragDropAccessChanged(rowsDraggable, dropMode, dragFilter, dropFilter)'
+      ];
+    }
+
+    ready() {
+      super.ready();
+      this.$.table.addEventListener('dragstart', this._onDragStart.bind(this));
+      this.$.table.addEventListener('dragend', this._onDragEnd.bind(this));
+      this.$.table.addEventListener('dragover', this._onDragOver.bind(this));
+      this.$.table.addEventListener('dragleave', this._onDragLeave.bind(this));
+      this.$.table.addEventListener('drop', this._onDrop.bind(this));
+      this.$.table.addEventListener('dragenter', e => {
+        if (this.dropMode) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      });
+
+    }
+
+    _onDragStart(e) {
+      if (this.rowsDraggable) {
+        let row = e.target;
+        if (row.localName === 'vaadin-grid-cell-content') {
+          // The draggable node is the cell content element on browsers that support native shadow
+          row = row.assignedSlot.parentNode.parentNode;
+        }
+        if (row.parentNode !== this.$.items) {
+          return;
+        }
+
+        e.stopPropagation();
+        this._toggleAttribute('dragging-rows', true, this);
+
+        if (this._safari) {
+          // Safari doesn't get proper drag images from transformed
+          // elements so we need to switch to top temporarily
+          const transform = row.style.transform;
+          row.style.top = /translateY\((.*)\)/.exec(transform)[1];
+          row.style.transform = 'none';
+          requestAnimationFrame(() => {
+            row.style.top = '';
+            row.style.transform = transform;
+          });
+        }
+
+        const rowRect = row.getBoundingClientRect();
+        if (!window.ShadyDOM) {
+          if (this._ios) {
+            e.dataTransfer.setDragImage(row);
+          } else {
+            e.dataTransfer.setDragImage(row, e.clientX - rowRect.left, e.clientY - rowRect.top);
+          }
+
+        }
+
+        let rows = [row];
+        if (this._isSelected(row._item)) {
+          rows = this.__getViewportRows()
+            .filter(row => this._isSelected(row._item))
+            .filter(row => !this.dragFilter || this.dragFilter(this.__getRowModel(row)));
+        }
+
+        // Set the default transfer data
+        e.dataTransfer.setData('text', this.__formatDefaultTransferData(rows));
+
+        row.setAttribute('dragstart', rows.length > 1 ? rows.length : '');
+        this.updateStyles({
+          '--_grid-drag-start-x': `${e.clientX - rowRect.left + 20}px`,
+          '--_grid-drag-start-y': `${e.clientY - rowRect.top + 10}px`
+        });
+
+        requestAnimationFrame(() => {
+          row.removeAttribute('dragstart');
+          this.updateStyles({'--_grid-drag-start-x': '', '--_grid-drag-start-y': ''});
+        });
+
+        const event = new CustomEvent('grid-dragstart', {
+          detail: {
+            draggedItems: rows.map(row => row._item),
+            setDragData: (type, data) => e.dataTransfer.setData(type, data),
+            setDraggedItemsCount: count => row.setAttribute('dragstart', count)
+          }
+        });
+        event.originalEvent = e;
+        this.dispatchEvent(event);
+      }
+    }
+
+    _onDragEnd(e) {
+      this._toggleAttribute('dragging-rows', false, this);
+      e.stopPropagation();
+      const event = new CustomEvent('grid-dragend');
+      event.originalEvent = e;
+      this.dispatchEvent(event);
+    }
+
+    _onDragLeave(e) {
+      e.stopPropagation();
+      this._clearDragStyles();
+    }
+
+    _onDragOver(e) {
+
+      if (this.dropMode) {
+        this._dropLocation = undefined;
+        this._dragOverItem = undefined;
+
+        if (this.__dndAutoScroll(e.clientY)) {
+          this._clearDragStyles();
+          return;
+        }
+
+        let row = e.composedPath().filter(node => node.localName === 'tr')[0];
+
+        if (!this._effectiveSize || this.dropMode === DropMode.ON_GRID) {
+          // The grid is empty or "on-grid" drop mode was used, always default to "empty"
+          this._dropLocation = DropLocation.EMPTY;
+        } else if (!row || row.parentNode !== this.$.items) {
+          // The dragover didn't occur on a body row but the grid has items
+          if (row) {
+            // The dragover occurred over a header/footer row
+            return;
+          } else if (this.dropMode === DropMode.BETWEEN || this.dropMode === DropMode.ON_TOP_OR_BETWEEN) {
+            // The drop mode allows setting the last row as the drag over item
+            row = Array.from(this.$.items.children).filter(row => !row.hidden).pop();
+            this._dropLocation = DropLocation.BELOW;
+          } else {
+            // Drop mode on-top used but the dragover didn't occur over one of the existing rows
+            return;
+          }
+        } else {
+          // The dragover occurred on a body row, determine the drop location from coordinates
+          const rowRect = row.getBoundingClientRect();
+
+          this._dropLocation = DropLocation.ON_TOP;
+
+          if (this.dropMode === DropMode.BETWEEN) {
+            const dropAbove = e.clientY - rowRect.top < rowRect.bottom - e.clientY;
+            this._dropLocation = dropAbove ? DropLocation.ABOVE : DropLocation.BELOW;
+
+          } else if (this.dropMode === DropMode.ON_TOP_OR_BETWEEN) {
+            if (e.clientY - rowRect.top < rowRect.height / 3) {
+              this._dropLocation = DropLocation.ABOVE;
+            } else if (e.clientY - rowRect.top > (rowRect.height / 3) * 2) {
+              this._dropLocation = DropLocation.BELOW;
+            }
+          }
+        }
+
+        if (row && row.hasAttribute('drop-disabled')) {
+          this._dropLocation = undefined;
+          return;
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+
+        if (this._dropLocation === DropLocation.EMPTY) {
+          this._toggleAttribute('dragover', true, this);
+        } else if (row) {
+          this._dragOverItem = row._item;
+          if (row.getAttribute('dragover') !== this._dropLocation) {
+            row.setAttribute('dragover', this._dropLocation);
+          }
+        } else {
+          this._clearDragStyles();
+        }
+      }
+    }
+
+    __dndAutoScroll(clientY) {
+      if (this.__dndAutoScrolling) {
+        return true;
+      }
+
+      const headerBottom = this.$.header.getBoundingClientRect().bottom;
+      const footerTop = this.$.footer.getBoundingClientRect().top;
+      const topDiff = headerBottom - clientY + this.__dndAutoScrollThreshold;
+      const bottomDiff = clientY - footerTop + this.__dndAutoScrollThreshold;
+      let scrollTopDelta = 0;
+
+      if (bottomDiff > 0) {
+        scrollTopDelta = bottomDiff * 2;
+      } else if (topDiff > 0) {
+        scrollTopDelta = -topDiff * 2;
+      }
+
+      if (scrollTopDelta) {
+        const scrollTop = this.$.table.scrollTop;
+        this.$.table.scrollTop += scrollTopDelta;
+        const scrollTopChanged = scrollTop !== this.$.table.scrollTop;
+        if (scrollTopChanged) {
+          this.__dndAutoScrolling = true;
+          // Disallow more auto-scrolls within 20ms
+          setTimeout(() => this.__dndAutoScrolling = false, 20);
+          this._scrollHandler();
+          return true;
+        }
+      }
+    }
+
+    __getViewportRows() {
+      const headerBottom = this.$.header.getBoundingClientRect().bottom;
+      const footerTop = this.$.footer.getBoundingClientRect().top;
+      return Array.from(this.$.items.children)
+        .filter(row => {
+          const rowRect = row.getBoundingClientRect();
+          return rowRect.bottom > headerBottom && rowRect.top < footerTop;
+        });
+    }
+
+    _clearDragStyles() {
+      this.removeAttribute('dragover');
+      Array.from(this.$.items.children).forEach(row => row.removeAttribute('dragover'));
+    }
+
+    _onDrop(e) {
+      if (this.dropMode) {
+        e.stopPropagation();
+        e.preventDefault();
+
+        const dragData = e.dataTransfer.types && Array.from(e.dataTransfer.types).map(type => {
+          return {
+            type,
+            data: e.dataTransfer.getData(type)
+          };
+        });
+
+        this._clearDragStyles();
+
+        const event = new CustomEvent('grid-drop', {
+          bubbles: e.bubbles,
+          cancelable: e.cancelable,
+          detail: {
+            dropTargetItem: this._dragOverItem,
+            dropLocation: this._dropLocation,
+            dragData
+          }
+        });
+        event.originalEvent = e;
+        this.dispatchEvent(event);
+      }
+    }
+
+    __formatDefaultTransferData(rows) {
+      return rows
+        .map(row => {
+          return Array.from(row.children)
+            .filter(cell => !cell.hidden && cell.getAttribute('part').indexOf('details-cell') === -1)
+            .sort((a, b) => {
+              return a._column._order > b._column._order ? 1 : -1;
+            })
+            .map(cell => cell._content.textContent.trim())
+            .filter(content => content)
+            .join('\t');
+        })
+        .join('\n');
+    }
+
+    _dragDropAccessChanged(rowsDraggable, dropMode, dragFilter, dropFilter) {
+      this.filterDragAndDrop();
+    }
+
+    /**
+     * Runs the `dragFilter` and `dropFilter` hooks for the visible cells.
+     * If the filter depends on varying conditions, you may need to
+     * call this function manually in order to update the draggability when
+     * the conditions change.
+     */
+    filterDragAndDrop() {
+      Array.from(this.$.items.children).filter(row => !row.hidden).forEach(
+        row => {
+          this._filterDragAndDrop(row, this.__getRowModel(row));
+        }
+      );
+    }
+
+    _filterDragAndDrop(row, rowData) {
+      const dragDisabled = !this.rowsDraggable || (this.dragFilter && !this.dragFilter(rowData));
+      const dropDisabled = !this.dropMode || (this.dropFilter && !this.dropFilter(rowData));
+
+      const draggableElements = window.ShadyDOM
+        ? [row]
+        : Array.from(row.children).map(cell => cell._content);
+
+      draggableElements.forEach(e => {
+        if (dragDisabled) {
+          e.removeAttribute('draggable');
+        } else {
+          e.setAttribute('draggable', true);
+        }
+      });
+
+      this._toggleAttribute('drag-disabled', dragDisabled, row);
+      this._toggleAttribute('drop-disabled', dropDisabled, row);
+    }
+
+    /**
+     * Fired when starting to drag grid rows.
+     *
+     * @event grid-dragstart
+     * @param {Object} originalEvent The native dragstart event
+     * @param {Object} detail
+     * @param {Object} detail.draggedItems the items in the visible viewport that are dragged
+     * @param {Function} detail.setDraggedItemsCount Overrides the default number shown in the drag image on multi row drag.
+     * Parameter is of type number.
+     * @param {Function} detail.setDragData Sets dataTransfer data for the drag operation.
+     * Note that "text" is the only data type supported by all the browsers the grid currently supports (including IE11).
+     * The function takes two parameters:
+     * - type:string The type of the data
+     * - data:string The data
+     */
+
+    /**
+     * Fired when the dragging of the rows ends.
+     *
+     * @event grid-dragend
+     * @param {Object} originalEvent The native dragend event
+     */
+
+    /**
+     * Fired when a drop occurs on top of the grid.
+     *
+     * @event grid-drop
+     * @param {Object} originalEvent The native drop event
+     * @param {Object} detail
+     * @param {Object} detail.dropTargetItem The item of the grid row on which the drop occurred.
+     * @param {string} detail.dropLocation The position at which the drop event took place relative to a row.
+     * Depending on the dropMode value, the drop location can be one of the following
+     * - `on-top`: when the drop occurred on top of the row
+     * - `above`: when the drop occurred above the row
+     * - `below`: when the drop occurred below the row
+     * - `empty`: when the drop occurred over the grid, not relative to any specific row
+     * @param {string} detail.dragData An array of items with the payload as a string representation as the
+     * `data` property and the type of the data as `type` property.
+     */
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * @polymerMixin
+   */
+  const KeyboardNavigationMixin = superClass => class KeyboardNavigationMixin extends superClass {
+    static get properties() {
+      return {
+        _headerFocusable: {
+          type: Object,
+          observer: '_focusableChanged'
+        },
+        _itemsFocusable: {
+          type: Object,
+          observer: '_focusableChanged'
+        },
+        _footerFocusable: {
+          type: Object,
+          observer: '_focusableChanged'
+        },
+        _navigatingIsHidden: Boolean,
+        _focusedItemIndex: {
+          type: Number,
+          value: 0
+        },
+        _focusedColumnOrder: Number
+      };
+    }
+
+    ready() {
+      super.ready();
+
+      if (this._ios || this._android) {
+        // Disable keyboard navigation on mobile devices
+        return;
+      }
+
+      this.addEventListener('keydown', this._onKeyDown);
+      this.addEventListener('keyup', this._onKeyUp);
+
+      this.addEventListener('focusin', this._onFocusIn);
+      this.addEventListener('focusout', this._onFocusOut);
+
+      // When focus goes from cell to another cell, focusin/focusout events do
+      // not escape the grid’s shadowRoot, thus listening inside the shadowRoot.
+      this.$.table.addEventListener('focusin', this._onCellFocusIn.bind(this));
+      this.$.table.addEventListener('focusout', this._onCellFocusOut.bind(this));
+
+      this.addEventListener('mousedown', () => {
+        this._toggleAttribute('navigating', false, this);
+        this._isMousedown = true;
+      });
+      this.addEventListener('mouseup', () => this._isMousedown = false);
+    }
+
+    _focusableChanged(focusable, oldFocusable) {
+      if (oldFocusable) {
+        oldFocusable.setAttribute('tabindex', '-1');
+      }
+      if (focusable) {
+        focusable.setAttribute('tabindex', '0');
+      }
+    }
+
+    _onKeyDown(e) {
+      // Ensure standard key value, unified across browsers
+      let key = e.key;
+      if (key === 'Up' || key === 'Down' || key === 'Left' || key === 'Right') {
+        // MSIE & Edge
+        key = 'Arrow' + key;
+      }
+      if (key === 'Esc') {
+        // MSIE & Edge
+        key = 'Escape';
+      }
+      if (key === 'Spacebar') {
+        // MSIE
+        key = ' ';
+      }
+
+      let keyGroup;
+      switch (key) {
+        case 'ArrowUp':
+        case 'ArrowDown':
+        case 'ArrowLeft':
+        case 'ArrowRight':
+        case 'PageUp':
+        case 'PageDown':
+        case 'Home':
+        case 'End':
+          keyGroup = 'Navigation';
+          break;
+        case 'Enter':
+        case 'Escape':
+        case 'F2':
+          keyGroup = 'Interaction';
+          break;
+        case 'Tab':
+          keyGroup = 'Tab';
+          break;
+        case ' ':
+          keyGroup = 'Space';
+          break;
+      }
+
+      this._detectInteracting(e);
+      if (this.hasAttribute('interacting') && keyGroup !== 'Interaction') {
+        // When in the interacting mode, only the “Interaction” keys are handled.
+        keyGroup = undefined;
+      }
+
+      if (keyGroup) {
+        this[`_on${keyGroup}KeyDown`](e, key);
+      }
+    }
+
+    _ensureScrolledToIndex(index) {
+      const targetRowInDom = Array.from(this.$.items.children).filter(child => child.index === index)[0];
+      if (!targetRowInDom) {
+        this._scrollToIndex(index);
+      }
+    }
+
+    _onNavigationKeyDown(e, key) {
+      e.preventDefault();
+
+      function indexOfChildElement(el) {
+        return Array.prototype.indexOf.call(el.parentNode.children, el);
+      }
+
+      const visibleItemsCount = this._lastVisibleIndex - this._firstVisibleIndex - 1;
+
+      let dx = 0, dy = 0;
+      switch (key) {
+        case 'ArrowRight':
+          dx = this.__isRTL ? -1 : 1;
+          break;
+        case 'ArrowLeft':
+          dx = this.__isRTL ? 1 : -1;
+          break;
+        case 'Home':
+          dx = -Infinity;
+          e.ctrlKey && (dy = -Infinity);
+          break;
+        case 'End':
+          dx = Infinity;
+          e.ctrlKey && (dy = Infinity);
+          break;
+        case 'ArrowDown':
+          dy = 1;
+          break;
+        case 'ArrowUp':
+          dy = -1;
+          break;
+        case 'PageDown':
+          dy = visibleItemsCount;
+          break;
+        case 'PageUp':
+          dy = -visibleItemsCount;
+          break;
+      }
+
+      const activeCell = e.composedPath()[0];
+      const columnIndex = indexOfChildElement(activeCell);
+      const isRowDetails = this._elementMatches(activeCell, '[part~="details-cell"]');
+
+      const activeRow = activeCell.parentNode;
+
+      const activeRowGroup = activeRow.parentNode;
+      const maxRowIndex = (activeRowGroup === this.$.items ? this._effectiveSize : activeRowGroup.children.length) - 1;
+
+      // Body rows have index property, otherwise DOM child index of the row is used.
+      const rowIndex = (activeRowGroup === this.$.items) ?
+        (this._focusedItemIndex !== undefined ? this._focusedItemIndex : activeRow.index) :
+        indexOfChildElement(activeRow);
+
+      // Index of the destination row
+      let dstRowIndex = Math.max(0, Math.min(rowIndex + dy, maxRowIndex));
+
+      // Row details navigation logic
+      let dstIsRowDetails = false;
+      if (activeRowGroup === this.$.items) {
+        const item = activeRow._item;
+        const dstItem = this._cache.getItemForIndex(dstRowIndex);
+        // Should we navigate to row details?
+        if (isRowDetails) {
+          dstIsRowDetails = dy === 0;
+        } else {
+          dstIsRowDetails = dy === 1 && this._isDetailsOpened(item) ||
+            dy === -1 && dstRowIndex !== rowIndex && this._isDetailsOpened(dstItem);
+        }
+        // Should we navigate between details and regular cells of the same row?
+        if (dstIsRowDetails !== isRowDetails &&
+            (dy === 1 && dstIsRowDetails || dy === -1 && !dstIsRowDetails)) {
+          dstRowIndex = rowIndex;
+        }
+      }
+
+      // Header and footer could have hidden rows, e. g., if none of the columns
+      // or groups on the given column tree level define template. Skip them
+      // in vertical keyboard navigation.
+      if (activeRowGroup !== this.$.items) {
+        if (dstRowIndex > rowIndex) {
+          while (
+            dstRowIndex < maxRowIndex &&
+            activeRowGroup.children[dstRowIndex].hidden
+          ) {
+            dstRowIndex++;
+          }
+        } else if (dstRowIndex < rowIndex) {
+          while (
+            dstRowIndex > 0 &&
+            activeRowGroup.children[dstRowIndex].hidden
+          ) {
+            dstRowIndex--;
+          }
+        }
+      }
+
+      // _focusedColumnOrder is memoized — this is to ensure predictable
+      // navigation when entering and leaving detail and column group cells.
+      if (this._focusedColumnOrder === undefined) {
+        if (isRowDetails) {
+          this._focusedColumnOrder = 0;
+        } else {
+          this._focusedColumnOrder = this._getColumns(activeRowGroup, rowIndex).filter(c => !c.hidden)[columnIndex]._order;
+        }
+      }
+
+      // Find orderedColumnIndex — the index of order closest matching the
+      // original _focusedColumnOrder in the sorted array of orders
+      // of the visible columns on the destination row.
+      const dstColumns = this._getColumns(activeRowGroup, dstRowIndex).filter(c => !c.hidden);
+      const dstSortedColumnOrders = dstColumns.map(c => c._order)
+        .sort((b, a) => (b - a));
+      const maxOrderedColumnIndex = dstSortedColumnOrders.length - 1;
+      const orderedColumnIndex = dstSortedColumnOrders.indexOf(
+        dstSortedColumnOrders.slice(0).sort((b, a) =>
+          Math.abs(b - this._focusedColumnOrder) - Math.abs(a - this._focusedColumnOrder)
+        )[0]
+      );
+
+      // Index of the destination column order
+      const dstOrderedColumnIndex = (dy === 0 && isRowDetails) ? orderedColumnIndex :
+        Math.max(0, Math.min(orderedColumnIndex + dx, maxOrderedColumnIndex));
+
+      if (dstOrderedColumnIndex !== orderedColumnIndex) {
+        // Horizontal movement invalidates stored _focusedColumnOrder
+        this._focusedColumnOrder = undefined;
+      }
+
+      // Ensure correct vertical scroll position, destination row is visible
+      if (activeRowGroup === this.$.items) {
+        this._ensureScrolledToIndex(dstRowIndex);
+      }
+
+      // This has to be set after scrolling, otherwise it can be removed by
+      // `_preventScrollerRotatingCellFocus(item, index)` during scrolling.
+      this._toggleAttribute('navigating', true, this);
+
+      const columnIndexByOrder = dstColumns.reduce((acc, col, i) => (acc[col._order] = i, acc), {});
+      const dstColumnIndex = columnIndexByOrder[dstSortedColumnOrders[dstOrderedColumnIndex]];
+
+      // For body rows, use index property to find destination row, otherwise use DOM child index
+      const dstRow = activeRowGroup === this.$.items ?
+        Array.from(activeRowGroup.children).filter(el => el.index === dstRowIndex)[0] :
+        activeRowGroup.children[dstRowIndex];
+      if (!dstRow) {
+        return;
+      }
+
+      // Here we go!
+      const dstCell = dstIsRowDetails ?
+        Array.from(dstRow.children)
+          .filter(el => this._elementMatches(el, '[part~="details-cell"]'))[0] :
+        dstRow.children[dstColumnIndex];
+      this._scrollHorizontallyToCell(dstCell);
+      if (activeRowGroup === this.$.items) {
+        // When scrolling with repeated keydown, sometimes FocusEvent listeners
+        // are too late to update _focusedItemIndex. Ensure next keydown
+        // listener invocation gets updated _focusedItemIndex value.
+        this._focusedItemIndex = dstRowIndex;
+      }
+
+      if (activeRowGroup === this.$.items) {
+        const dstRect = dstCell.getBoundingClientRect();
+        const footerTop = this.$.footer.getBoundingClientRect().top;
+        const headerBottom = this.$.header.getBoundingClientRect().bottom;
+        if (dstRect.bottom > footerTop) {
+          this.$.table.scrollTop += dstRect.bottom - footerTop;
+          this._scrollHandler();
+        } else if (dstRect.top < headerBottom) {
+          this.$.table.scrollTop -= headerBottom - dstRect.top;
+          this._scrollHandler();
+        }
+      }
+
+      dstCell.focus();
+    }
+
+    _parseEventPath(path) {
+      const tableIndex = path.indexOf(this.$.table);
+      return {
+        rowGroup: path[tableIndex - 1],
+        row: path[tableIndex - 2],
+        cell: path[tableIndex - 3]
+      };
+    }
+
+    _onInteractionKeyDown(e, key) {
+      const localTarget = e.composedPath()[0];
+      const localTargetIsTextInput = localTarget.localName === 'input' &&
+        !/^(button|checkbox|color|file|image|radio|range|reset|submit)$/i.test(localTarget.type);
+
+      let wantInteracting;
+      switch (key) {
+        case 'Enter':
+          wantInteracting = this.hasAttribute('interacting') ? !localTargetIsTextInput : true;
+          break;
+        case 'Escape':
+          wantInteracting = false;
+          break;
+        case 'F2':
+          wantInteracting = !this.hasAttribute('interacting');
+          break;
+      }
+
+      const {cell} = this._parseEventPath(e.composedPath());
+
+      if (this.hasAttribute('interacting') !== wantInteracting) {
+        if (wantInteracting) {
+          const focusTarget = cell._content.querySelector('[focus-target]') ||
+            cell._content.firstElementChild;
+          if (focusTarget) {
+            e.preventDefault();
+            focusTarget.focus();
+            this._toggleAttribute('interacting', true, this);
+            this._toggleAttribute('navigating', false, this);
+          }
+        } else {
+          e.preventDefault();
+          this._focusedColumnOrder = undefined;
+          cell.focus();
+          this._toggleAttribute('interacting', false, this);
+          this._toggleAttribute('navigating', true, this);
+        }
+      }
+    }
+
+    _predictFocusStepTarget(srcElement, step) {
+      const tabOrder = [
+        this.$.table,
+        this._headerFocusable,
+        this._itemsFocusable,
+        this._footerFocusable,
+        this.$.focusexit
+      ];
+
+      let index = tabOrder.indexOf(srcElement);
+
+      index += step;
+      while (index >= 0 && index <= tabOrder.length - 1 &&
+          (!tabOrder[index] || tabOrder[index].parentNode.hidden)) {
+        index += step;
+      }
+
+      return tabOrder[index];
+    }
+
+    _onTabKeyDown(e) {
+      const focusTarget = this._predictFocusStepTarget(e.composedPath()[0], e.shiftKey ? -1 : 1);
+
+      if (focusTarget === this.$.table) {
+        // The focus is about to exit the grid to the top.
+        this.$.table.focus();
+      } else if (focusTarget === this.$.focusexit) {
+        // The focus is about to exit the grid to the bottom.
+        this.$.focusexit.focus();
+      } else if (focusTarget === this._itemsFocusable) {
+        let itemsFocusTarget = focusTarget;
+        const targetRow = this._itemsFocusable.parentNode;
+        this._ensureScrolledToIndex(this._focusedItemIndex);
+        if (targetRow.index !== this._focusedItemIndex) {
+          // The target row, which is about to be focused next, has been
+          // assigned with a new index since last focus, probably because of
+          // scrolling. Focus the row for the stored focused item index instead.
+          const columnIndex = Array.from(targetRow.children).indexOf(this._itemsFocusable);
+          const focusedItemRow = Array.from(this.$.items.children)
+            .filter(row => row.index === this._focusedItemIndex)[0];
+          if (focusedItemRow) {
+            itemsFocusTarget = focusedItemRow.children[columnIndex];
+          }
+        }
+        e.preventDefault();
+        itemsFocusTarget.focus();
+      } else {
+        e.preventDefault();
+        focusTarget.focus();
+      }
+
+      this._toggleAttribute('navigating', true, this);
+    }
+
+    _onSpaceKeyDown(e) {
+      e.preventDefault();
+
+      const cell = e.composedPath()[0];
+      if (!cell._content || !cell._content.firstElementChild) {
+        this.dispatchEvent(new CustomEvent('cell-activate', {detail: {
+          model: this.__getRowModel(cell.parentElement)
+        }}));
+      }
+    }
+
+    /** @private */
+    _onKeyUp(e) {
+      if (!/^( |SpaceBar)$/.test(e.key)) {
+        return;
+      }
+
+      e.preventDefault();
+
+      const cell = e.composedPath()[0];
+      if (cell._content && cell._content.firstElementChild) {
+        const wasNavigating = this.hasAttribute('navigating');
+        cell._content.firstElementChild.click();
+        this._toggleAttribute('navigating', wasNavigating, this);
+      }
+    }
+
+    _onFocusIn(e) {
+      if (!this._isMousedown) {
+        this._toggleAttribute('navigating', true, this);
+      }
+
+      const rootTarget = e.composedPath()[0];
+
+      if (rootTarget === this.$.table ||
+          rootTarget === this.$.focusexit) {
+        // The focus enters the top (bottom) of the grid, meaning that user has
+        // tabbed (shift-tabbed) into the grid. Move the focus to
+        // the first (the last) focusable.
+        this._predictFocusStepTarget(
+          rootTarget,
+          rootTarget === this.$.table ? 1 : -1
+        ).focus();
+        this._toggleAttribute('interacting', false, this);
+      } else {
+        this._detectInteracting(e);
+      }
+    }
+
+    _onFocusOut(e) {
+      this._toggleAttribute('navigating', false, this);
+      this._detectInteracting(e);
+    }
+
+    _onCellFocusIn(e) {
+      this._detectInteracting(e);
+
+      if (e.composedPath().indexOf(this.$.table) === 3) {
+        const cell = e.composedPath()[0];
+        this._activeRowGroup = cell.parentNode.parentNode;
+        if (this._activeRowGroup === this.$.header) {
+          this._headerFocusable = cell;
+        } else if (this._activeRowGroup === this.$.items) {
+          this._itemsFocusable = cell;
+        } else if (this._activeRowGroup === this.$.footer) {
+          this._footerFocusable = cell;
+        }
+        // Inform cell content of the focus (used in <vaadin-grid-sorter>)
+        cell._content.dispatchEvent(new CustomEvent('cell-focusin', {bubbles: false}));
+      }
+
+      this._detectFocusedItemIndex(e);
+    }
+
+    _onCellFocusOut(e) {
+      if (e.composedPath().indexOf(this.$.table) === 3) {
+        const cell = e.composedPath()[0];
+        // Inform cell content of the focus (used in <vaadin-grid-sorter>)
+        cell._content.dispatchEvent(new CustomEvent('cell-focusout', {bubbles: false}));
+      }
+    }
+
+    _detectInteracting(e) {
+      this._toggleAttribute('interacting',
+        e.composedPath().some(el => el.localName === 'vaadin-grid-cell-content'),
+        this);
+    }
+
+    _detectFocusedItemIndex(e) {
+      const {rowGroup, row} = this._parseEventPath(e.composedPath());
+      if (rowGroup === this.$.items) {
+        this._focusedItemIndex = row.index;
+      }
+    }
+
+    _preventScrollerRotatingCellFocus(item, index) {
+      if (item.index === this._focusedItemIndex && this.hasAttribute('navigating') && this._activeRowGroup === this.$.items) {
+        // Focused item has went, hide navigation mode
+        this._navigatingIsHidden = true;
+        this._toggleAttribute('navigating', false, this);
+      }
+      if (index === this._focusedItemIndex && this._navigatingIsHidden) {
+        // Focused item is back, restore navigation mode
+        this._navigatingIsHidden = false;
+        this._toggleAttribute('navigating', true, this);
+      }
+    }
+
+    _getColumns(rowGroup, rowIndex) {
+      let columnTreeLevel = this._columnTree.length - 1;
+      if (rowGroup === this.$.header) {
+        columnTreeLevel = rowIndex;
+      } else if (rowGroup === this.$.footer) {
+        columnTreeLevel = this._columnTree.length - 1 - rowIndex;
+      }
+      return this._columnTree[columnTreeLevel];
+    }
+
+    _resetKeyboardNavigation() {
+      if (this.$.header.firstElementChild) {
+        this._headerFocusable = Array.from(this.$.header.firstElementChild.children).filter(el => !el.hidden)[0];
+      }
+
+      if (this.$.items.firstElementChild) {
+        const firstVisibleIndexRow = this._iterateItems((pidx, vidx) => {
+          if (this._firstVisibleIndex === vidx) {
+            return this.$.items.children[pidx];
+          }
+        });
+        if (firstVisibleIndexRow) {
+          this._itemsFocusable = Array.from(firstVisibleIndexRow.children).filter(el => !el.hidden)[0];
+        }
+      }
+
+      if (this.$.footer.firstElementChild) {
+        this._footerFocusable = Array.from(this.$.footer.firstElementChild.children).filter(el => !el.hidden)[0];
+      }
+    }
+
+    _scrollHorizontallyToCell(dstCell) {
+      if (dstCell.hasAttribute('frozen') || this._elementMatches(dstCell, '[part~="details-cell"]')) {
+        // These cells are, by design, always visible, no need to scroll.
+        return;
+      }
+
+      const dstCellRect = dstCell.getBoundingClientRect();
+      const dstRow = dstCell.parentNode;
+      const dstCellIndex = Array.from(dstRow.children).indexOf(dstCell);
+      const tableRect = this.$.table.getBoundingClientRect();
+      let leftBoundary = tableRect.left, rightBoundary = tableRect.right;
+      for (let i = dstCellIndex - 1; i >= 0; i--) {
+        const cell = dstRow.children[i];
+        if (cell.hasAttribute('hidden') ||
+            this._elementMatches(cell, '[part~="details-cell"]')) {
+          continue;
+        }
+        if (cell.hasAttribute('frozen')) {
+          leftBoundary = cell.getBoundingClientRect().right;
+          break;
+        }
+      }
+      for (let i = dstCellIndex + 1; i < dstRow.children.length; i++) {
+        const cell = dstRow.children[i];
+        if (cell.hasAttribute('hidden') ||
+            this._elementMatches(cell, '[part~="details-cell"]')) {
+          continue;
+        }
+        if (cell.hasAttribute('frozen')) {
+          rightBoundary = cell.getBoundingClientRect().left;
+          break;
+        }
+      }
+
+      if (dstCellRect.left < leftBoundary) {
+        this.$.table.scrollLeft += Math.round(dstCellRect.left - leftBoundary);
+      }
+      if (dstCellRect.right > rightBoundary) {
+        this.$.table.scrollLeft += Math.round(dstCellRect.right - rightBoundary);
+      }
+    }
+
+    _elementMatches(el, query) {
+      return el.matches ? el.matches(query) :
+        Array.from(el.parentNode.querySelectorAll(query)).indexOf(el) !== -1;
+    }
+  };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const ColumnReorderingMixin = superClass => class ColumnReorderingMixin extends GestureEventListeners(superClass) {
+
+    static get properties() {
+      return {
+        /**
+         * Set to true to allow column reordering.
+         */
+        columnReorderingAllowed: {
+          type: Boolean,
+          value: false
+        },
+
+        _orderBaseScope: {
+          type: Number,
+          value: 10000000
+        }
+      };
+    }
+
+    static get observers() {
+      return [
+        '_updateOrders(_columnTree, _columnTree.*)'
+      ];
+    }
+
+    ready() {
+      super.ready();
+      addListener(this, 'track', this._onTrackEvent);
+      this._reorderGhost = this.shadowRoot.querySelector('[part="reorder-ghost"]');
+
+      this.addEventListener('touchstart', this._onTouchStart.bind(this));
+      this.addEventListener('touchmove', this._onTouchMove.bind(this));
+      this.addEventListener('touchend', this._onTouchEnd.bind(this));
+      this.addEventListener('contextmenu', this._onContextMenu.bind(this));
+    }
+
+    _onContextMenu(e) {
+      if (this.hasAttribute('reordering')) {
+        e.preventDefault();
+      }
+    }
+
+    _onTouchStart(e) {
+      // Touch event, delay activation by 100ms
+      this._startTouchReorderTimeout = setTimeout(() => {
+        this._onTrackStart({
+          detail: {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY
+          }
+        });
+      }, 100);
+    }
+
+    _onTouchMove(e) {
+      if (this._draggedColumn) {
+        e.preventDefault();
+      }
+      clearTimeout(this._startTouchReorderTimeout);
+    }
+
+    _onTouchEnd() {
+      clearTimeout(this._startTouchReorderTimeout);
+      this._onTrackEnd();
+    }
+
+    _onTrackEvent(e) {
+      if (e.detail.state === 'start') {
+        const path = e.composedPath();
+        const headerCell = path[path.indexOf(this.$.header) - 2];
+        if (!headerCell || !headerCell._content) {
+          // Not a header column
+          return;
+        }
+
+        const activeElement = this.getRootNode().activeElement;
+        if (headerCell._content.contains(this.getRootNode().activeElement)
+            && (!this._ie || !this._isFocusable(activeElement))) {
+          // Something was focused inside the cell
+          return;
+        }
+
+        if (this.$.scroller.hasAttribute('column-resizing')) {
+          // Resizing is in progress
+          return;
+        }
+
+        if (!this._touchDevice) {
+          // Not a touch device
+          this._onTrackStart(e);
+        }
+      } else if (e.detail.state === 'track') {
+        this._onTrack(e);
+      } else if (e.detail.state === 'end') {
+        this._onTrackEnd(e);
+      }
+    }
+
+    _onTrackStart(e) {
+      if (!this.columnReorderingAllowed) {
+        return;
+      }
+
+      // Cancel reordering if there are draggable nodes on the event path
+      const path = e.path || dom(e).path;
+      if (path && path.filter(node => node.hasAttribute && node.hasAttribute('draggable'))[0]) {
+        return;
+      }
+
+      const headerCell = this._cellFromPoint(e.detail.x, e.detail.y);
+      if (!headerCell || headerCell.getAttribute('part').indexOf('header-cell') === -1) {
+        return;
+      }
+
+      this._toggleAttribute('reordering', true, this);
+      this._draggedColumn = headerCell._column;
+      while (this._draggedColumn.parentElement.childElementCount === 1) {
+        // This is the only column in the group, drag the whole group instead
+        this._draggedColumn = this._draggedColumn.parentElement;
+      }
+      this._setSiblingsReorderStatus(this._draggedColumn, 'allowed');
+      this._draggedColumn._reorderStatus = 'dragging';
+
+      this._updateGhost(headerCell);
+      this._reorderGhost.style.visibility = 'visible';
+      this._updateGhostPosition(e.detail.x, this._touchDevice ? e.detail.y - 50 : e.detail.y);
+      this._autoScroller();
+    }
+
+    _onTrack(e) {
+      if (!this._draggedColumn) {
+        // Reordering didn’t start. Skip this event.
+        return;
+      }
+
+      const targetCell = this._cellFromPoint(e.detail.x, e.detail.y);
+      if (!targetCell) {
+        return;
+      }
+
+      const targetColumn = this._getTargetColumn(targetCell, this._draggedColumn);
+      if (this._isSwapAllowed(this._draggedColumn, targetColumn) &&
+        this._isSwappableByPosition(targetColumn, e.detail.x)) {
+        this._swapColumnOrders(this._draggedColumn, targetColumn);
+      }
+
+      this._updateGhostPosition(e.detail.x, this._touchDevice ? e.detail.y - 50 : e.detail.y);
+      this._lastDragClientX = e.detail.x;
+    }
+
+    _onTrackEnd() {
+      if (!this._draggedColumn) {
+        // Reordering didn’t start. Skip this event.
+        return;
+      }
+
+      this._toggleAttribute('reordering', false, this);
+      this._draggedColumn._reorderStatus = '';
+      this._setSiblingsReorderStatus(this._draggedColumn, '');
+      this._draggedColumn = null;
+      this._lastDragClientX = null;
+      this._reorderGhost.style.visibility = 'hidden';
+
+      this.dispatchEvent(new CustomEvent('column-reorder', {detail: {
+        columns: this._getColumnsInOrder()
+      }}));
+    }
+
+    _getColumnsInOrder() {
+      return this._columnTree.slice(0).pop()
+        .filter(c => !c.hidden)
+        .sort((b, a) => (b._order - a._order));
+    }
+
+    _cellFromPoint(x, y) {
+      x = x || 0;
+      y = y || 0;
+      if (!this._draggedColumn) {
+        this._toggleAttribute('no-content-pointer-events', true, this.$.scroller);
+      }
+      let cell;
+      if (useShadow) {
+        cell = this.shadowRoot.elementFromPoint(x, y);
+      } else {
+        cell = document.elementFromPoint(x, y);
+
+        // Workaround a FF58 bug
+        if (cell.localName === 'vaadin-grid-cell-content') {
+          cell = cell.assignedSlot.parentNode;
+        }
+
+      }
+      this._toggleAttribute('no-content-pointer-events', false, this.$.scroller);
+
+      // Make sure the element is actually a cell
+      if (cell && cell._column) {
+        return cell;
+      }
+    }
+
+    _updateGhostPosition(eventClientX, eventClientY) {
+      const ghostRect = this._reorderGhost.getBoundingClientRect();
+      // // This is where we want to position the ghost
+      const targetLeft = eventClientX - ghostRect.width / 2;
+      const targetTop = eventClientY - ghostRect.height / 2;
+      // Current position
+      const _left = parseInt(this._reorderGhost._left || 0);
+      const _top = parseInt(this._reorderGhost._top || 0);
+      // Reposition the ghost
+      this._reorderGhost._left = _left - (ghostRect.left - targetLeft);
+      this._reorderGhost._top = _top - (ghostRect.top - targetTop);
+      this._reorderGhost.style.transform = `translate(${this._reorderGhost._left}px, ${this._reorderGhost._top}px)`;
+    }
+
+    _getInnerText(e) {
+      if (e.localName) {
+        // Custom implementation needed since IE11 doesn't respect the spec in case of hidden elements
+        if (getComputedStyle(e).display === 'none') {
+          return '';
+        } else {
+          return Array.from(e.childNodes).map(n => this._getInnerText(n)).join('');
+        }
+      } else {
+        return e.textContent;
+      }
+    }
+
+    _updateGhost(cell) {
+      const ghost = this._reorderGhost;
+      ghost.textContent = this._getInnerText(cell._content);
+      const style = window.getComputedStyle(cell);
+      ['boxSizing', 'display', 'width', 'height', 'background', 'alignItems', 'padding', 'border', 'flex-direction', 'overflow']
+        .forEach(propertyName => ghost.style[propertyName] = style[propertyName]);
+      return ghost;
+    }
+
+    _updateOrders(columnTree, splices) {
+      if (columnTree === undefined || splices === undefined) {
+        return;
+      }
+
+      // Reset all column orders
+      columnTree[0].forEach((column, index) => column._order = 0);
+      // Set order numbers to top-level columns
+      columnTree[0].forEach((column, index) => column._order = (index + 1) * this._orderBaseScope);
+    }
+
+    _setSiblingsReorderStatus(column, status) {
+      Array.from(column.parentNode.children)
+        .filter(child => /column/.test(child.localName) && this._isSwapAllowed(child, column))
+        .forEach(sibling => sibling._reorderStatus = status);
+    }
+
+    _autoScroller() {
+      if (this._lastDragClientX) {
+        const rightDiff = this._lastDragClientX - this.getBoundingClientRect().right + 50;
+        const leftDiff = this.getBoundingClientRect().left - this._lastDragClientX + 50;
+
+        if (rightDiff > 0) {
+          this.$.table.scrollLeft += rightDiff / 10;
+        } else if (leftDiff > 0) {
+          this.$.table.scrollLeft -= leftDiff / 10;
+        }
+        this._scrollHandler();
+      }
+
+      if (this._draggedColumn) {
+        this.async(this._autoScroller, 10);
+      }
+    }
+
+    _isSwapAllowed(column1, column2) {
+      if (column1 && column2) {
+        const differentColumns = column1 !== column2;
+        const sameParent = column1.parentElement === column2.parentElement;
+        const sameFrozen = column1.frozen === column2.frozen;
+        return differentColumns && sameParent && sameFrozen;
+      }
+    }
+
+    _isSwappableByPosition(targetColumn, clientX) {
+      const targetCell =
+        Array.from(this.$.header.querySelectorAll('tr:not([hidden]) [part~="cell"]')).filter(cell => targetColumn.contains(cell._column))[0];
+      const sourceCellRect = this.$.header.querySelector('tr:not([hidden]) [reorder-status=dragging]').getBoundingClientRect();
+      const targetRect = targetCell.getBoundingClientRect();
+      if (targetRect.left > sourceCellRect.left) {
+        return clientX > targetRect.right - sourceCellRect.width;
+      } else {
+        return clientX < targetRect.left + sourceCellRect.width;
+      }
+    }
+
+    _swapColumnOrders(column1, column2) {
+      const _order = column1._order;
+      column1._order = column2._order;
+      column2._order = _order;
+      this._updateLastFrozen();
+      this._updateFirstAndLastColumn();
+    }
+
+    _getTargetColumn(targetCell, draggedColumn) {
+      if (targetCell && draggedColumn) {
+        let candidate = targetCell._column;
+        while (candidate.parentElement !== draggedColumn.parentElement && candidate !== this) {
+          candidate = candidate.parentElement;
+        }
+        if (candidate.parentElement === draggedColumn.parentElement) {
+          return candidate;
+        } else {
+          return targetCell._column;
+        }
+      }
+    }
+
+    /**
+     * Fired when the columns in the grid are reordered.
+     *
+     * @event column-reorder
+     * @param {Object} detail
+     * @param {Object} detail.columns the columns in the new order
+     */
+  };
+
+  /**
+  @license
+  Copyright (c) 2018 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  /**
+   * @polymerMixin
+   */
+  const ColumnBaseMixin = superClass => class ColumnBaseMixin extends superClass {
+    static get properties() {
+      return {
+        /**
+         * When set to true, the column is user-resizable.
+         * @default false
+         */
+        resizable: {
+          type: Boolean,
+          value: function() {
+            if (this.localName === 'vaadin-grid-column-group') {
+              return;
+            }
+
+            const parent = this.parentNode;
+            if (parent && parent.localName === 'vaadin-grid-column-group') {
+              return parent.resizable || false;
+            } else {
+              return false;
+            }
+          }
+        },
+
+        _headerTemplate: {
+          type: Object
+        },
+
+        _footerTemplate: {
+          type: Object
+        },
+
+        /**
+         * When true, the column is frozen. When a column inside of a column group is frozen,
+         * all of the sibling columns inside the group will get frozen also.
+         */
+        frozen: {
+          type: Boolean,
+          value: false
+        },
+
+        /**
+         * When set to true, the cells for this column are hidden.
+         */
+        hidden: {
+          type: Boolean
+        },
+
+        /**
+         * Text content to display in the header cell of the column.
+         */
+        header: {
+          type: String
+        },
+
+        /**
+         * Aligns the columns cell content horizontally.
+         * Supported values: "start", "center" and "end".
+         */
+        textAlign: {
+          type: String
+        },
+
+        _lastFrozen: {
+          type: Boolean,
+          value: false
+        },
+
+        _order: Number,
+
+        _reorderStatus: Boolean,
+
+        _emptyCells: Array,
+
+        _headerCell: Object,
+
+        _footerCell: Object,
+
+        _grid: Object,
+
+        /**
+         * Custom function for rendering the header content.
+         * Receives two arguments:
+         *
+         * - `root` The header cell content DOM element. Append your content to it.
+         * - `column` The `<vaadin-grid-column>` element.
+         */
+        headerRenderer: Function,
+
+        /**
+         * Custom function for rendering the footer content.
+         * Receives two arguments:
+         *
+         * - `root` The footer cell content DOM element. Append your content to it.
+         * - `column` The `<vaadin-grid-column>` element.
+         */
+        footerRenderer: Function
+      };
+    }
+
+    static get observers() {
+      return [
+        '_widthChanged(width, _headerCell, _footerCell, _cells.*)',
+        '_frozenChanged(frozen, _headerCell, _footerCell, _cells.*)',
+        '_flexGrowChanged(flexGrow, _headerCell, _footerCell, _cells.*)',
+        '_pathOrHeaderChanged(path, header, _headerCell, _footerCell, _cells.*, renderer, headerRenderer, _bodyTemplate, _headerTemplate)',
+        '_textAlignChanged(textAlign, _cells.*, _headerCell, _footerCell)',
+        '_orderChanged(_order, _headerCell, _footerCell, _cells.*)',
+        '_lastFrozenChanged(_lastFrozen)',
+        '_setBodyTemplateOrRenderer(_bodyTemplate, renderer, _cells, _cells.*)',
+        '_setHeaderTemplateOrRenderer(_headerTemplate, headerRenderer, _headerCell)',
+        '_setFooterTemplateOrRenderer(_footerTemplate, footerRenderer, _footerCell)',
+        '_resizableChanged(resizable, _headerCell)',
+        '_reorderStatusChanged(_reorderStatus, _headerCell, _footerCell, _cells.*)',
+        '_hiddenChanged(hidden, _headerCell, _footerCell, _cells.*)'
+      ];
+    }
+
+    /** @protected */
+    connectedCallback() {
+      super.connectedCallback();
+
+      this._bodyTemplate && (this._bodyTemplate.templatizer._grid = this._grid);
+      this._headerTemplate && (this._headerTemplate.templatizer._grid = this._grid);
+      this._footerTemplate && (this._footerTemplate.templatizer._grid = this._grid);
+
+      this._templateObserver.flush();
+      if (!this._bodyTemplate) {
+        // The observer might not have triggered if the tag is empty. Run manually.
+        this._templateObserver.callback();
+      }
+
+      requestAnimationFrame(() => {
+        this._allCells.forEach(cell => {
+          if (!cell._content.parentNode) {
+            this._grid && this._grid.appendChild(cell._content);
+          }
+        });
+      });
+    }
+
+    /** @protected */
+    disconnectedCallback() {
+      super.disconnectedCallback();
+
+      requestAnimationFrame(() => {
+        if (!this._findHostGrid()) {
+          this._allCells.forEach(cell => {
+            if (cell._content.parentNode) {
+              cell._content.parentNode.removeChild(cell._content);
+            }
+          });
+        }
+      });
+
+      this._gridValue = undefined;
+    }
+
+    _findHostGrid() {
+      let el = this;
+      // Custom elements extending grid must have a specific localName
+      while (el && !/^vaadin.*grid(-pro)?$/.test(el.localName)) {
+        el = el.assignedSlot ? el.assignedSlot.parentNode : el.parentNode;
+      }
+      return el || undefined;
+    }
+
+    get _grid() {
+      if (!this._gridValue) {
+        this._gridValue = this._findHostGrid();
+      }
+      return this._gridValue;
+    }
+
+    get _allCells() {
+      return []
+        .concat(this._cells || [])
+        .concat(this._emptyCells || [])
+        .concat(this._headerCell)
+        .concat(this._footerCell)
+        .filter(cell => cell);
+    }
+
+    constructor() {
+      super();
+
+      this._templateObserver = new FlattenedNodesObserver(this, info => {
+        this._headerTemplate = this._prepareHeaderTemplate();
+        this._footerTemplate = this._prepareFooterTemplate();
+        this._bodyTemplate = this._prepareBodyTemplate();
+      });
+    }
+
+    _prepareHeaderTemplate() {
+      return this._prepareTemplatizer(this._findTemplate(true) || null, {});
+    }
+
+    _prepareFooterTemplate() {
+      return this._prepareTemplatizer(this._findTemplate(false, true) || null, {});
+    }
+
+    _prepareBodyTemplate() {
+      return this._prepareTemplatizer(this._findTemplate() || null);
+    }
+
+    _prepareTemplatizer(template, instanceProps) {
+      if (template && !template.templatizer) {
+        const templatizer = new GridTemplatizer();
+        templatizer._grid = this._grid;
+        templatizer.dataHost = this.dataHost;
+        templatizer._instanceProps = instanceProps || templatizer._instanceProps;
+        templatizer.template = template;
+        template.templatizer = templatizer;
+      }
+
+      return template;
+    }
+
+    _renderHeaderAndFooter() {
+      if (this.headerRenderer && this._headerCell) {
+        this.__runRenderer(this.headerRenderer, this._headerCell);
+      }
+      if (this.footerRenderer && this._footerCell) {
+        this.__runRenderer(this.footerRenderer, this._footerCell);
+      }
+    }
+
+    __runRenderer(renderer, cell, rowData) {
+      const args = [cell._content, this];
+      if (rowData && rowData.item) {
+        args.push(rowData);
+      }
+      renderer.apply(this, args);
+    }
+
+    __setColumnTemplateOrRenderer(template, renderer, cells) {
+      if (template && renderer) {
+        throw new Error('You should only use either a renderer or a template');
+      }
+
+      cells.forEach(cell => {
+        const model = this._grid.__getRowModel(cell.parentElement);
+
+        if (renderer) {
+          cell._renderer = renderer;
+
+          if (model.item || renderer === this.headerRenderer || renderer === this.footerRenderer) {
+            this.__runRenderer(renderer, cell, model);
+          }
+        } else if (cell._template !== template) {
+          cell._template = template;
+
+          cell._content.innerHTML = '';
+          template.templatizer._grid = template.templatizer._grid || this._grid;
+          const inst = template.templatizer.createInstance();
+          cell._content.appendChild(inst.root);
+          cell._instance = inst;
+          if (model.item) {
+            cell._instance.setProperties(model);
+          }
+        }
+      });
+    }
+
+    _setBodyTemplateOrRenderer(template, renderer, cells, splices) {
+      if ((template || renderer) && cells) {
+        this.__setColumnTemplateOrRenderer(template, renderer, cells);
+      }
+    }
+
+    _setHeaderTemplateOrRenderer(headerTemplate, headerRenderer, headerCell) {
+      if ((headerTemplate || headerRenderer) && headerCell) {
+        this.__setColumnTemplateOrRenderer(headerTemplate, headerRenderer, [headerCell]);
+      }
+    }
+
+    _setFooterTemplateOrRenderer(footerTemplate, footerRenderer, footerCell) {
+      if ((footerTemplate || footerRenderer) && footerCell) {
+        this.__setColumnTemplateOrRenderer(footerTemplate, footerRenderer, [footerCell]);
+        this._grid.__updateHeaderFooterRowVisibility(footerCell.parentElement);
+      }
+    }
+
+    _selectFirstTemplate(header = false, footer = false) {
+      return FlattenedNodesObserver.getFlattenedNodes(this)
+        .filter(node =>
+          node.localName === 'template'
+          && node.classList.contains('header') === header
+          && node.classList.contains('footer') === footer
+        )[0];
+    }
+
+    _findTemplate(header, footer) {
+      const template = this._selectFirstTemplate(header, footer);
+      if (template) {
+        if (this.dataHost) {
+          // set dataHost to the context where template has been defined
+          template._rootDataHost = this.dataHost._rootDataHost || this.dataHost;
+        }
+      }
+      return template;
+    }
+
+    _flexGrowChanged(flexGrow, headerCell, footerCell, cells) {
+      if (this.parentElement && this.parentElement._columnPropChanged) {
+        this.parentElement._columnPropChanged('flexGrow');
+      }
+
+      this._allCells.forEach(cell => cell.style.flexGrow = flexGrow);
+    }
+
+    _orderChanged(order, headerCell, footerCell, cells) {
+      this._allCells.forEach(cell => cell.style.order = order);
+    }
+
+    _widthChanged(width, headerCell, footerCell, cells) {
+      if (this.parentElement && this.parentElement._columnPropChanged) {
+        this.parentElement._columnPropChanged('width');
+      }
+
+      this._allCells.forEach(cell => cell.style.width = width);
+
+      // Force a reflow to workaround browser issues causing double scrollbars to grid
+      // https://github.com/vaadin/vaadin-grid/issues/1586
+      if (this._grid && this._grid.__forceReflow) {
+        this._grid.__forceReflow();
+      }
+    }
+
+    _frozenChanged(frozen, headerCell, footerCell, cells) {
+      if (this.parentElement && this.parentElement._columnPropChanged) {
+        this.parentElement._columnPropChanged('frozen', frozen);
+      }
+
+      this._allCells.forEach(cell => this._toggleAttribute('frozen', frozen, cell));
+
+      this._grid && this._grid._frozenCellsChanged && this._grid._frozenCellsChanged();
+    }
+
+    _lastFrozenChanged(lastFrozen) {
+      this._allCells.forEach(cell => this._toggleAttribute('last-frozen', lastFrozen, cell));
+
+      if (this.parentElement && this.parentElement._columnPropChanged) {
+        this.parentElement._lastFrozen = lastFrozen;
+      }
+    }
+
+    _pathOrHeaderChanged(path, header, headerCell, footerCell, cells, renderer, headerRenderer, bodyTemplate, headerTemplate) {
+      const hasHeaderText = header !== undefined;
+      if (!headerRenderer && !headerTemplate && hasHeaderText && headerCell) {
+        this.__setTextContent(headerCell._content, header);
+      }
+
+      if (path && cells.value) {
+        if (!renderer && !bodyTemplate) {
+          const pathRenderer = (root, owner, {item}) => this.__setTextContent(root, this.get(path, item));
+          this.__setColumnTemplateOrRenderer(undefined, pathRenderer, cells.value);
+        }
+
+        if (!headerRenderer && !headerTemplate && !hasHeaderText && headerCell && header !== null) {
+          this.__setTextContent(headerCell._content, this._generateHeader(path));
+        }
+      }
+
+      if (headerCell) {
+        this._grid.__updateHeaderFooterRowVisibility(headerCell.parentElement);
+      }
+    }
+
+    __setTextContent(node, textContent) {
+      node.textContent !== textContent && (node.textContent = textContent);
+    }
+
+    _generateHeader(path) {
+      return path
+        .substr(path.lastIndexOf('.') + 1)
+        .replace(/([A-Z])/g, '-$1').toLowerCase()
+        .replace(/-/g, ' ')
+        .replace(/^./, match => match.toUpperCase());
+    }
+
+    _toggleAttribute(name, bool, node) {
+      if (node.hasAttribute(name) === !bool) {
+        if (bool) {
+          node.setAttribute(name, '');
+        } else {
+          node.removeAttribute(name);
+        }
+      }
+    }
+
+    _reorderStatusChanged(reorderStatus, headerCell, footerCell, cells) {
+      this._allCells.forEach(cell => cell.setAttribute('reorder-status', reorderStatus));
+    }
+
+    _resizableChanged(resizable, headerCell) {
+      if (resizable === undefined || headerCell === undefined) {
+        return;
+      }
+
+      if (headerCell) {
+        [headerCell].concat(this._emptyCells).forEach(cell => {
+          if (cell) {
+            const existingHandle = cell.querySelector('[part~="resize-handle"]');
+            if (existingHandle) {
+              cell.removeChild(existingHandle);
+            }
+
+            if (resizable) {
+              const handle = document.createElement('div');
+              handle.setAttribute('part', 'resize-handle');
+              cell.appendChild(handle);
+            }
+          }
+        });
+      }
+    }
+
+    _textAlignChanged(textAlign, _cells, _headerCell, _footerCell) {
+      if (textAlign === undefined) {
+        return;
+      }
+      if (['start', 'end', 'center'].indexOf(textAlign) === -1) {
+        console.warn('textAlign can only be set as "start", "end" or "center"');
+        return;
+      }
+
+      let textAlignFallback;
+      if (getComputedStyle(this._grid).direction === 'ltr') {
+        if (textAlign === 'start') {
+          textAlignFallback = 'left';
+        } else if (textAlign === 'end') {
+          textAlignFallback = 'right';
+        }
+      } else {
+        if (textAlign === 'start') {
+          textAlignFallback = 'right';
+        } else if (textAlign === 'end') {
+          textAlignFallback = 'left';
+        }
+      }
+
+      this._allCells.forEach(cell => {
+        cell._content.style.textAlign = textAlign;
+        if (getComputedStyle(cell._content).textAlign !== textAlign) {
+          cell._content.style.textAlign = textAlignFallback;
+        }
+      });
+    }
+
+    _hiddenChanged(hidden, headerCell, footerCell, cells) {
+      if (this.parentElement && this.parentElement._columnPropChanged) {
+        this.parentElement._columnPropChanged('hidden', hidden);
+      }
+
+      if (!!hidden !== !!this._previousHidden && this._grid) {
+        if (hidden === true) {
+          this._allCells.forEach(cell => {
+            if (cell._content.parentNode) {
+              cell._content.parentNode.removeChild(cell._content);
+            }
+          });
+        }
+        this._grid._debouncerHiddenChanged = Debouncer.debounce(
+          this._grid._debouncerHiddenChanged,
+          animationFrame,
+          () => {
+            if (this._grid && this._grid._renderColumnTree) {
+              this._grid._renderColumnTree(this._grid._columnTree);
+            }
+          }
+        );
+
+        this._grid._updateLastFrozen && this._grid._updateLastFrozen();
+        this._grid.notifyResize && this._grid.notifyResize();
+        this._grid._resetKeyboardNavigation && this._grid._resetKeyboardNavigation();
+      }
+      this._previousHidden = hidden;
+    }
+
+  };
+
+  /**
+   * A `<vaadin-grid-column>` is used to configure how a column in `<vaadin-grid>`
+   * should look like.
+   *
+   * See `<vaadin-grid>` documentation and demos for instructions and examples on how
+   * to configure the `<vaadin-grid-column>`.
+   * ```
+   *
+   * @extends PolymerElement
+   * @mixes Grid.ColumnBaseMixin
+   */
+  class GridColumnElement extends ColumnBaseMixin(DirMixin(PolymerElement)) {
+    static get is() {
+      return 'vaadin-grid-column';
+    }
+
+    static get properties() {
+      return {
+        /**
+         * Width of the cells for this column.
+         */
+        width: {
+          type: String,
+          value: '100px'
+        },
+
+        /**
+         * Flex grow ratio for the cell widths. When set to 0, cell width is fixed.
+         */
+        flexGrow: {
+          type: Number,
+          value: 1
+        },
+
+        /**
+         * Custom function for rendering the cell content.
+         * Receives three arguments:
+         *
+         * - `root` The cell content DOM element. Append your content to it.
+         * - `column` The `<vaadin-grid-column>` element.
+         * - `rowData` The object with the properties related with
+         *   the rendered item, contains:
+         *   - `rowData.index` The index of the item.
+         *   - `rowData.item` The item.
+         *   - `rowData.expanded` Sublevel toggle state.
+         *   - `rowData.level` Level of the tree represented with a horizontal offset of the toggle button.
+         *   - `rowData.selected` Selected state.
+         */
+        renderer: Function,
+
+        /**
+         * Path to an item sub-property whose value gets displayed in the column body cells.
+         * The property name is also shown in the column header if an explicit header or renderer isn't defined.
+         */
+        path: {
+          type: String
+        },
+
+        /**
+         * Automatically sets the width of the column based on the column contents when this is set to `true`.
+         *
+         * For performance reasons the column width is calculated automatically only once when the grid items
+         * are rendered for the first time and the calculation only considers the rows which are currently
+         * rendered in DOM (a bit more than what is currently visible). If the grid is scrolled, or the cell
+         * content changes, the column width might not match the contents anymore.
+         *
+         * Hidden columns are ignored in the calculation and their widths are not automatically updated when
+         * you show a column that was initially hidden.
+         *
+         * You can manually trigger the auto sizing behavior again by calling `grid.recalculateColumnWidths()`.
+         *
+         * The column width may still grow larger when `flexGrow` is not 0.
+         */
+        autoWidth: {
+          type: Boolean,
+          value: false
+        },
+
+        _bodyTemplate: {
+          type: Object
+        },
+
+        _cells: Array
+
+      };
+    }
+
+  }
+
+  customElements.define(GridColumnElement.is, GridColumnElement);
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  /**
+   * This Element is used internally by vaadin-grid.
+   *
+   * @private
+   */
+  class GridOuterScrollerElement extends (class extends PolymerElement {}) {
+    static get template() {
+      return html`
+    <style>
+      :host {
+        display: block;
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        top: 0;
+        box-sizing: border-box;
+        overflow: auto;
+      }
+
+      :host([passthrough]) {
+        pointer-events: none;
+      }
+    </style>
+
+    <slot></slot>
+`;
+    }
+
+    static get is() {
+      return 'vaadin-grid-outer-scroller';
+    }
+
+    static get properties() {
+      return {
+
+        scrollTarget: {
+          type: Object
+        },
+
+        scrollHandler: {
+          type: Object
+        },
+
+        passthrough: {
+          type: Boolean,
+          reflectToAttribute: true,
+          value: true
+        },
+
+        outerScrolling: Boolean,
+
+        noScrollbars: Boolean,
+
+        _touchDevice: Boolean
+      };
+    }
+
+    ready() {
+      super.ready();
+      this.addEventListener('scroll', () => this._syncScrollTarget());
+      this.parentElement.addEventListener('mousemove', this._onMouseMove.bind(this));
+
+      // for some reason scroll bars are hidden in iOS if this style is
+      // added in stylesheets or before attaching.
+      this.style.webkitOverflowScrolling = 'touch';
+
+      this.addEventListener('mousedown', _ => this.outerScrolling = true);
+      this.addEventListener('mouseup', _ => {
+        this.outerScrolling = false;
+        this.scrollHandler._scrollHandler();
+      });
+    }
+
+    _onMouseMove(e) {
+      // Ignore mousemove events on touch devices
+      if (!this._touchDevice) {
+        if (this.noScrollbars && this.parentElement.hasAttribute('scroll-period')) {
+          this.passthrough = e.offsetY <= this.clientHeight - 20 && e.offsetX <= this.clientWidth - 20;
+        } else {
+          this.passthrough = e.offsetY <= this.clientHeight && e.offsetX <= this.clientWidth;
+        }
+      }
+    }
+
+    syncOuterScroller() {
+      this.scrollTop = this.scrollTarget.scrollTop;
+      this.scrollLeft = this.scrollTarget.scrollLeft;
+    }
+
+    _syncScrollTarget() {
+      requestAnimationFrame(() => {
+        this.scrollTarget.scrollTop = this.scrollTop;
+        this.scrollTarget.scrollLeft = this.scrollLeft;
+        this.scrollHandler._scrollHandler();
+      });
+
+    }
+  }
+
+  customElements.define(GridOuterScrollerElement.is, GridOuterScrollerElement);
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const VaadinGridStyles = document.createElement('dom-module');
+
+  // NOTE(web-padawan): https://github.com/vaadin/vaadin-grid/issues/1514
+  VaadinGridStyles.appendChild(
+    html`
+  <style>
+    @keyframes vaadin-grid-appear {
+      to {
+        opacity: 1;
+      }
+    }
+
+    :host {
+      display: block;
+      animation: 1ms vaadin-grid-appear;
+      height: 400px;
+      flex: 1 1 auto;
+      align-self: stretch;
+      position: relative;
+    }
+
+    :host([hidden]) {
+      display: none !important;
+    }
+
+    #scroller {
+      display: block;
+      transform: translateY(0);
+      width: auto;
+      height: auto;
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+    }
+
+    :host([height-by-rows]) {
+      height: auto;
+      align-self: flex-start;
+      flex-grow: 0;
+      width: 100%;
+    }
+
+    :host([height-by-rows]) #scroller {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #table {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      z-index: -2;
+      position: relative;
+      outline: none;
+    }
+
+    #header {
+      display: block;
+      position: absolute;
+      top: 0;
+      width: 100%;
+    }
+
+    th {
+      text-align: inherit;
+    }
+
+    /* Safari doesn't work with "inherit" */
+    [safari] th {
+      text-align: initial;
+    }
+
+    #footer {
+      display: block;
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+    }
+
+    #items {
+      display: block;
+      width: 100%;
+      position: relative;
+      z-index: -1;
+    }
+
+    #items,
+    #outersizer,
+    #fixedsizer {
+      border-top: 0 solid transparent;
+      border-bottom: 0 solid transparent;
+    }
+
+    [part~="row"] {
+      display: flex;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0;
+    }
+
+    [part~="row"][loading] [part~="body-cell"] ::slotted(vaadin-grid-cell-content) {
+      opacity: 0;
+    }
+
+    #items [part~="row"] {
+      position: absolute;
+    }
+
+    #items [part~="row"]:empty {
+      height: 1em;
+    }
+
+    [part~="cell"]:not([part~="details-cell"]) {
+      flex-shrink: 0;
+      flex-grow: 1;
+      box-sizing: border-box;
+      display: flex;
+      width: 100%;
+      position: relative;
+      align-items: center;
+      padding: 0;
+      white-space: nowrap;
+    }
+
+    [part~="details-cell"] {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0;
+    }
+
+    [part~="cell"] ::slotted(vaadin-grid-cell-content) {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    [frozen] {
+      z-index: 2;
+      will-change: transform;
+    }
+
+    #outerscroller {
+      /* Needed (at least) for Android Chrome */
+      z-index: 0;
+    }
+
+    #scroller:not([safari]) #outerscroller {
+      /* Needed for Android Chrome (#1020). Can't be applied to Safari
+      since it would re-introduce the sub-pixel overflow bug (#853) */
+      will-change: transform;
+    }
+
+    [no-scrollbars]:not([safari]):not([firefox]) #outerscroller,
+    [no-scrollbars][safari] #table,
+    [no-scrollbars][firefox] #table {
+      overflow: hidden;
+    }
+
+    [no-scrollbars]:not([safari]):not([firefox]) #outerscroller {
+      pointer-events: none;
+    }
+
+    /* Reordering styles */
+    :host([reordering]) [part~="cell"] ::slotted(vaadin-grid-cell-content),
+    :host([reordering]) [part~="resize-handle"],
+    #scroller[no-content-pointer-events] [part~="cell"] ::slotted(vaadin-grid-cell-content) {
+      pointer-events: none;
+    }
+
+    [part~="reorder-ghost"] {
+      visibility: hidden;
+      position: fixed;
+      pointer-events: none;
+      opacity: 0.5;
+
+      /* Prevent overflowing the grid in Firefox */
+      top: 0;
+      left: 0;
+    }
+
+    :host([reordering]) {
+      -moz-user-select: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    #scroller[ie][column-reordering-allowed] [part~="header-cell"] {
+      -ms-user-select: none;
+    }
+
+    :host([reordering]) #outerscroller {
+      -webkit-overflow-scrolling: auto !important;
+    }
+
+    /* Resizing styles */
+    [part~="resize-handle"] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 1;
+    }
+
+    [part~="resize-handle"]::before {
+      position: absolute;
+      content: "";
+      height: 100%;
+      width: 35px;
+      transform: translateX(-50%);
+    }
+
+    [last-column] [part~="resize-handle"]::before,
+    [last-frozen] [part~="resize-handle"]::before {
+      width: 18px;
+      transform: none;
+      right: 0;
+    }
+
+    #scroller[column-resizing] {
+      -ms-user-select: none;
+      -moz-user-select: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* Sizer styles */
+    .sizer {
+      display: flex;
+      position: relative;
+      width: 100%;
+      visibility: hidden;
+    }
+
+    .sizer [part~="details-cell"] {
+      display: none !important;
+    }
+
+    .sizer [part~="cell"][hidden] {
+      display: none !important;
+    }
+
+    .sizer [part~="cell"] {
+      display: block;
+      flex-shrink: 0;
+      line-height: 0;
+      margin-top: -1em;
+      height: 0 !important;
+      min-height: 0 !important;
+      max-height: 0 !important;
+      padding: 0 !important;
+    }
+
+    .sizer [part~="cell"]::before {
+      content: "-";
+    }
+
+    .sizer [part~="cell"] ::slotted(vaadin-grid-cell-content) {
+      display: none !important;
+    }
+
+    /* Fixed mode (Tablet Edge) */
+    #fixedsizer {
+      position: absolute;
+    }
+
+    :not([edge][no-scrollbars]) #fixedsizer {
+      display: none;
+    }
+
+    [edge][no-scrollbars] {
+      /* Any value other than ‘none’ for the transform results in the creation of both a stacking context and
+      a containing block. The object acts as a containing block for fixed positioned descendants. */
+      transform: translateZ(0);
+      overflow: hidden;
+    }
+
+    [edge][no-scrollbars] #header,
+    [edge][no-scrollbars] #footer {
+      position: fixed;
+    }
+
+    [edge][no-scrollbars] #items {
+      position: fixed;
+      width: 100%;
+      will-change: transform;
+    }
+
+    /* RTL specific styles */
+
+    :host([dir="rtl"]) [part~="reorder-ghost"] {
+      left: auto;
+      right: 0;
+    }
+
+    :host([dir="rtl"]) [part~="resize-handle"] {
+      left: 0;
+      right: auto;
+    }
+
+    :host([dir="rtl"]) [part~="resize-handle"]::before {
+      transform: translateX(50%);
+    }
+
+    :host([dir="rtl"]) [last-column] [part~="resize-handle"]::before,
+    :host([dir="rtl"]) [last-frozen] [part~="resize-handle"]::before {
+      left: 0;
+      right: auto;
+    }
+  </style>
+`);
+
+  const safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const firefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+
+  if (safari || firefox) {
+    const scrollingStyles = document.createElement('style');
+    scrollingStyles.textContent = `
+    [scrolling][safari] #outerscroller,
+    [scrolling][firefox] #outerscroller {
+      pointer-events: auto;
+    }
+
+    [ios] #outerscroller {
+      pointer-events: auto;
+      z-index: -3;
+    }
+
+    [ios][scrolling] #outerscroller {
+      z-index: 0;
+    }
+
+    [ios] [frozen] {
+      will-change: auto;
+    }
+  `;
+    VaadinGridStyles.querySelector('template').content.appendChild(scrollingStyles);
+  }
+
+  VaadinGridStyles.register('vaadin-grid-styles');
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+
+  const TOUCH_DEVICE = (() => {
+    try {
+      document.createEvent('TouchEvent');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  /**
+   *
+   * `<vaadin-grid>` is a free, high quality data grid / data table Web Component. The content of the
+   * the grid can be populated in two ways: imperatively by using renderer callback function and
+   * declaratively by using Polymer's Templates.
+   *
+   * ### Quick Start
+   *
+   * Start with an assigning an array to the [`items`](#/elements/vaadin-grid#property-items) property to visualize your data.
+   *
+   * Use the [`<vaadin-grid-column>`](#/elements/vaadin-grid-column) element to configure the grid columns. Set `path` and `header`
+   * shorthand properties for the columns to define what gets rendered in the cells of the column.
+   *
+   * #### Example:
+   * ```html
+   * <vaadin-grid>
+   *   <vaadin-grid-column path="name.first" header="First name"></vaadin-grid-column>
+   *   <vaadin-grid-column path="name.last" header="Last name"></vaadin-grid-column>
+   *   <vaadin-grid-column path="email"></vaadin-grid-column>
+   * </vaadin-grid>
+   * ```
+   *
+   * For custom content `vaadin-grid-column` element provides you with three types of `renderer` callback functions: `headerRenderer`,
+   * `renderer` and `footerRenderer`.
+   *
+   * Each of those renderer functions provides `root`, `column`, `rowData` arguments when applicable.
+   * Generate DOM content, append it to the `root` element and control the state
+   * of the host element by accessing `column`. Before generating new content,
+   * users are able to check if there is already content in `root` for reusing it.
+   *
+   * Renderers are called on initialization of new column cells and each time the
+   * related row data is updated. DOM generated during the renderer call can be reused
+   * in the next renderer call and will be provided with the `root` argument.
+   * On first call it will be empty.
+   *
+   * #### Example:
+   * ```html
+   * <vaadin-grid>
+   *   <vaadin-grid-column></vaadin-grid-column>
+   *   <vaadin-grid-column></vaadin-grid-column>
+   *   <vaadin-grid-column></vaadin-grid-column>
+   * </vaadin-grid>
+   * ```
+   * ```js
+   * const grid = document.querySelector('vaadin-grid');
+   * grid.items = [{'name': 'John', 'surname': 'Lennon', 'role': 'singer'},
+   *               {'name': 'Ringo', 'surname': 'Starr', 'role': 'drums'}];
+   *
+   * const columns = grid.querySelectorAll('vaadin-grid-column');
+   *
+   * columns[0].headerRenderer = function(root) {
+   *   root.textContent = 'Name';
+   * };
+   * columns[0].renderer = function(root, column, rowData) {
+   *   root.textContent = rowData.item.name;
+   * };
+   *
+   * columns[1].headerRenderer = function(root) {
+   *   root.textContent = 'Surname';
+   * };
+   * columns[1].renderer = function(root, column, rowData) {
+   *   root.textContent = rowData.item.surname;
+   * };
+   *
+   * columns[2].headerRenderer = function(root) {
+   *   root.textContent = 'Role';
+   * };
+   * columns[2].renderer = function(root, column, rowData) {
+   *   root.textContent = rowData.item.role;
+   * };
+   * ```
+   *
+   * Alternatively, the content can be provided with Polymer's Templates:
+   *
+   * #### Example:
+   * ```html
+   * <vaadin-grid items='[{"name": "John", "surname": "Lennon", "role": "singer"},
+   * {"name": "Ringo", "surname": "Starr", "role": "drums"}]'>
+   *   <vaadin-grid-column>
+   *     <template class="header">Name</template>
+   *     <template>[[item.name]]</template>
+   *   </vaadin-grid-column>
+   *   <vaadin-grid-column>
+   *     <template class="header">Surname</template>
+   *     <template>[[item.surname]]</template>
+   *   </vaadin-grid-column>
+   *   <vaadin-grid-column>
+   *     <template class="header">Role</template>
+   *     <template>[[item.role]]</template>
+   *   </vaadin-grid-column>
+   * </vaadin-grid>
+   * ```
+   *
+   * The following helper elements can be used for further customization:
+   * - [`<vaadin-grid-column-group>`](#/elements/vaadin-grid-column-group)
+   * - [`<vaadin-grid-filter>`](#/elements/vaadin-grid-filter)
+   * - [`<vaadin-grid-sorter>`](#/elements/vaadin-grid-sorter)
+   * - [`<vaadin-grid-selection-column>`](#/elements/vaadin-grid-selection-column)
+   * - [`<vaadin-grid-tree-toggle>`](#/elements/vaadin-grid-tree-toggle)
+   *
+   * __Note that the helper elements must be explicitly imported.__
+   * If you want to import everything at once you can use the `all-imports.html` bundle.
+   *
+   * A column template can be decorated with one the following class names to specify its purpose
+   * - `header`: Marks a header template
+   * - `footer`: Marks a footer template
+   * - `row-details`: Marks a row details template
+   *
+   * The following built-in template variables can be bound to inside the column templates:
+   * - `[[index]]`: Number representing the row index
+   * - `[[item]]` and it's sub-properties: Data object (provided by a data provider / items array)
+   * - `{{selected}}`: True if the item is selected (can be two-way bound)
+   * - `{{detailsOpened}}`: True if the item has row details opened (can be two-way bound)
+   * - `{{expanded}}`: True if the item has tree sublevel expanded (can be two-way bound)
+   * - `[[level]]`: Number of the tree sublevel of the item, first level-items have 0
+   *
+   * ### Lazy Loading with Function Data Provider
+   *
+   * In addition to assigning an array to the items property, you can alternatively
+   * provide the `<vaadin-grid>` data through the
+   * [`dataProvider`](#/elements/vaadin-grid#property-dataProvider) function property.
+   * The `<vaadin-grid>` calls this function lazily, only when it needs more data
+   * to be displayed.
+   *
+   * See the [`dataProvider`](#/elements/vaadin-grid#property-dataProvider) in
+   * the API reference below for the detailed data provider arguments description,
+   * and the “Assigning Data” page in the demos.
+   *
+   * __Note that expanding the tree grid's item will trigger a call to the `dataProvider`.__
+   *
+   * __Also, note that when using function data providers, the total number of items
+   * needs to be set manually. The total number of items can be returned
+   * in the second argument of the data provider callback:__
+   *
+   * ```javascript
+   * grid.dataProvider = function(params, callback) {
+   *   var url = 'https://api.example/data' +
+   *       '?page=' + params.page +        // the requested page index
+   *       '&per_page=' + params.pageSize; // number of items on the page
+   *   var xhr = new XMLHttpRequest();
+   *   xhr.onload = function() {
+   *     var response = JSON.parse(xhr.responseText);
+   *     callback(
+   *       response.employees, // requested page of items
+   *       response.totalSize  // total number of items
+   *     );
+   *   };
+   *   xhr.open('GET', url, true);
+   *   xhr.send();
+   * };
+   * ```
+   *
+   * __Alternatively, you can use the `size` property to set the total number of items:__
+   *
+   * ```javascript
+   * grid.size = 200; // The total number of items
+   * grid.dataProvider = function(params, callback) {
+   *   var url = 'https://api.example/data' +
+   *       '?page=' + params.page +        // the requested page index
+   *       '&per_page=' + params.pageSize; // number of items on the page
+   *   var xhr = new XMLHttpRequest();
+   *   xhr.onload = function() {
+   *     var response = JSON.parse(xhr.responseText);
+   *     callback(response.employees);
+   *   };
+   *   xhr.open('GET', url, true);
+   *   xhr.send();
+   * };
+   * ```
+   *
+   * ### Styling
+   *
+   * The following shadow DOM parts are available for styling:
+   *
+   * Part name | Description
+   * ----------------|----------------
+   * `row` | Row in the internal table
+   * `cell` | Cell in the internal table
+   * `header-cell` | Header cell in the internal table
+   * `body-cell` | Body cell in the internal table
+   * `footer-cell` | Footer cell in the internal table
+   * `details-cell` | Row details cell in the internal table
+   * `resize-handle` | Handle for resizing the columns
+   * `reorder-ghost` | Ghost element of the header cell being dragged
+   *
+   * The following state attributes are available for styling:
+   *
+   * Attribute    | Description | Part name
+   * -------------|-------------|------------
+   * `loading` | Set when the grid is loading data from data provider | :host
+   * `interacting` | Keyboard navigation in interaction mode | :host
+   * `navigating` | Keyboard navigation in navigation mode | :host
+   * `overflow` | Set when rows are overflowing the grid viewport. Possible values: `top`, `bottom`, `left`, `right` | :host
+   * `reordering` | Set when the grid's columns are being reordered | :host
+   * `dragover` | Set when the grid (not a specific row) is dragged over | :host
+   * `dragging-rows` : Set when grid rows are dragged  | :host
+   * `reorder-status` | Reflects the status of a cell while columns are being reordered | cell
+   * `frozen` | Frozen cell | cell
+   * `last-frozen` | Last frozen cell | cell
+  * * `first-column` | First visible cell on a row | cell
+   * `last-column` | Last visible cell on a row | cell
+   * `selected` | Selected row | row
+   * `expanded` | Expanded row | row
+   * `details-opened` | Row with details open | row
+   * `loading` | Row that is waiting for data from data provider | row
+   * `odd` | Odd row | row
+   * `first` | The first body row | row
+   * `dragstart` | Set for one frame when drag of a row is starting. The value is a number when multiple rows are dragged | row
+   * `dragover` | Set when the row is dragged over | row
+   * `drag-disabled` | Set to a row that isn't available for dragging | row
+   * `drop-disabled` | Set to a row that can't be dropped on top of | row
+   *
+   * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
+   *
+   * @extends PolymerElement
+   * @mixes ThemableMixin
+   * @mixes Grid.A11yMixin
+   * @mixes Grid.ActiveItemMixin
+   * @mixes Grid.ArrayDataProviderMixin
+   * @mixes Grid.ColumnResizingMixin
+   * @mixes Grid.DataProviderMixin
+   * @mixes Grid.DynamicColumnsMixin
+   * @mixes Grid.FilterMixin
+   * @mixes Grid.RowDetailsMixin
+   * @mixes Grid.ScrollMixin
+   * @mixes Grid.SelectionMixin
+   * @mixes Grid.SortMixin
+   * @mixes Grid.KeyboardNavigationMixin
+   * @mixes Grid.ColumnReorderingMixin
+   * @mixes Grid.EventContextMixin
+   * @mixes Grid.StylingMixin
+   * @mixes Grid.DragAndDropMixin
+   * @demo demo/index.html
+   */
+  class GridElement extends
+    ElementMixin$1(
+      ThemableMixin(
+        DataProviderMixin(
+          ArrayDataProviderMixin(
+            DynamicColumnsMixin(
+              ActiveItemMixin(
+                ScrollMixin(
+                  SelectionMixin(
+                    SortMixin(
+                      RowDetailsMixin(
+                        KeyboardNavigationMixin(
+                          A11yMixin(
+                            FilterMixin(
+                              ColumnReorderingMixin(
+                                ColumnResizingMixin(
+                                  EventContextMixin(
+                                    DragAndDropMixin(
+                                      StylingMixin(
+                                        GridScrollerElement)))))))))))))))))) {
+    static get template() {
+      return html`
+    <style include="vaadin-grid-styles"></style>
+
+    <div id="scroller" no-scrollbars\$="[[!_scrollbarWidth]]" wheel-scrolling\$="[[_wheelScrolling]]" safari\$="[[_safari]]" ios\$="[[_ios]]" loading\$="[[loading]]" edge\$="[[_edge]]" firefox\$="[[_firefox]]" ie\$="[[_ie]]" column-reordering-allowed\$="[[columnReorderingAllowed]]">
+
+      <table id="table" role="grid" aria-multiselectable="true" tabindex="0">
+        <caption id="fixedsizer" class="sizer" part="row"></caption>
+        <thead id="header" role="rowgroup"></thead>
+        <tbody id="items" role="rowgroup"></tbody>
+        <tfoot id="footer" role="rowgroup"></tfoot>
+      </table>
+
+      <div part="reorder-ghost"></div>
+      <vaadin-grid-outer-scroller id="outerscroller" _touch-device="[[_touchDevice]]" scroll-target="[[scrollTarget]]" scroll-handler="[[_this]]" no-scrollbars="[[!_scrollbarWidth]]">
+        <div id="outersizer" class="sizer" part="row"></div>
+      </vaadin-grid-outer-scroller>
+    </div>
+
+    <!-- The template needs at least one slot or else shady doesn't distribute -->
+    <slot name="nodistribute"></slot>
+
+    <div id="focusexit" tabindex="0"></div>
+`;
+    }
+
+    static get is() {
+      return 'vaadin-grid';
+    }
+
+    static get version() {
+      return '5.6.6';
+    }
+
+    static get observers() {
+      return [
+        '_columnTreeChanged(_columnTree, _columnTree.*)'
+      ];
+    }
+
+    static get properties() {
+      return {
+
+        _this: {
+          type: Object,
+          value: function() {
+            return this;
+          }
+        },
+
+        _safari: {
+          type: Boolean,
+          value: /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+        },
+
+        _ios: {
+          type: Boolean,
+          value: (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream)
+            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+        },
+
+        _edge: {
+          type: Boolean,
+          value: typeof CSS !== 'undefined' && CSS.supports('(-ms-ime-align:auto)')
+        },
+
+        _ie: {
+          type: Boolean,
+          value: !!(navigator.userAgent.match(/Trident/) && !navigator.userAgent.match(/MSIE/))
+        },
+
+        _firefox: {
+          type: Boolean,
+          value: navigator.userAgent.toLowerCase().indexOf('firefox') > -1
+        },
+
+        _android: {
+          type: Boolean,
+          value: /android/i.test(navigator.userAgent)
+        },
+
+        _touchDevice: {
+          type: Boolean,
+          value: TOUCH_DEVICE
+        },
+
+        /**
+         * If true, the grid's height is defined by its rows.
+         *
+         * Effectively, this disables the grid's virtual scrolling so that all the rows are rendered in the DOM at once.
+         * If the grid has a large number of items, using the feature is discouraged to avoid performance issues.
+         */
+        heightByRows: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true,
+          observer: '_heightByRowsChanged'
+        },
+        _recalculateColumnWidthOnceLoadingFinished: {
+          type: Boolean,
+          value: true
+        }
+      };
+    }
+
+    constructor() {
+      super();
+      this.addEventListener('animationend', this._onAnimationEnd);
+    }
+
+    connectedCallback() {
+      super.connectedCallback();
+      this.recalculateColumnWidths();
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+      super.attributeChangedCallback(name, oldValue, newValue);
+      if (name === 'dir') {
+        this.__isRTL = newValue === 'rtl';
+        this._updateScrollerMeasurements();
+      }
+    }
+
+    __hasRowsWithClientHeight() {
+      return !!Array.from(this.$.items.children).filter(row => row.clientHeight).length;
+    }
+
+    __itemsReceived() {
+      if (this._recalculateColumnWidthOnceLoadingFinished
+        && !this._cache.isLoading()
+        && this.__hasRowsWithClientHeight()) {
+        this._recalculateColumnWidthOnceLoadingFinished = false;
+        this.recalculateColumnWidths();
+      }
+    }
+
+    /**
+     * @param {Array<Vaadin.GridColumnElement>} cols the columns to auto size based on their content width
+     */
+    _recalculateColumnWidths(cols) {
+      // Note: The `cols.forEach()` loops below could be implemented as a single loop but this has been
+      // split for performance reasons to batch these similar actions [write/read] together to avoid
+      // unnecessary layout trashing.
+
+      // [write] Set automatic width for all cells (breaks column alignment)
+      cols.forEach(col => {
+        col.width = 'auto';
+        col._origFlexGrow = col.flexGrow;
+        col.flexGrow = 0;
+      });
+      // [read] Measure max cell width in each column
+      cols.forEach(col => {
+        col._currentWidth = 0;
+        // Note: _allCells only contains cells which are currently rendered in DOM
+        col._allCells.forEach(c => {
+          // Add 1px buffer to the offset width to avoid too narrow columns (sub-pixel rendering)
+          const cellWidth = c.offsetWidth + 1;
+          col._currentWidth = Math.max(col._currentWidth, cellWidth);
+        });
+      });
+      // [write] Set column widths to fit widest measured content
+      cols.forEach(col => {
+        col.width = `${col._currentWidth}px`;
+        col.flexGrow = col._origFlexGrow;
+        col._currentWidth = undefined;
+        col._origFlexGrow = undefined;
+      });
+    }
+
+    /**
+     * Updates the `width` of all columns which have `autoWidth` set to `true`.
+     */
+    recalculateColumnWidths() {
+      if (!this._columnTree) {
+        return; // No columns
+      }
+      if (this._cache.isLoading()) {
+        this._recalculateColumnWidthOnceLoadingFinished = true;
+      } else {
+        const cols = this._getColumns().filter(col => !col.hidden && col.autoWidth);
+        this._recalculateColumnWidths(cols);
+
+      }
+    }
+
+    _createScrollerRows(count) {
+      const rows = [];
+      for (var i = 0; i < count; i++) {
+        const row = document.createElement('tr');
+        row.setAttribute('part', 'row');
+        row.setAttribute('role', 'row');
+        if (this._columnTree) {
+          this._updateRow(row, this._columnTree[this._columnTree.length - 1], 'body', false, true);
+        }
+        rows.push(row);
+      }
+
+      if (this._columnTree) {
+        this._columnTree[this._columnTree.length - 1].forEach(c => c.notifyPath && c.notifyPath('_cells.*', c._cells));
+      }
+
+      beforeNextRender(this, () => {
+        this._updateFirstAndLastColumn();
+        this._resetKeyboardNavigation();
+      });
+      return rows;
+    }
+
+    _getRowTarget() {
+      return this.$.items;
+    }
+
+    _createCell(tagName) {
+      const contentId = this._contentIndex = this._contentIndex + 1 || 0;
+      const slotName = 'vaadin-grid-cell-content-' + contentId;
+
+      const cellContent = document.createElement('vaadin-grid-cell-content');
+      cellContent.setAttribute('slot', slotName);
+
+      const cell = document.createElement(tagName);
+      cell.id = slotName.replace('-content-', '-');
+      cell.setAttribute('tabindex', '-1');
+      cell.setAttribute('role', tagName === 'td' ? 'gridcell' : 'columnheader');
+
+      const slot = document.createElement('slot');
+      slot.setAttribute('name', slotName);
+
+      cell.appendChild(slot);
+
+      cell._content = cellContent;
+
+      // With native Shadow DOM, mousedown on slotted element does not focus
+      // focusable slot wrapper, that is why cells are not focused with
+      // mousedown. Workaround: listen for mousedown and focus manually.
+      cellContent.addEventListener('mousedown', () => {
+        if (window.chrome) {
+          // Chrome bug: focusing before mouseup prevents text selection, see http://crbug.com/771903
+          const mouseUpListener = () => {
+            if (!cellContent.contains(this.getRootNode().activeElement)) {
+              cell.focus();
+            }
+            // If focus is in the cell content — respect it, do not change.
+            document.removeEventListener('mouseup', mouseUpListener, true);
+          };
+          document.addEventListener('mouseup', mouseUpListener, true);
+        } else {
+          // Focus on mouseup, on the other hand, removes selection on Safari.
+          // Watch out sync focus removal issue, only async focus works here.
+          setTimeout(() => {
+            if (!cellContent.contains(this.getRootNode().activeElement)) {
+              cell.focus();
+            }
+          });
+        }
+      });
+
+      return cell;
+    }
+
+    _updateRow(row, columns, section, isColumnRow, noNotify) {
+      section = section || 'body';
+
+      const contentsFragment = document.createDocumentFragment();
+
+      Array.from(row.children).forEach(cell => cell._vacant = true);
+      row.innerHTML = '';
+      if (row.id !== 'outersizer' && row.id !== 'fixedsizer') {
+        row.hidden = true;
+      }
+      columns
+        .filter(column => !column.hidden)
+        .forEach((column, index, cols) => {
+          let cell;
+
+          if (section === 'body') {
+          // Body
+            column._cells = column._cells || [];
+            cell = column._cells.filter(cell => cell._vacant)[0];
+            if (!cell) {
+              cell = this._createCell('td');
+              column._cells.push(cell);
+            }
+            cell.setAttribute('part', 'cell body-cell');
+            row.appendChild(cell);
+
+            if (index === cols.length - 1 && (this._rowDetailsTemplate || this.rowDetailsRenderer)) {
+            // Add details cell as last cell to body rows
+              this._detailsCells = this._detailsCells || [];
+              const detailsCell = this._detailsCells.filter(cell => cell._vacant)[0] || this._createCell('td');
+              if (this._detailsCells.indexOf(detailsCell) === -1) {
+                this._detailsCells.push(detailsCell);
+              }
+              if (!detailsCell._content.parentElement) {
+                contentsFragment.appendChild(detailsCell._content);
+              }
+              this._configureDetailsCell(detailsCell);
+              row.appendChild(detailsCell);
+              this._a11ySetRowDetailsCell(row, detailsCell);
+              detailsCell._vacant = false;
+            }
+
+            if (column.notifyPath && !noNotify) {
+              column.notifyPath('_cells.*', column._cells);
+            }
+          } else {
+          // Header & footer
+            const tagName = section === 'header' ? 'th' : 'td';
+            if (isColumnRow || column.localName === 'vaadin-grid-column-group') {
+              cell = column[`_${section}Cell`] || this._createCell(tagName);
+              cell._column = column;
+              row.appendChild(cell);
+              column[`_${section}Cell`] = cell;
+            } else {
+              column._emptyCells = column._emptyCells || [];
+              cell = column._emptyCells.filter(cell => cell._vacant)[0] || this._createCell(tagName);
+              cell._column = column;
+              row.appendChild(cell);
+              if (column._emptyCells.indexOf(cell) === -1) {
+                column._emptyCells.push(cell);
+              }
+            }
+            cell.setAttribute('part', `cell ${section}-cell`);
+            this.__updateHeaderFooterRowVisibility(row);
+          }
+
+          if (!cell._content.parentElement) {
+            contentsFragment.appendChild(cell._content);
+          }
+          cell._vacant = false;
+          cell._column = column;
+        });
+
+      // Might be empty if only cache was used
+      this.appendChild(contentsFragment);
+
+      this._frozenCellsChanged();
+      this._updateFirstAndLastColumnForRow(row);
+    }
+
+    __updateHeaderFooterRowVisibility(row) {
+      if (!row) {
+        return;
+      }
+
+      const visibleRowCells = Array.from(row.children).filter(cell => {
+        const column = cell._column;
+        if (column._emptyCells && column._emptyCells.indexOf(cell) > -1) {
+          // The cell is an "empty cell"  -> doesn't block hiding the row
+          return false;
+        }
+        if (row.parentElement === this.$.header) {
+          if (column.headerRenderer || column._headerTemplate) {
+            // The cell is the header cell of a column that has a header renderer
+            // or a header template -> row should be visible
+            return true;
+          }
+          if (column.header === null) {
+            // The column header is explicilty set to null -> doesn't block hiding the row
+            return false;
+          }
+          if (column.path || column.header !== undefined) {
+            // The column has an explicit non-null header or a path that generates a header
+            // -> row should be visible
+            return true;
+          }
+        } else {
+          if (column.footerRenderer || column._footerTemplate) {
+            // The cell is the footer cell of a column that has a footer renderer
+            // or a footer template -> row should be visible
+            return true;
+          }
+        }
+      });
+
+      if (row.hidden !== !visibleRowCells.length) {
+        row.hidden = !visibleRowCells.length;
+        this.notifyResize();
+      }
+    }
+
+    _updateScrollerItem(row, index) {
+      this._preventScrollerRotatingCellFocus(row, index);
+
+      if (!this._columnTree) {
+        return;
+      }
+
+      this._toggleAttribute('first', index === 0, row);
+      this._toggleAttribute('odd', index % 2, row);
+      this._a11yUpdateRowRowindex(row, index);
+      this._getItem(index, row);
+    }
+
+    _columnTreeChanged(columnTree, splices) {
+      this._renderColumnTree(columnTree);
+      this.recalculateColumnWidths();
+    }
+
+    _renderColumnTree(columnTree) {
+      Array.from(this.$.items.children).forEach((row) => this._updateRow(row, columnTree[columnTree.length - 1], null, false, true));
+
+      while (this.$.header.children.length < columnTree.length) {
+        const headerRow = document.createElement('tr');
+        headerRow.setAttribute('part', 'row');
+        headerRow.setAttribute('role', 'row');
+        this.$.header.appendChild(headerRow);
+
+        const footerRow = document.createElement('tr');
+        footerRow.setAttribute('part', 'row');
+        footerRow.setAttribute('role', 'row');
+        this.$.footer.appendChild(footerRow);
+      }
+      while (this.$.header.children.length > columnTree.length) {
+        this.$.header.removeChild(this.$.header.firstElementChild);
+        this.$.footer.removeChild(this.$.footer.firstElementChild);
+      }
+
+      Array.from(this.$.header.children)
+        .forEach((headerRow, index) => this._updateRow(headerRow, columnTree[index], 'header', index === columnTree.length - 1));
+
+      Array.from(this.$.footer.children)
+        .forEach((footerRow, index) => this._updateRow(footerRow, columnTree[columnTree.length - 1 - index], 'footer', index === 0));
+
+      // Sizer rows
+      this._updateRow(this.$.outersizer, columnTree[columnTree.length - 1], null, false, true);
+      this._updateRow(this.$.fixedsizer, columnTree[columnTree.length - 1]);
+
+      this._resizeHandler();
+      this._frozenCellsChanged();
+      this._updateFirstAndLastColumn();
+      this._resetKeyboardNavigation();
+      this._a11yUpdateHeaderRows();
+      this._a11yUpdateFooterRows();
+    }
+
+    _updateItem(row, item) {
+      row._item = item;
+      const model = this.__getRowModel(row);
+
+      this._toggleAttribute('selected', model.selected, row);
+      this._a11yUpdateRowSelected(row, model.selected);
+      this._a11yUpdateRowLevel(row, model.level);
+      this._toggleAttribute('expanded', model.expanded, row);
+      if (this._rowDetailsTemplate || this.rowDetailsRenderer) {
+        this._toggleDetailsCell(row, item);
+      }
+      this._generateCellClassNames(row, model);
+      this._filterDragAndDrop(row, model);
+
+      Array.from(row.children).forEach(cell => {
+        if (cell._renderer) {
+          const owner = cell._column || this;
+          cell._renderer.call(owner, cell._content, owner, model);
+        } else if (cell._instance) {
+          cell._instance.__detailsOpened__ = model.detailsOpened;
+          cell._instance.__selected__ = model.selected;
+          cell._instance.__level__ = model.level;
+          cell._instance.__expanded__ = model.expanded;
+          cell._instance.setProperties(model);
+        }
+      });
+
+      this._debouncerUpdateHeights = Debouncer.debounce(this._debouncerUpdateHeights,
+        timeOut.after(1), () => {
+          this._updateMetrics();
+          this._positionItems();
+          this._updateScrollerSize();
+        }
+      );
+    }
+
+    _resizeHandler() {
+      this._updateDetailsCellHeights();
+      this._accessIronListAPI(super._resizeHandler, true);
+      this._updateScrollerMeasurements();
+      this._updateHeaderFooterMetrics();
+    }
+
+    _updateHeaderFooterMetrics() {
+      const headerHeight = this.$.header.clientHeight + 'px';
+      const footerHeight = this.$.footer.clientHeight + 'px';
+      [this.$.outersizer, this.$.fixedsizer, this.$.items].forEach(element => {
+        element.style.borderTopWidth = headerHeight;
+        element.style.borderBottomWidth = footerHeight;
+      });
+
+      afterNextRender(this.$.header, () => {
+        if (this._pendingScrollToIndex) {
+          this._scrollToIndex(this._pendingScrollToIndex);
+        }
+      });
+    }
+
+    _onAnimationEnd(e) {
+      // ShadyCSS applies scoping suffixes to animation names
+      if (e.animationName.indexOf('vaadin-grid-appear') === 0) {
+        this._render();
+        this._updateHeaderFooterMetrics();
+        e.stopPropagation();
+        this.notifyResize();
+        this.__itemsReceived();
+      }
+    }
+
+    _toggleAttribute(name, bool, node) {
+      if (node.hasAttribute(name) === !bool) {
+        if (bool) {
+          node.setAttribute(name, '');
+        } else {
+          node.removeAttribute(name);
+        }
+      }
+    }
+
+    __getRowModel(row) {
+      return {
+        index: row.index,
+        item: row._item,
+        level: this._getIndexLevel(row.index),
+        expanded: this._isExpanded(row._item),
+        selected: this._isSelected(row._item),
+        detailsOpened:
+          !!(this._rowDetailsTemplate || this.rowDetailsRenderer) && this._isDetailsOpened(row._item)
+      };
+    }
+
+    /**
+     * Manually invoke existing renderers for all the columns
+     * (header, footer and body cells) and opened row details.
+     */
+    render() {
+      if (this._columnTree) {
+        // header and footer renderers
+        this._columnTree.forEach(level => {
+          level.forEach(column => column._renderHeaderAndFooter());
+        });
+
+        // body and row details renderers
+        this._update();
+      }
+    }
+
+    /**
+     * Updates the computed metrics and positioning of internal grid parts
+     * (row/details cell positioning etc). Needs to be invoked whenever the sizing of grid
+     * content changes asynchronously to ensure consistent appearance (e.g. when a
+     * contained image whose bounds aren't known beforehand finishes loading).
+     */
+    notifyResize() {
+      super.notifyResize();
+    }
+
+    _heightByRowsChanged(value, oldValue) {
+      if (value || oldValue) {
+        this.notifyResize();
+      }
+    }
+
+    __forceReflow() {
+      this._debouncerForceReflow = Debouncer.debounce(this._debouncerForceReflow,
+        animationFrame, () => {
+          this.$.scroller.style.overflow = 'hidden';
+          setTimeout(() => this.$.scroller.style.overflow = '');
+        }
+      );
+    }
+  }
+
+  customElements.define(GridElement.is, GridElement);
+
+  class Services{
+      message(){
+          return "Hello Campinas";    
+      }
+      postServices(url = ``, data = {}) {
+          // Default options are marked with *
+          console.log('data', data);
+          return fetch(url, {
+              method: "POST", // *GET, POST, PUT, DELETE, etc.
+              mode: "cors", // no-cors, cors, *same-origin
+              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+              credentials: "same-origin", // include, *same-origin, omit
+              headers: {
+                  "Content-Type": "application/json",
+                  // "Content-Type": "application/x-www-form-urlencoded",
+              },
+              redirect: "follow", // manual, *follow, error
+              referrer: "no-referrer", // no-referrer, *client
+              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+          }); // parses response to JSO    
+      }   
+      
+      async getServices(url= ``){
+          const request = await fetch(url);
+          const payload = await request.json(); 
+          return payload;
+      }
+  }
+
+  class ClienteView extends HTMLElement{
+      constructor(){
+          super();
+          this.service = new Services();
+          this.loadingGrid();
+      }
+      connectedCallback(){
+          this.callService();
+          this.attachListener();
+          this.loadingGrid();
+          console.log('connectCallback');
+      }
+      callService(){
+          const templete = html$1 `
+        <vaadin-form-layout>
+            <vaadin-text-field label="Nome" id="nome"></vaadin-text-field>
+            <vaadin-form-item>
+                <vaadin-button theme="primary">Salvar</vaadin-button>
+            </vaadin-form-item>
+        </vaadin-form-layout>
+        <vaadin-grid>
+            <vaadin-grid-column path="id" header="Código"></vaadin-grid-column>
+            <vaadin-grid-column path="nome" header="Nome"></vaadin-grid-column>
+        </vaadin-grid>`;
+          render(templete, this);
+      }    
+      attachListener(){
+          const button = this.querySelector('vaadin-button');
+          button.addEventListener('click', _ =>{
+              this.salvar();
+          });
+      }
+      salvar(){
+          const nome = this.querySelector('#nome');
+          const data = {nome: nome.value};
+          this.service.postServices("http://localhost:8080/clientes", data)
+          .then(response =>{ 
+              console.log('response',response);
+              this.loadingGrid();
+              const textfield = this.querySelector('vaadin-text-field');
+              console.log('campo',textfield);
+          });
+      }
+      loadingGrid(){
+          customElements.whenDefined('vaadin-grid').then(_ =>{
+              const grid = this.querySelector('vaadin-grid');
+            //  grid.dataProvider = (params, callback) =>{
+            //      fetch("")
+            //      .then(response => response.json()).then(
+           //           json => callback(json, json.length));
+           //
+              grid.dataProvider =(params, callback) =>{
+                  this.service.getServices("http://localhost:8080/clientes")
+                  .then(data => callback(data, data.length));
+              };
+          });
+      }
+  }
+  customElements.define('cliente-view',ClienteView);
 
   class VappPage3 extends PolymerElement{
       static get template(){
@@ -31291,8 +42691,8 @@
         const router = new Router(this.shadowRoot.getElementById('outlet'));
         router.setRoutes([
           {path: '/', component: 'vapp-home'},
+          {path: '/Clinte', component: 'cliente-view'},
           {path: '/page3', component: 'vapp-page3'},
-          {path: '/page2', component: 'vapp-page2'},
         ]);
       }
       static get template(){
@@ -31311,9 +42711,9 @@
               </a>
             </vaadin-tab>
             <vaadin-tab>
-              <a href="page2">
+              <a href="Clinte">
                 <iron-icon icon="vaadin:list"></iron-icon>
-                  Page 2
+                  Clintes
               </a>
             </vaadin-tab>
             <vaadin-tab>

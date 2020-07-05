@@ -13,7 +13,6 @@ export default class VappHome extends PolymerElement{
         button.addEventListener('click', function() {
             button.nextElementSibling.textContent = ++i;
         });
-        console.log('sugar', Sugar);
         Sugar.Date.setLocale('pt');
         var datepicker = this.shadowRoot.querySelector('vaadin-date-picker');
         console.log('data', datepicker);

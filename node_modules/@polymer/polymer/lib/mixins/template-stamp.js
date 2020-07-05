@@ -22,6 +22,53 @@ const templateExtensions = {
   'dom-if': true,
   'dom-repeat': true
 };
+
+let placeholderBugDetect = false;
+let placeholderBug = false;
+
+function hasPlaceholderBug() {
+  if (!placeholderBugDetect) {
+    placeholderBugDetect = true;
+    const t = document.createElement('textarea');
+    t.placeholder = 'a';
+    placeholderBug = t.placeholder === t.textContent;
+  }
+  return placeholderBug;
+}
+
+/**
+ * Some browsers have a bug with textarea, where placeholder text is copied as
+ * a textnode child of the textarea.
+ *
+ * If the placeholder is a binding, this can break template stamping in two
+ * ways.
+ *
+ * One issue is that when the `placeholder` attribute is removed when the
+ * binding is processed, the textnode child of the textarea is deleted, and the
+ * template info tries to bind into that node.
+ *
+ * With `legacyOptimizations` in use, when the template is stamped and the
+ * `textarea.textContent` binding is processed, no corresponding node is found
+ * because it was removed during parsing. An exception is generated when this
+ * binding is updated.
+ *
+ * With `legacyOptimizations` not in use, the template is cloned before
+ * processing and this changes the above behavior. The cloned template also has
+ * a value property set to the placeholder and textContent. This prevents the
+ * removal of the textContent when the placeholder attribute is removed.
+ * Therefore the exception does not occur. However, there is an extra
+ * unnecessary binding.
+ *
+ * @param {!Node} node Check node for placeholder bug
+ * @return {void}
+ */
+function fixPlaceholder(node) {
+  if (hasPlaceholderBug() && node.localName === 'textarea' && node.placeholder
+        && node.placeholder === node.textContent) {
+    node.textContent = null;
+  }
+}
+
 function wrapTemplateExtension(node) {
   let is = node.getAttribute('is');
   if (is && templateExtensions[is]) {
@@ -72,9 +119,11 @@ function applyEventListener(inst, node, nodeInfo) {
 }
 
 // push configuration references at configure time
-function applyTemplateContent(inst, node, nodeInfo) {
+function applyTemplateInfo(inst, node, nodeInfo, parentTemplateInfo) {
   if (nodeInfo.templateInfo) {
+    // Give the node an instance of this templateInfo and set its parent
     node._templateInfo = nodeInfo.templateInfo;
+    node._parentTemplateInfo = parentTemplateInfo;
   }
 }
 
@@ -104,9 +153,6 @@ function createNodeEventHandler(context, eventName, methodName) {
  * @mixinFunction
  * @polymer
  * @summary Element class mixin that provides basic template parsing and stamping
- * @template T
- * @param {function(new:T)} superClass Class to apply mixin to.
- * @return {function(new:T)} superClass with mixin applied.
  */
 export const TemplateStamp = dedupingMixin(
     /**
@@ -205,6 +251,7 @@ export const TemplateStamp = dedupingMixin(
         // TODO(rictic): fix typing
         let /** ? */ templateInfo = template._templateInfo = {};
         templateInfo.nodeInfoList = [];
+        templateInfo.nestedTemplate = Boolean(outerTemplateInfo);
         templateInfo.stripWhiteSpace =
           (outerTemplateInfo && outerTemplateInfo.stripWhiteSpace) ||
           template.hasAttribute('strip-whitespace');
@@ -251,13 +298,18 @@ export const TemplateStamp = dedupingMixin(
         // For ShadyDom optimization, indicating there is an insertion point
         templateInfo.hasInsertionPoint = true;
       }
+      fixPlaceholder(element);
       if (element.firstChild) {
         this._parseTemplateChildNodes(element, templateInfo, nodeInfo);
       }
       if (element.hasAttributes && element.hasAttributes()) {
         noted = this._parseTemplateNodeAttributes(element, templateInfo, nodeInfo) || noted;
       }
-      return noted;
+      // Checking `nodeInfo.noted` allows a child node of this node (who gets
+      // access to `parentInfo`) to cause the parent to be noted, which
+      // otherwise has no return path via `_parseTemplateChildNodes` (used by
+      // some optimizations)
+      return noted || nodeInfo.noted;
     }
 
     /**
@@ -436,16 +488,22 @@ export const TemplateStamp = dedupingMixin(
      * is removed and stored in notes as well.
      *
      * @param {!HTMLTemplateElement} template Template to stamp
+     * @param {TemplateInfo=} templateInfo Optional template info associated
+     *   with the template to be stamped; if omitted the template will be
+     *   automatically parsed.
      * @return {!StampedTemplate} Cloned template content
      * @override
      */
-    _stampTemplate(template) {
+    _stampTemplate(template, templateInfo) {
       // Polyfill support: bootstrap the template if it has not already been
       if (template && !template.content &&
           window.HTMLTemplateElement && HTMLTemplateElement.decorate) {
         HTMLTemplateElement.decorate(template);
       }
-      let templateInfo = this.constructor._parseTemplate(template);
+      // Accepting the `templateInfo` via an argument allows for creating
+      // instances of the `templateInfo` by the caller, useful for adding
+      // instance-time information to the prototypical data
+      templateInfo = templateInfo || this.constructor._parseTemplate(template);
       let nodeInfo = templateInfo.nodeInfoList;
       let content = templateInfo.content || template.content;
       let dom = /** @type {DocumentFragment} */ (document.importNode(content, true));
@@ -456,7 +514,7 @@ export const TemplateStamp = dedupingMixin(
       for (let i=0, l=nodeInfo.length, info; (i<l) && (info=nodeInfo[i]); i++) {
         let node = nodes[i] = findTemplateNode(dom, info);
         applyIdToMap(this, dom.$, node, info);
-        applyTemplateContent(this, node, info);
+        applyTemplateInfo(this, node, info, templateInfo);
         applyEventListener(this, node, info);
       }
       dom = /** @type {!StampedTemplate} */(dom); // eslint-disable-line no-self-assign
