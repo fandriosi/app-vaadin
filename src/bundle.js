@@ -25864,6 +25864,1124 @@
 
   document.head.appendChild($_documentContainer$c.content);
 
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const directives = new WeakMap();
+  const isDirective = (o) => {
+      return typeof o === 'function' && directives.has(o);
+  };
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * True if the custom elements polyfill is in use.
+   */
+  const isCEPolyfill = typeof window !== 'undefined' &&
+      window.customElements != null &&
+      window.customElements.polyfillWrapFlushCallback !==
+          undefined;
+  /**
+   * Removes nodes, starting from `start` (inclusive) to `end` (exclusive), from
+   * `container`.
+   */
+  const removeNodes = (container, start, end = null) => {
+      while (start !== end) {
+          const n = start.nextSibling;
+          container.removeChild(start);
+          start = n;
+      }
+  };
+
+  /**
+   * @license
+   * Copyright (c) 2018 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * A sentinel value that signals that a value was handled by a directive and
+   * should not be written to the DOM.
+   */
+  const noChange = {};
+  /**
+   * A sentinel value that signals a NodePart to fully clear its content.
+   */
+  const nothing = {};
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * An expression marker with embedded unique key to avoid collision with
+   * possible text in templates.
+   */
+  const marker = `{{lit-${String(Math.random()).slice(2)}}}`;
+  /**
+   * An expression marker used text-positions, multi-binding attributes, and
+   * attributes with markup-like text values.
+   */
+  const nodeMarker = `<!--${marker}-->`;
+  const markerRegex = new RegExp(`${marker}|${nodeMarker}`);
+  /**
+   * Suffix appended to all bound attribute names.
+   */
+  const boundAttributeSuffix = '$lit$';
+  /**
+   * An updatable Template that tracks the location of dynamic parts.
+   */
+  class Template {
+      constructor(result, element) {
+          this.parts = [];
+          this.element = element;
+          const nodesToRemove = [];
+          const stack = [];
+          // Edge needs all 4 parameters present; IE11 needs 3rd parameter to be null
+          const walker = document.createTreeWalker(element.content, 133 /* NodeFilter.SHOW_{ELEMENT|COMMENT|TEXT} */, null, false);
+          // Keeps track of the last index associated with a part. We try to delete
+          // unnecessary nodes, but we never want to associate two different parts
+          // to the same index. They must have a constant node between.
+          let lastPartIndex = 0;
+          let index = -1;
+          let partIndex = 0;
+          const { strings, values: { length } } = result;
+          while (partIndex < length) {
+              const node = walker.nextNode();
+              if (node === null) {
+                  // We've exhausted the content inside a nested template element.
+                  // Because we still have parts (the outer for-loop), we know:
+                  // - There is a template in the stack
+                  // - The walker will find a nextNode outside the template
+                  walker.currentNode = stack.pop();
+                  continue;
+              }
+              index++;
+              if (node.nodeType === 1 /* Node.ELEMENT_NODE */) {
+                  if (node.hasAttributes()) {
+                      const attributes = node.attributes;
+                      const { length } = attributes;
+                      // Per
+                      // https://developer.mozilla.org/en-US/docs/Web/API/NamedNodeMap,
+                      // attributes are not guaranteed to be returned in document order.
+                      // In particular, Edge/IE can return them out of order, so we cannot
+                      // assume a correspondence between part index and attribute index.
+                      let count = 0;
+                      for (let i = 0; i < length; i++) {
+                          if (endsWith(attributes[i].name, boundAttributeSuffix)) {
+                              count++;
+                          }
+                      }
+                      while (count-- > 0) {
+                          // Get the template literal section leading up to the first
+                          // expression in this attribute
+                          const stringForPart = strings[partIndex];
+                          // Find the attribute name
+                          const name = lastAttributeNameRegex.exec(stringForPart)[2];
+                          // Find the corresponding attribute
+                          // All bound attributes have had a suffix added in
+                          // TemplateResult#getHTML to opt out of special attribute
+                          // handling. To look up the attribute value we also need to add
+                          // the suffix.
+                          const attributeLookupName = name.toLowerCase() + boundAttributeSuffix;
+                          const attributeValue = node.getAttribute(attributeLookupName);
+                          node.removeAttribute(attributeLookupName);
+                          const statics = attributeValue.split(markerRegex);
+                          this.parts.push({ type: 'attribute', index, name, strings: statics });
+                          partIndex += statics.length - 1;
+                      }
+                  }
+                  if (node.tagName === 'TEMPLATE') {
+                      stack.push(node);
+                      walker.currentNode = node.content;
+                  }
+              }
+              else if (node.nodeType === 3 /* Node.TEXT_NODE */) {
+                  const data = node.data;
+                  if (data.indexOf(marker) >= 0) {
+                      const parent = node.parentNode;
+                      const strings = data.split(markerRegex);
+                      const lastIndex = strings.length - 1;
+                      // Generate a new text node for each literal section
+                      // These nodes are also used as the markers for node parts
+                      for (let i = 0; i < lastIndex; i++) {
+                          let insert;
+                          let s = strings[i];
+                          if (s === '') {
+                              insert = createMarker();
+                          }
+                          else {
+                              const match = lastAttributeNameRegex.exec(s);
+                              if (match !== null && endsWith(match[2], boundAttributeSuffix)) {
+                                  s = s.slice(0, match.index) + match[1] +
+                                      match[2].slice(0, -boundAttributeSuffix.length) + match[3];
+                              }
+                              insert = document.createTextNode(s);
+                          }
+                          parent.insertBefore(insert, node);
+                          this.parts.push({ type: 'node', index: ++index });
+                      }
+                      // If there's no text, we must insert a comment to mark our place.
+                      // Else, we can trust it will stick around after cloning.
+                      if (strings[lastIndex] === '') {
+                          parent.insertBefore(createMarker(), node);
+                          nodesToRemove.push(node);
+                      }
+                      else {
+                          node.data = strings[lastIndex];
+                      }
+                      // We have a part for each match found
+                      partIndex += lastIndex;
+                  }
+              }
+              else if (node.nodeType === 8 /* Node.COMMENT_NODE */) {
+                  if (node.data === marker) {
+                      const parent = node.parentNode;
+                      // Add a new marker node to be the startNode of the Part if any of
+                      // the following are true:
+                      //  * We don't have a previousSibling
+                      //  * The previousSibling is already the start of a previous part
+                      if (node.previousSibling === null || index === lastPartIndex) {
+                          index++;
+                          parent.insertBefore(createMarker(), node);
+                      }
+                      lastPartIndex = index;
+                      this.parts.push({ type: 'node', index });
+                      // If we don't have a nextSibling, keep this node so we have an end.
+                      // Else, we can remove it to save future costs.
+                      if (node.nextSibling === null) {
+                          node.data = '';
+                      }
+                      else {
+                          nodesToRemove.push(node);
+                          index--;
+                      }
+                      partIndex++;
+                  }
+                  else {
+                      let i = -1;
+                      while ((i = node.data.indexOf(marker, i + 1)) !== -1) {
+                          // Comment node has a binding marker inside, make an inactive part
+                          // The binding won't work, but subsequent bindings will
+                          // TODO (justinfagnani): consider whether it's even worth it to
+                          // make bindings in comments work
+                          this.parts.push({ type: 'node', index: -1 });
+                          partIndex++;
+                      }
+                  }
+              }
+          }
+          // Remove text binding nodes after the walk to not disturb the TreeWalker
+          for (const n of nodesToRemove) {
+              n.parentNode.removeChild(n);
+          }
+      }
+  }
+  const endsWith = (str, suffix) => {
+      const index = str.length - suffix.length;
+      return index >= 0 && str.slice(index) === suffix;
+  };
+  const isTemplatePartActive = (part) => part.index !== -1;
+  // Allows `document.createComment('')` to be renamed for a
+  // small manual size-savings.
+  const createMarker = () => document.createComment('');
+  /**
+   * This regex extracts the attribute name preceding an attribute-position
+   * expression. It does this by matching the syntax allowed for attributes
+   * against the string literal directly preceding the expression, assuming that
+   * the expression is in an attribute-value position.
+   *
+   * See attributes in the HTML spec:
+   * https://www.w3.org/TR/html5/syntax.html#elements-attributes
+   *
+   * " \x09\x0a\x0c\x0d" are HTML space characters:
+   * https://www.w3.org/TR/html5/infrastructure.html#space-characters
+   *
+   * "\0-\x1F\x7F-\x9F" are Unicode control characters, which includes every
+   * space character except " ".
+   *
+   * So an attribute is:
+   *  * The name: any character except a control character, space character, ('),
+   *    ("), ">", "=", or "/"
+   *  * Followed by zero or more space characters
+   *  * Followed by "="
+   *  * Followed by zero or more space characters
+   *  * Followed by:
+   *    * Any character except space, ('), ("), "<", ">", "=", (`), or
+   *    * (") then any non-("), or
+   *    * (') then any non-(')
+   */
+  const lastAttributeNameRegex = 
+  // eslint-disable-next-line no-control-regex
+  /([ \x09\x0a\x0c\x0d])([^\0-\x1F\x7F-\x9F "'>=/]+)([ \x09\x0a\x0c\x0d]*=[ \x09\x0a\x0c\x0d]*(?:[^ \x09\x0a\x0c\x0d"'`<>=]*|"[^"]*|'[^']*))$/;
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * An instance of a `Template` that can be attached to the DOM and updated
+   * with new values.
+   */
+  class TemplateInstance {
+      constructor(template, processor, options) {
+          this.__parts = [];
+          this.template = template;
+          this.processor = processor;
+          this.options = options;
+      }
+      update(values) {
+          let i = 0;
+          for (const part of this.__parts) {
+              if (part !== undefined) {
+                  part.setValue(values[i]);
+              }
+              i++;
+          }
+          for (const part of this.__parts) {
+              if (part !== undefined) {
+                  part.commit();
+              }
+          }
+      }
+      _clone() {
+          // There are a number of steps in the lifecycle of a template instance's
+          // DOM fragment:
+          //  1. Clone - create the instance fragment
+          //  2. Adopt - adopt into the main document
+          //  3. Process - find part markers and create parts
+          //  4. Upgrade - upgrade custom elements
+          //  5. Update - set node, attribute, property, etc., values
+          //  6. Connect - connect to the document. Optional and outside of this
+          //     method.
+          //
+          // We have a few constraints on the ordering of these steps:
+          //  * We need to upgrade before updating, so that property values will pass
+          //    through any property setters.
+          //  * We would like to process before upgrading so that we're sure that the
+          //    cloned fragment is inert and not disturbed by self-modifying DOM.
+          //  * We want custom elements to upgrade even in disconnected fragments.
+          //
+          // Given these constraints, with full custom elements support we would
+          // prefer the order: Clone, Process, Adopt, Upgrade, Update, Connect
+          //
+          // But Safari does not implement CustomElementRegistry#upgrade, so we
+          // can not implement that order and still have upgrade-before-update and
+          // upgrade disconnected fragments. So we instead sacrifice the
+          // process-before-upgrade constraint, since in Custom Elements v1 elements
+          // must not modify their light DOM in the constructor. We still have issues
+          // when co-existing with CEv0 elements like Polymer 1, and with polyfills
+          // that don't strictly adhere to the no-modification rule because shadow
+          // DOM, which may be created in the constructor, is emulated by being placed
+          // in the light DOM.
+          //
+          // The resulting order is on native is: Clone, Adopt, Upgrade, Process,
+          // Update, Connect. document.importNode() performs Clone, Adopt, and Upgrade
+          // in one step.
+          //
+          // The Custom Elements v1 polyfill supports upgrade(), so the order when
+          // polyfilled is the more ideal: Clone, Process, Adopt, Upgrade, Update,
+          // Connect.
+          const fragment = isCEPolyfill ?
+              this.template.element.content.cloneNode(true) :
+              document.importNode(this.template.element.content, true);
+          const stack = [];
+          const parts = this.template.parts;
+          // Edge needs all 4 parameters present; IE11 needs 3rd parameter to be null
+          const walker = document.createTreeWalker(fragment, 133 /* NodeFilter.SHOW_{ELEMENT|COMMENT|TEXT} */, null, false);
+          let partIndex = 0;
+          let nodeIndex = 0;
+          let part;
+          let node = walker.nextNode();
+          // Loop through all the nodes and parts of a template
+          while (partIndex < parts.length) {
+              part = parts[partIndex];
+              if (!isTemplatePartActive(part)) {
+                  this.__parts.push(undefined);
+                  partIndex++;
+                  continue;
+              }
+              // Progress the tree walker until we find our next part's node.
+              // Note that multiple parts may share the same node (attribute parts
+              // on a single element), so this loop may not run at all.
+              while (nodeIndex < part.index) {
+                  nodeIndex++;
+                  if (node.nodeName === 'TEMPLATE') {
+                      stack.push(node);
+                      walker.currentNode = node.content;
+                  }
+                  if ((node = walker.nextNode()) === null) {
+                      // We've exhausted the content inside a nested template element.
+                      // Because we still have parts (the outer for-loop), we know:
+                      // - There is a template in the stack
+                      // - The walker will find a nextNode outside the template
+                      walker.currentNode = stack.pop();
+                      node = walker.nextNode();
+                  }
+              }
+              // We've arrived at our part's node.
+              if (part.type === 'node') {
+                  const part = this.processor.handleTextExpression(this.options);
+                  part.insertAfterNode(node.previousSibling);
+                  this.__parts.push(part);
+              }
+              else {
+                  this.__parts.push(...this.processor.handleAttributeExpressions(node, part.name, part.strings, this.options));
+              }
+              partIndex++;
+          }
+          if (isCEPolyfill) {
+              document.adoptNode(fragment);
+              customElements.upgrade(fragment);
+          }
+          return fragment;
+      }
+  }
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const commentMarker = ` ${marker} `;
+  /**
+   * The return type of `html`, which holds a Template and the values from
+   * interpolated expressions.
+   */
+  class TemplateResult {
+      constructor(strings, values, type, processor) {
+          this.strings = strings;
+          this.values = values;
+          this.type = type;
+          this.processor = processor;
+      }
+      /**
+       * Returns a string of HTML used to create a `<template>` element.
+       */
+      getHTML() {
+          const l = this.strings.length - 1;
+          let html = '';
+          let isCommentBinding = false;
+          for (let i = 0; i < l; i++) {
+              const s = this.strings[i];
+              // For each binding we want to determine the kind of marker to insert
+              // into the template source before it's parsed by the browser's HTML
+              // parser. The marker type is based on whether the expression is in an
+              // attribute, text, or comment position.
+              //   * For node-position bindings we insert a comment with the marker
+              //     sentinel as its text content, like <!--{{lit-guid}}-->.
+              //   * For attribute bindings we insert just the marker sentinel for the
+              //     first binding, so that we support unquoted attribute bindings.
+              //     Subsequent bindings can use a comment marker because multi-binding
+              //     attributes must be quoted.
+              //   * For comment bindings we insert just the marker sentinel so we don't
+              //     close the comment.
+              //
+              // The following code scans the template source, but is *not* an HTML
+              // parser. We don't need to track the tree structure of the HTML, only
+              // whether a binding is inside a comment, and if not, if it appears to be
+              // the first binding in an attribute.
+              const commentOpen = s.lastIndexOf('<!--');
+              // We're in comment position if we have a comment open with no following
+              // comment close. Because <-- can appear in an attribute value there can
+              // be false positives.
+              isCommentBinding = (commentOpen > -1 || isCommentBinding) &&
+                  s.indexOf('-->', commentOpen + 1) === -1;
+              // Check to see if we have an attribute-like sequence preceding the
+              // expression. This can match "name=value" like structures in text,
+              // comments, and attribute values, so there can be false-positives.
+              const attributeMatch = lastAttributeNameRegex.exec(s);
+              if (attributeMatch === null) {
+                  // We're only in this branch if we don't have a attribute-like
+                  // preceding sequence. For comments, this guards against unusual
+                  // attribute values like <div foo="<!--${'bar'}">. Cases like
+                  // <!-- foo=${'bar'}--> are handled correctly in the attribute branch
+                  // below.
+                  html += s + (isCommentBinding ? commentMarker : nodeMarker);
+              }
+              else {
+                  // For attributes we use just a marker sentinel, and also append a
+                  // $lit$ suffix to the name to opt-out of attribute-specific parsing
+                  // that IE and Edge do for style and certain SVG attributes.
+                  html += s.substr(0, attributeMatch.index) + attributeMatch[1] +
+                      attributeMatch[2] + boundAttributeSuffix + attributeMatch[3] +
+                      marker;
+              }
+          }
+          html += this.strings[l];
+          return html;
+      }
+      getTemplateElement() {
+          const template = document.createElement('template');
+          template.innerHTML = this.getHTML();
+          return template;
+      }
+  }
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const isPrimitive = (value) => {
+      return (value === null ||
+          !(typeof value === 'object' || typeof value === 'function'));
+  };
+  const isIterable = (value) => {
+      return Array.isArray(value) ||
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          !!(value && value[Symbol.iterator]);
+  };
+  /**
+   * Writes attribute values to the DOM for a group of AttributeParts bound to a
+   * single attribute. The value is only set once even if there are multiple parts
+   * for an attribute.
+   */
+  class AttributeCommitter {
+      constructor(element, name, strings) {
+          this.dirty = true;
+          this.element = element;
+          this.name = name;
+          this.strings = strings;
+          this.parts = [];
+          for (let i = 0; i < strings.length - 1; i++) {
+              this.parts[i] = this._createPart();
+          }
+      }
+      /**
+       * Creates a single part. Override this to create a differnt type of part.
+       */
+      _createPart() {
+          return new AttributePart(this);
+      }
+      _getValue() {
+          const strings = this.strings;
+          const l = strings.length - 1;
+          let text = '';
+          for (let i = 0; i < l; i++) {
+              text += strings[i];
+              const part = this.parts[i];
+              if (part !== undefined) {
+                  const v = part.value;
+                  if (isPrimitive(v) || !isIterable(v)) {
+                      text += typeof v === 'string' ? v : String(v);
+                  }
+                  else {
+                      for (const t of v) {
+                          text += typeof t === 'string' ? t : String(t);
+                      }
+                  }
+              }
+          }
+          text += strings[l];
+          return text;
+      }
+      commit() {
+          if (this.dirty) {
+              this.dirty = false;
+              this.element.setAttribute(this.name, this._getValue());
+          }
+      }
+  }
+  /**
+   * A Part that controls all or part of an attribute value.
+   */
+  class AttributePart {
+      constructor(committer) {
+          this.value = undefined;
+          this.committer = committer;
+      }
+      setValue(value) {
+          if (value !== noChange && (!isPrimitive(value) || value !== this.value)) {
+              this.value = value;
+              // If the value is a not a directive, dirty the committer so that it'll
+              // call setAttribute. If the value is a directive, it'll dirty the
+              // committer if it calls setValue().
+              if (!isDirective(value)) {
+                  this.committer.dirty = true;
+              }
+          }
+      }
+      commit() {
+          while (isDirective(this.value)) {
+              const directive = this.value;
+              this.value = noChange;
+              directive(this);
+          }
+          if (this.value === noChange) {
+              return;
+          }
+          this.committer.commit();
+      }
+  }
+  /**
+   * A Part that controls a location within a Node tree. Like a Range, NodePart
+   * has start and end locations and can set and update the Nodes between those
+   * locations.
+   *
+   * NodeParts support several value types: primitives, Nodes, TemplateResults,
+   * as well as arrays and iterables of those types.
+   */
+  class NodePart {
+      constructor(options) {
+          this.value = undefined;
+          this.__pendingValue = undefined;
+          this.options = options;
+      }
+      /**
+       * Appends this part into a container.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      appendInto(container) {
+          this.startNode = container.appendChild(createMarker());
+          this.endNode = container.appendChild(createMarker());
+      }
+      /**
+       * Inserts this part after the `ref` node (between `ref` and `ref`'s next
+       * sibling). Both `ref` and its next sibling must be static, unchanging nodes
+       * such as those that appear in a literal section of a template.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      insertAfterNode(ref) {
+          this.startNode = ref;
+          this.endNode = ref.nextSibling;
+      }
+      /**
+       * Appends this part into a parent part.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      appendIntoPart(part) {
+          part.__insert(this.startNode = createMarker());
+          part.__insert(this.endNode = createMarker());
+      }
+      /**
+       * Inserts this part after the `ref` part.
+       *
+       * This part must be empty, as its contents are not automatically moved.
+       */
+      insertAfterPart(ref) {
+          ref.__insert(this.startNode = createMarker());
+          this.endNode = ref.endNode;
+          ref.endNode = this.startNode;
+      }
+      setValue(value) {
+          this.__pendingValue = value;
+      }
+      commit() {
+          if (this.startNode.parentNode === null) {
+              return;
+          }
+          while (isDirective(this.__pendingValue)) {
+              const directive = this.__pendingValue;
+              this.__pendingValue = noChange;
+              directive(this);
+          }
+          const value = this.__pendingValue;
+          if (value === noChange) {
+              return;
+          }
+          if (isPrimitive(value)) {
+              if (value !== this.value) {
+                  this.__commitText(value);
+              }
+          }
+          else if (value instanceof TemplateResult) {
+              this.__commitTemplateResult(value);
+          }
+          else if (value instanceof Node) {
+              this.__commitNode(value);
+          }
+          else if (isIterable(value)) {
+              this.__commitIterable(value);
+          }
+          else if (value === nothing) {
+              this.value = nothing;
+              this.clear();
+          }
+          else {
+              // Fallback, will render the string representation
+              this.__commitText(value);
+          }
+      }
+      __insert(node) {
+          this.endNode.parentNode.insertBefore(node, this.endNode);
+      }
+      __commitNode(value) {
+          if (this.value === value) {
+              return;
+          }
+          this.clear();
+          this.__insert(value);
+          this.value = value;
+      }
+      __commitText(value) {
+          const node = this.startNode.nextSibling;
+          value = value == null ? '' : value;
+          // If `value` isn't already a string, we explicitly convert it here in case
+          // it can't be implicitly converted - i.e. it's a symbol.
+          const valueAsString = typeof value === 'string' ? value : String(value);
+          if (node === this.endNode.previousSibling &&
+              node.nodeType === 3 /* Node.TEXT_NODE */) {
+              // If we only have a single text node between the markers, we can just
+              // set its value, rather than replacing it.
+              // TODO(justinfagnani): Can we just check if this.value is primitive?
+              node.data = valueAsString;
+          }
+          else {
+              this.__commitNode(document.createTextNode(valueAsString));
+          }
+          this.value = value;
+      }
+      __commitTemplateResult(value) {
+          const template = this.options.templateFactory(value);
+          if (this.value instanceof TemplateInstance &&
+              this.value.template === template) {
+              this.value.update(value.values);
+          }
+          else {
+              // Make sure we propagate the template processor from the TemplateResult
+              // so that we use its syntax extension, etc. The template factory comes
+              // from the render function options so that it can control template
+              // caching and preprocessing.
+              const instance = new TemplateInstance(template, value.processor, this.options);
+              const fragment = instance._clone();
+              instance.update(value.values);
+              this.__commitNode(fragment);
+              this.value = instance;
+          }
+      }
+      __commitIterable(value) {
+          // For an Iterable, we create a new InstancePart per item, then set its
+          // value to the item. This is a little bit of overhead for every item in
+          // an Iterable, but it lets us recurse easily and efficiently update Arrays
+          // of TemplateResults that will be commonly returned from expressions like:
+          // array.map((i) => html`${i}`), by reusing existing TemplateInstances.
+          // If _value is an array, then the previous render was of an
+          // iterable and _value will contain the NodeParts from the previous
+          // render. If _value is not an array, clear this part and make a new
+          // array for NodeParts.
+          if (!Array.isArray(this.value)) {
+              this.value = [];
+              this.clear();
+          }
+          // Lets us keep track of how many items we stamped so we can clear leftover
+          // items from a previous render
+          const itemParts = this.value;
+          let partIndex = 0;
+          let itemPart;
+          for (const item of value) {
+              // Try to reuse an existing part
+              itemPart = itemParts[partIndex];
+              // If no existing part, create a new one
+              if (itemPart === undefined) {
+                  itemPart = new NodePart(this.options);
+                  itemParts.push(itemPart);
+                  if (partIndex === 0) {
+                      itemPart.appendIntoPart(this);
+                  }
+                  else {
+                      itemPart.insertAfterPart(itemParts[partIndex - 1]);
+                  }
+              }
+              itemPart.setValue(item);
+              itemPart.commit();
+              partIndex++;
+          }
+          if (partIndex < itemParts.length) {
+              // Truncate the parts array so _value reflects the current state
+              itemParts.length = partIndex;
+              this.clear(itemPart && itemPart.endNode);
+          }
+      }
+      clear(startNode = this.startNode) {
+          removeNodes(this.startNode.parentNode, startNode.nextSibling, this.endNode);
+      }
+  }
+  /**
+   * Implements a boolean attribute, roughly as defined in the HTML
+   * specification.
+   *
+   * If the value is truthy, then the attribute is present with a value of
+   * ''. If the value is falsey, the attribute is removed.
+   */
+  class BooleanAttributePart {
+      constructor(element, name, strings) {
+          this.value = undefined;
+          this.__pendingValue = undefined;
+          if (strings.length !== 2 || strings[0] !== '' || strings[1] !== '') {
+              throw new Error('Boolean attributes can only contain a single expression');
+          }
+          this.element = element;
+          this.name = name;
+          this.strings = strings;
+      }
+      setValue(value) {
+          this.__pendingValue = value;
+      }
+      commit() {
+          while (isDirective(this.__pendingValue)) {
+              const directive = this.__pendingValue;
+              this.__pendingValue = noChange;
+              directive(this);
+          }
+          if (this.__pendingValue === noChange) {
+              return;
+          }
+          const value = !!this.__pendingValue;
+          if (this.value !== value) {
+              if (value) {
+                  this.element.setAttribute(this.name, '');
+              }
+              else {
+                  this.element.removeAttribute(this.name);
+              }
+              this.value = value;
+          }
+          this.__pendingValue = noChange;
+      }
+  }
+  /**
+   * Sets attribute values for PropertyParts, so that the value is only set once
+   * even if there are multiple parts for a property.
+   *
+   * If an expression controls the whole property value, then the value is simply
+   * assigned to the property under control. If there are string literals or
+   * multiple expressions, then the strings are expressions are interpolated into
+   * a string first.
+   */
+  class PropertyCommitter extends AttributeCommitter {
+      constructor(element, name, strings) {
+          super(element, name, strings);
+          this.single =
+              (strings.length === 2 && strings[0] === '' && strings[1] === '');
+      }
+      _createPart() {
+          return new PropertyPart(this);
+      }
+      _getValue() {
+          if (this.single) {
+              return this.parts[0].value;
+          }
+          return super._getValue();
+      }
+      commit() {
+          if (this.dirty) {
+              this.dirty = false;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              this.element[this.name] = this._getValue();
+          }
+      }
+  }
+  class PropertyPart extends AttributePart {
+  }
+  // Detect event listener options support. If the `capture` property is read
+  // from the options object, then options are supported. If not, then the third
+  // argument to add/removeEventListener is interpreted as the boolean capture
+  // value so we should only pass the `capture` property.
+  let eventOptionsSupported = false;
+  // Wrap into an IIFE because MS Edge <= v41 does not support having try/catch
+  // blocks right into the body of a module
+  (() => {
+      try {
+          const options = {
+              get capture() {
+                  eventOptionsSupported = true;
+                  return false;
+              }
+          };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          window.addEventListener('test', options, options);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          window.removeEventListener('test', options, options);
+      }
+      catch (_e) {
+          // event options not supported
+      }
+  })();
+  class EventPart {
+      constructor(element, eventName, eventContext) {
+          this.value = undefined;
+          this.__pendingValue = undefined;
+          this.element = element;
+          this.eventName = eventName;
+          this.eventContext = eventContext;
+          this.__boundHandleEvent = (e) => this.handleEvent(e);
+      }
+      setValue(value) {
+          this.__pendingValue = value;
+      }
+      commit() {
+          while (isDirective(this.__pendingValue)) {
+              const directive = this.__pendingValue;
+              this.__pendingValue = noChange;
+              directive(this);
+          }
+          if (this.__pendingValue === noChange) {
+              return;
+          }
+          const newListener = this.__pendingValue;
+          const oldListener = this.value;
+          const shouldRemoveListener = newListener == null ||
+              oldListener != null &&
+                  (newListener.capture !== oldListener.capture ||
+                      newListener.once !== oldListener.once ||
+                      newListener.passive !== oldListener.passive);
+          const shouldAddListener = newListener != null && (oldListener == null || shouldRemoveListener);
+          if (shouldRemoveListener) {
+              this.element.removeEventListener(this.eventName, this.__boundHandleEvent, this.__options);
+          }
+          if (shouldAddListener) {
+              this.__options = getOptions(newListener);
+              this.element.addEventListener(this.eventName, this.__boundHandleEvent, this.__options);
+          }
+          this.value = newListener;
+          this.__pendingValue = noChange;
+      }
+      handleEvent(event) {
+          if (typeof this.value === 'function') {
+              this.value.call(this.eventContext || this.element, event);
+          }
+          else {
+              this.value.handleEvent(event);
+          }
+      }
+  }
+  // We copy options because of the inconsistent behavior of browsers when reading
+  // the third argument of add/removeEventListener. IE11 doesn't support options
+  // at all. Chrome 41 only reads `capture` if the argument is an object.
+  const getOptions = (o) => o &&
+      (eventOptionsSupported ?
+          { capture: o.capture, passive: o.passive, once: o.once } :
+          o.capture);
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * Creates Parts when a template is instantiated.
+   */
+  class DefaultTemplateProcessor {
+      /**
+       * Create parts for an attribute-position binding, given the event, attribute
+       * name, and string literals.
+       *
+       * @param element The element containing the binding
+       * @param name  The attribute name
+       * @param strings The string literals. There are always at least two strings,
+       *   event for fully-controlled bindings with a single expression.
+       */
+      handleAttributeExpressions(element, name, strings, options) {
+          const prefix = name[0];
+          if (prefix === '.') {
+              const committer = new PropertyCommitter(element, name.slice(1), strings);
+              return committer.parts;
+          }
+          if (prefix === '@') {
+              return [new EventPart(element, name.slice(1), options.eventContext)];
+          }
+          if (prefix === '?') {
+              return [new BooleanAttributePart(element, name.slice(1), strings)];
+          }
+          const committer = new AttributeCommitter(element, name, strings);
+          return committer.parts;
+      }
+      /**
+       * Create parts for a text-position binding.
+       * @param templateFactory
+       */
+      handleTextExpression(options) {
+          return new NodePart(options);
+      }
+  }
+  const defaultTemplateProcessor = new DefaultTemplateProcessor();
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  /**
+   * The default TemplateFactory which caches Templates keyed on
+   * result.type and result.strings.
+   */
+  function templateFactory(result) {
+      let templateCache = templateCaches.get(result.type);
+      if (templateCache === undefined) {
+          templateCache = {
+              stringsArray: new WeakMap(),
+              keyString: new Map()
+          };
+          templateCaches.set(result.type, templateCache);
+      }
+      let template = templateCache.stringsArray.get(result.strings);
+      if (template !== undefined) {
+          return template;
+      }
+      // If the TemplateStringsArray is new, generate a key from the strings
+      // This key is shared between all templates with identical content
+      const key = result.strings.join(marker);
+      // Check if we already have a Template for this key
+      template = templateCache.keyString.get(key);
+      if (template === undefined) {
+          // If we have not seen this key before, create a new Template
+          template = new Template(result, result.getTemplateElement());
+          // Cache the Template for this key
+          templateCache.keyString.set(key, template);
+      }
+      // Cache all future queries for this TemplateStringsArray
+      templateCache.stringsArray.set(result.strings, template);
+      return template;
+  }
+  const templateCaches = new Map();
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  const parts = new WeakMap();
+  /**
+   * Renders a template result or other value to a container.
+   *
+   * To update a container with new values, reevaluate the template literal and
+   * call `render` with the new result.
+   *
+   * @param result Any value renderable by NodePart - typically a TemplateResult
+   *     created by evaluating a template tag like `html` or `svg`.
+   * @param container A DOM parent to render to. The entire contents are either
+   *     replaced, or efficiently updated if the same result type was previous
+   *     rendered there.
+   * @param options RenderOptions for the entire render tree rendered to this
+   *     container. Render options must *not* change between renders to the same
+   *     container, as those changes will not effect previously rendered DOM.
+   */
+  const render = (result, container, options) => {
+      let part = parts.get(container);
+      if (part === undefined) {
+          removeNodes(container, container.firstChild);
+          parts.set(container, part = new NodePart(Object.assign({ templateFactory }, options)));
+          part.appendInto(container);
+      }
+      part.setValue(result);
+      part.commit();
+  };
+
+  /**
+   * @license
+   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
+   * This code may only be used under the BSD style license found at
+   * http://polymer.github.io/LICENSE.txt
+   * The complete set of authors may be found at
+   * http://polymer.github.io/AUTHORS.txt
+   * The complete set of contributors may be found at
+   * http://polymer.github.io/CONTRIBUTORS.txt
+   * Code distributed by Google as part of the polymer project is also
+   * subject to an additional IP rights grant found at
+   * http://polymer.github.io/PATENTS.txt
+   */
+  // IMPORTANT: do not change the property name or the assignment expression.
+  // This line will be used in regexes to search for lit-html usage.
+  // TODO(justinfagnani): inject version number at build time
+  if (typeof window !== 'undefined') {
+      (window['litHtmlVersions'] || (window['litHtmlVersions'] = [])).push('1.2.1');
+  }
+  /**
+   * Interprets a template literal as an HTML template that can efficiently
+   * render to and update a container.
+   */
+  const html$1 = (strings, ...values) => new TemplateResult(strings, values, 'html', defaultTemplateProcessor);
+
   const $_documentContainer$d = html`<dom-module id="lumo-form-layout" theme-for="vaadin-form-layout">
   <template>
     <style>
@@ -33759,17 +34877,31 @@
 
   customElements.define(DatePickerElement.is, DatePickerElement);
 
-  class VappHome extends PolymerElement{
-      ready(){
-          super.ready();     
-          let i = 0;
-          let button = this.shadowRoot.getElementById('vaadin-button');
-          button.addEventListener('click', function() {
-              button.nextElementSibling.textContent = ++i;
-          });
+  class VappHome extends HTMLElement{
+      constructor(){
+          super();       
+          
+      }
+      connectedCallback(){
+          this.callServer();
+          this.attachDate();
+          this.attachListner();
+      }
+      callServer(){
+          const templete = html$1 `
+        <vaadin-form-layout>
+            <vaadin-text-field label="First Name" value="Jane"></vaadin-text-field>
+            <vaadin-text-field label="Last Name" value="Doe"></vaadin-text-field>
+            <vaadin-text-field label="Email" value="jane.doe@example.com"></vaadin-text-field>
+            <vaadin-date-picker label="Birthday"></vaadin-date-picker>
+            <vaadin-text-area label="Bio" colspan="2" value="My name is Jane."></vaadin-text-area>
+            <vaadin-button theme="primary" id="vaadin-button">Salvar</vaadin-button>
+        </vaadin-form-layout>`;
+          render(templete, this);
+      }
+      attachDate(){
           Sugar.Date.setLocale('pt');
-          var datepicker = this.shadowRoot.querySelector('vaadin-date-picker');
-          console.log('data', datepicker);
+          var datepicker = this.querySelector('vaadin-date-picker');
           datepicker.i18n = {
               week: 'semana',
               calendar: 'calendario',
@@ -33798,1139 +34930,1277 @@
               }
           };
       }
-      static get template(){
-          return html `
-        <vaadin-form-layout>
-            <vaadin-text-field label="First Name" value="Jane"></vaadin-text-field>
-            <vaadin-text-field label="Last Name" value="Doe"></vaadin-text-field>
-            <vaadin-text-field label="Email" value="jane.doe@example.com"></vaadin-text-field>
-            <vaadin-date-picker label="Birthday"></vaadin-date-picker>
-            <vaadin-text-area label="Bio" colspan="2" value="My name is Jane."></vaadin-text-area>
-            <vaadin-button theme="primary" id="vaadin-button">Salvar</vaadin-button>
-        </vaadin-form-layout>`
+      attachListner(){
+          customElements.whenDefined('vaadin-button').then(_ =>{
+              let i = 0;
+              let button = this.querySelector('vaadin-button');
+              button.addEventListener('click', function() {
+                  console.log('click');
+                  button.nextElementSibling.textContent = ++i;
+              });
+          });
       }
   }
   customElements.define('vapp-home',VappHome);
 
+  const $_documentContainer$s = html`<dom-module id="lumo-custom-field" theme-for="vaadin-custom-field">
+  <template>
+    <style include="lumo-required-field">
+      :host {
+        --lumo-text-field-size: var(--lumo-size-m);
+        color: var(--lumo-body-text-color);
+        font-size: var(--lumo-font-size-m);
+        /* align with text-field height + vertical paddings */
+        line-height: calc(var(--lumo-text-field-size) + 2 * var(--lumo-space-xs));
+        font-family: var(--lumo-font-family);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        -webkit-tap-highlight-color: transparent;
+        padding: 0;
+      }
+
+      :host::before {
+        margin-top: var(--lumo-space-xs);
+        height: var(--lumo-text-field-size);
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      /* align with text-field label */
+      :host([has-label]) [part="label"] {
+        padding-bottom: calc(0.5em - var(--lumo-space-xs));
+      }
+
+      :host(:not([has-label])) [part="label"],
+      :host(:not([has-label]))::before {
+        display: none;
+      }
+
+      /* align with text-field error message */
+      :host([invalid]) [part="error-message"]:not(:empty)::before {
+        height: calc(0.4em - var(--lumo-space-xs));
+      }
+
+      :host([focused]:not([readonly]):not([disabled])) [part="label"] {
+        color: var(--lumo-primary-text-color);
+      }
+
+      :host(:hover:not([readonly]):not([disabled]):not([focused])) [part="label"] {
+        color: var(--lumo-body-text-color);
+      }
+
+      /* Touch device adjustment */
+      @media (pointer: coarse) {
+        :host(:hover:not([readonly]):not([disabled]):not([focused])) [part="label"] {
+          color: var(--lumo-secondary-text-color);
+        }
+      }
+
+      /* Disabled style */
+
+      :host([disabled]) [part="label"] {
+        color: var(--lumo-disabled-text-color);
+        -webkit-text-fill-color: var(--lumo-disabled-text-color);
+      }
+
+      /* Small theme */
+
+      :host([theme~="small"]) {
+        font-size: var(--lumo-font-size-s);
+        --lumo-text-field-size: var(--lumo-size-s);
+      }
+
+      :host([theme~="small"][has-label]) [part="label"] {
+        font-size: var(--lumo-font-size-xs);
+      }
+
+      :host([theme~="small"][has-label]) [part="error-message"] {
+        font-size: var(--lumo-font-size-xxs);
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$s.content);
+
   /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
+   * @polymerMixin
    */
-  const directives = new WeakMap();
-  const isDirective = (o) => {
-      return typeof o === 'function' && directives.has(o);
+  const CustomFieldMixin = superClass => class VaadinCustomFieldMixin extends superClass {
+    static get properties() {
+      return {
+        /**
+         * Array of available input nodes
+         */
+        inputs: {
+          type: Array,
+          readOnly: true
+        },
+
+        /**
+         * The object used to localize this component.
+         * To change the default localization, replace the entire
+         * _i18n_ object or just the property you want to modify.
+         *
+         * The object has the following JSON structure:
+
+           {
+             // A function to format given `Array` as
+             // component value. Array is list of all internal values
+             // in the order of their presence in the DOM
+             // This function is called each time the internal input
+             // value is changed.
+             formatValue: inputValues => {
+               // returns a representation of the given array of values
+               // in the form of string with delimiter characters
+             },
+
+             // A function to parse the given value to an `Array` in the format
+             // of the list of all internal values
+             // in the order of their presence in the DOM
+             // This function is called when value of the
+             // custom field is set.
+             parseValue: value => {
+               // returns the array of values from parsed value string.
+             }
+          */
+        i18n: {
+          type: Object,
+          value: () => {
+            return {
+              parseValue: function(value) {
+                return value.split('\t');
+              },
+              formatValue: function(inputValues) {
+                return inputValues.join('\t');
+              }
+            };
+          }
+        },
+
+        __errorId: String,
+        __labelId: String
+      };
+    }
+
+    connectedCallback() {
+      super.connectedCallback();
+      if (this.__observer) {
+        this.__observer.connect();
+      }
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.__observer && this.__observer.disconnect();
+    }
+
+    ready() {
+      super.ready();
+
+      this.__setInputsFromSlot();
+      this.__observer = new FlattenedNodesObserver(this.$.slot, () => {
+        this.__setInputsFromSlot();
+      });
+
+      const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+      this.addEventListener('keydown', e => {
+        if (e.keyCode === 9) {
+          // FIXME (yuriy): remove this workaround once this issue is fixed:
+          // https://bugs.chromium.org/p/chromium/issues/detail?id=1014868&can=2&num=100&q=slot%20shift%20tab
+          if (e.target.parentElement.localName === 'slot' &&
+          !e.defaultPrevented && isChrome) {
+            const slot = e.target.parentElement;
+            slot.setAttribute('tabindex', -1);
+            setTimeout(() => slot.removeAttribute('tabindex'));
+          }
+          if (this.inputs.indexOf(e.target) < this.inputs.length - 1 && !e.shiftKey ||
+              this.inputs.indexOf(e.target) > 0 && e.shiftKey) {
+            this.dispatchEvent(new CustomEvent('internal-tab'));
+          } else {
+            // FIXME (yuriy): remove this workaround when value should not be updated before focusout
+            this.__setValue();
+          }
+        }
+      });
+
+      this.addEventListener('focusin', () => this.setAttribute('focused', ''));
+
+      this.addEventListener('focusout', e => {
+        const activeElement = this.getRootNode().activeElement;
+        if (!this.inputs.some(el => activeElement === el || el.shadowRoot && el.shadowRoot.contains(activeElement))) {
+          this.removeAttribute('focused');
+        }
+      });
+
+      var uniqueId = CustomFieldMixin._uniqueId = 1 + CustomFieldMixin._uniqueId || 1;
+      this.__errorId = `${this.constructor.is}-error-${uniqueId}`;
+      this.__labelId = `${this.constructor.is}-label-${uniqueId}`;
+    }
+
+    /*
+     * @private
+     */
+    focus() {
+      this.inputs && this.inputs[0] && this.inputs[0].focus();
+    }
+
+    __updateValue(e) {
+      // Stop native change events
+      e && e.stopPropagation();
+
+      this.__setValue();
+      this.validate();
+      this.dispatchEvent(new CustomEvent('change', {
+        bubbles: true,
+        cancelable: false,
+        detail: {
+          value: this.value
+        }
+      }));
+    }
+
+    __setValue() {
+      this.__settingValue = true;
+      this.value = this.i18n.formatValue.apply(this, [this.inputs.map(input => input.value)]);
+      this.__settingValue = false;
+    }
+
+    /* Like querySelectorAll('*') but also gets all elements through any nested slots recursively */
+    __queryAllAssignedElements(elem) {
+      const result = [];
+      let elements;
+      if (elem.tagName === 'SLOT') {
+        elements = elem.assignedNodes({flatten: true}).filter(node => node.nodeType === Node.ELEMENT_NODE);
+      } else {
+        result.push(elem);
+        elements = Array.from(elem.children);
+      }
+      elements.forEach(elem => result.push(...this.__queryAllAssignedElements(elem)));
+      return result;
+    }
+
+    __getInputsFromSlot() {
+      const isInput = (node => node.validate || node.checkValidity);
+      return this.__queryAllAssignedElements(this.$.slot).filter(isInput);
+    }
+
+    __setInputsFromSlot() {
+      this._setInputs(this.__getInputsFromSlot());
+      this.__setValue();
+    }
+
+    __valueChanged(value, oldValue) {
+      if (this.__settingValue || !this.inputs) {
+        return;
+      }
+
+      const valuesArray = this.i18n.parseValue(value);
+      if (!valuesArray || valuesArray.length == 0) {
+        console.warn('Value parser has not provided values array');
+        return;
+      }
+
+      this.inputs.forEach((input, id) => input.value = valuesArray[id]);
+      if (oldValue !== undefined) {
+        this.validate();
+      }
+    }
+
+    /**
+     * Fired on Tab keydown triggered from the internal inputs,
+     * meaning focus will not leave the inputs.
+     *
+     * @event internal-tab
+     */
+
+    /**
+     * Fired when the user commits a value change for any of the internal inputs.
+     *
+     * @event change
+     */
   };
 
   /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
-   */
-  /**
-   * True if the custom elements polyfill is in use.
-   */
-  const isCEPolyfill = typeof window !== 'undefined' &&
-      window.customElements != null &&
-      window.customElements.polyfillWrapFlushCallback !==
-          undefined;
-  /**
-   * Removes nodes, starting from `start` (inclusive) to `end` (exclusive), from
-   * `container`.
-   */
-  const removeNodes = (container, start, end = null) => {
-      while (start !== end) {
-          const n = start.nextSibling;
-          container.removeChild(start);
-          start = n;
-      }
-  };
+  @license
+  Copyright (c) 2018 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
 
   /**
-   * @license
-   * Copyright (c) 2018 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
+   * `<vaadin-custom-field>` is a Web Component providing field wrapper functionality.
+   *
+   * ```
+   * <vaadin-custom-field label="Appointment time">
+   *   <vaadin-date-picker></vaadin-date-picker>
+   *   <vaadin-time-picker></vaadin-time-picker>
+   * </vaadin-custom-field>
+   * ```
+   *
+   * ### Styling
+   *
+   * You may set the attribute `disabled` or `readonly` on this component to make the label styles behave the same
+   * way as they would on a `<vaadin-text-field>` which is disabled or readonly.
+   *
+   * The following shadow DOM parts are available for styling:
+   *
+   * Part name | Description
+   * ----------------|----------------
+   * `label` | The label element
+   * `error-message` | The error message element
+   *
+   * The following state attributes are available for styling:
+   *
+   * Attribute    | Description | Part name
+   * -------------|-------------|------------
+   * `has-label`  | Set when the field has a label | :host
+   * `invalid`    | Set when the field is invalid | :host
+   * `focused`    | Set when the field contains focus | :host
+   *
+   * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
+   *
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ThemableMixin
+   * @mixes CustomFieldMixin
+   * @demo demo/index.html
    */
-  /**
-   * A sentinel value that signals that a value was handled by a directive and
-   * should not be written to the DOM.
-   */
-  const noChange = {};
-  /**
-   * A sentinel value that signals a NodePart to fully clear its content.
-   */
-  const nothing = {};
+  class CustomFieldElement extends ElementMixin$1(CustomFieldMixin(ThemableMixin(PolymerElement))) {
+    static get template() {
+      return html`
+    <style>
+      :host {
+        display: inline-flex;
+      }
 
-  /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
-   */
-  /**
-   * An expression marker with embedded unique key to avoid collision with
-   * possible text in templates.
-   */
-  const marker = `{{lit-${String(Math.random()).slice(2)}}}`;
-  /**
-   * An expression marker used text-positions, multi-binding attributes, and
-   * attributes with markup-like text values.
-   */
-  const nodeMarker = `<!--${marker}-->`;
-  const markerRegex = new RegExp(`${marker}|${nodeMarker}`);
-  /**
-   * Suffix appended to all bound attribute names.
-   */
-  const boundAttributeSuffix = '$lit$';
-  /**
-   * An updatable Template that tracks the location of dynamic parts.
-   */
-  class Template {
-      constructor(result, element) {
-          this.parts = [];
-          this.element = element;
-          const nodesToRemove = [];
-          const stack = [];
-          // Edge needs all 4 parameters present; IE11 needs 3rd parameter to be null
-          const walker = document.createTreeWalker(element.content, 133 /* NodeFilter.SHOW_{ELEMENT|COMMENT|TEXT} */, null, false);
-          // Keeps track of the last index associated with a part. We try to delete
-          // unnecessary nodes, but we never want to associate two different parts
-          // to the same index. They must have a constant node between.
-          let lastPartIndex = 0;
-          let index = -1;
-          let partIndex = 0;
-          const { strings, values: { length } } = result;
-          while (partIndex < length) {
-              const node = walker.nextNode();
-              if (node === null) {
-                  // We've exhausted the content inside a nested template element.
-                  // Because we still have parts (the outer for-loop), we know:
-                  // - There is a template in the stack
-                  // - The walker will find a nextNode outside the template
-                  walker.currentNode = stack.pop();
-                  continue;
-              }
-              index++;
-              if (node.nodeType === 1 /* Node.ELEMENT_NODE */) {
-                  if (node.hasAttributes()) {
-                      const attributes = node.attributes;
-                      const { length } = attributes;
-                      // Per
-                      // https://developer.mozilla.org/en-US/docs/Web/API/NamedNodeMap,
-                      // attributes are not guaranteed to be returned in document order.
-                      // In particular, Edge/IE can return them out of order, so we cannot
-                      // assume a correspondence between part index and attribute index.
-                      let count = 0;
-                      for (let i = 0; i < length; i++) {
-                          if (endsWith(attributes[i].name, boundAttributeSuffix)) {
-                              count++;
-                          }
-                      }
-                      while (count-- > 0) {
-                          // Get the template literal section leading up to the first
-                          // expression in this attribute
-                          const stringForPart = strings[partIndex];
-                          // Find the attribute name
-                          const name = lastAttributeNameRegex.exec(stringForPart)[2];
-                          // Find the corresponding attribute
-                          // All bound attributes have had a suffix added in
-                          // TemplateResult#getHTML to opt out of special attribute
-                          // handling. To look up the attribute value we also need to add
-                          // the suffix.
-                          const attributeLookupName = name.toLowerCase() + boundAttributeSuffix;
-                          const attributeValue = node.getAttribute(attributeLookupName);
-                          node.removeAttribute(attributeLookupName);
-                          const statics = attributeValue.split(markerRegex);
-                          this.parts.push({ type: 'attribute', index, name, strings: statics });
-                          partIndex += statics.length - 1;
-                      }
-                  }
-                  if (node.tagName === 'TEMPLATE') {
-                      stack.push(node);
-                      walker.currentNode = node.content;
-                  }
-              }
-              else if (node.nodeType === 3 /* Node.TEXT_NODE */) {
-                  const data = node.data;
-                  if (data.indexOf(marker) >= 0) {
-                      const parent = node.parentNode;
-                      const strings = data.split(markerRegex);
-                      const lastIndex = strings.length - 1;
-                      // Generate a new text node for each literal section
-                      // These nodes are also used as the markers for node parts
-                      for (let i = 0; i < lastIndex; i++) {
-                          let insert;
-                          let s = strings[i];
-                          if (s === '') {
-                              insert = createMarker();
-                          }
-                          else {
-                              const match = lastAttributeNameRegex.exec(s);
-                              if (match !== null && endsWith(match[2], boundAttributeSuffix)) {
-                                  s = s.slice(0, match.index) + match[1] +
-                                      match[2].slice(0, -boundAttributeSuffix.length) + match[3];
-                              }
-                              insert = document.createTextNode(s);
-                          }
-                          parent.insertBefore(insert, node);
-                          this.parts.push({ type: 'node', index: ++index });
-                      }
-                      // If there's no text, we must insert a comment to mark our place.
-                      // Else, we can trust it will stick around after cloning.
-                      if (strings[lastIndex] === '') {
-                          parent.insertBefore(createMarker(), node);
-                          nodesToRemove.push(node);
-                      }
-                      else {
-                          node.data = strings[lastIndex];
-                      }
-                      // We have a part for each match found
-                      partIndex += lastIndex;
-                  }
-              }
-              else if (node.nodeType === 8 /* Node.COMMENT_NODE */) {
-                  if (node.data === marker) {
-                      const parent = node.parentNode;
-                      // Add a new marker node to be the startNode of the Part if any of
-                      // the following are true:
-                      //  * We don't have a previousSibling
-                      //  * The previousSibling is already the start of a previous part
-                      if (node.previousSibling === null || index === lastPartIndex) {
-                          index++;
-                          parent.insertBefore(createMarker(), node);
-                      }
-                      lastPartIndex = index;
-                      this.parts.push({ type: 'node', index });
-                      // If we don't have a nextSibling, keep this node so we have an end.
-                      // Else, we can remove it to save future costs.
-                      if (node.nextSibling === null) {
-                          node.data = '';
-                      }
-                      else {
-                          nodesToRemove.push(node);
-                          index--;
-                      }
-                      partIndex++;
-                  }
-                  else {
-                      let i = -1;
-                      while ((i = node.data.indexOf(marker, i + 1)) !== -1) {
-                          // Comment node has a binding marker inside, make an inactive part
-                          // The binding won't work, but subsequent bindings will
-                          // TODO (justinfagnani): consider whether it's even worth it to
-                          // make bindings in comments work
-                          this.parts.push({ type: 'node', index: -1 });
-                          partIndex++;
-                      }
-                  }
-              }
-          }
-          // Remove text binding nodes after the walk to not disturb the TreeWalker
-          for (const n of nodesToRemove) {
-              n.parentNode.removeChild(n);
-          }
+      :host::before {
+        content: "\\2003";
+        width: 0;
+        display: inline-block;
+        /* Size and position this element on the same vertical position as the input-field element
+           to make vertical align for the host element work as expected */
       }
-  }
-  const endsWith = (str, suffix) => {
-      const index = str.length - suffix.length;
-      return index >= 0 && str.slice(index) === suffix;
-  };
-  const isTemplatePartActive = (part) => part.index !== -1;
-  // Allows `document.createComment('')` to be renamed for a
-  // small manual size-savings.
-  const createMarker = () => document.createComment('');
-  /**
-   * This regex extracts the attribute name preceding an attribute-position
-   * expression. It does this by matching the syntax allowed for attributes
-   * against the string literal directly preceding the expression, assuming that
-   * the expression is in an attribute-value position.
-   *
-   * See attributes in the HTML spec:
-   * https://www.w3.org/TR/html5/syntax.html#elements-attributes
-   *
-   * " \x09\x0a\x0c\x0d" are HTML space characters:
-   * https://www.w3.org/TR/html5/infrastructure.html#space-characters
-   *
-   * "\0-\x1F\x7F-\x9F" are Unicode control characters, which includes every
-   * space character except " ".
-   *
-   * So an attribute is:
-   *  * The name: any character except a control character, space character, ('),
-   *    ("), ">", "=", or "/"
-   *  * Followed by zero or more space characters
-   *  * Followed by "="
-   *  * Followed by zero or more space characters
-   *  * Followed by:
-   *    * Any character except space, ('), ("), "<", ">", "=", (`), or
-   *    * (") then any non-("), or
-   *    * (') then any non-(')
-   */
-  const lastAttributeNameRegex = 
-  // eslint-disable-next-line no-control-regex
-  /([ \x09\x0a\x0c\x0d])([^\0-\x1F\x7F-\x9F "'>=/]+)([ \x09\x0a\x0c\x0d]*=[ \x09\x0a\x0c\x0d]*(?:[^ \x09\x0a\x0c\x0d"'`<>=]*|"[^"]*|'[^']*))$/;
 
-  /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
-   */
-  /**
-   * An instance of a `Template` that can be attached to the DOM and updated
-   * with new values.
-   */
-  class TemplateInstance {
-      constructor(template, processor, options) {
-          this.__parts = [];
-          this.template = template;
-          this.processor = processor;
-          this.options = options;
+      :host([hidden]) {
+        display: none !important;
       }
-      update(values) {
-          let i = 0;
-          for (const part of this.__parts) {
-              if (part !== undefined) {
-                  part.setValue(values[i]);
-              }
-              i++;
-          }
-          for (const part of this.__parts) {
-              if (part !== undefined) {
-                  part.commit();
-              }
-          }
+
+      .container {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
       }
-      _clone() {
-          // There are a number of steps in the lifecycle of a template instance's
-          // DOM fragment:
-          //  1. Clone - create the instance fragment
-          //  2. Adopt - adopt into the main document
-          //  3. Process - find part markers and create parts
-          //  4. Upgrade - upgrade custom elements
-          //  5. Update - set node, attribute, property, etc., values
-          //  6. Connect - connect to the document. Optional and outside of this
-          //     method.
-          //
-          // We have a few constraints on the ordering of these steps:
-          //  * We need to upgrade before updating, so that property values will pass
-          //    through any property setters.
-          //  * We would like to process before upgrading so that we're sure that the
-          //    cloned fragment is inert and not disturbed by self-modifying DOM.
-          //  * We want custom elements to upgrade even in disconnected fragments.
-          //
-          // Given these constraints, with full custom elements support we would
-          // prefer the order: Clone, Process, Adopt, Upgrade, Update, Connect
-          //
-          // But Safari does not implement CustomElementRegistry#upgrade, so we
-          // can not implement that order and still have upgrade-before-update and
-          // upgrade disconnected fragments. So we instead sacrifice the
-          // process-before-upgrade constraint, since in Custom Elements v1 elements
-          // must not modify their light DOM in the constructor. We still have issues
-          // when co-existing with CEv0 elements like Polymer 1, and with polyfills
-          // that don't strictly adhere to the no-modification rule because shadow
-          // DOM, which may be created in the constructor, is emulated by being placed
-          // in the light DOM.
-          //
-          // The resulting order is on native is: Clone, Adopt, Upgrade, Process,
-          // Update, Connect. document.importNode() performs Clone, Adopt, and Upgrade
-          // in one step.
-          //
-          // The Custom Elements v1 polyfill supports upgrade(), so the order when
-          // polyfilled is the more ideal: Clone, Process, Adopt, Upgrade, Update,
-          // Connect.
-          const fragment = isCEPolyfill ?
-              this.template.element.content.cloneNode(true) :
-              document.importNode(this.template.element.content, true);
-          const stack = [];
-          const parts = this.template.parts;
-          // Edge needs all 4 parameters present; IE11 needs 3rd parameter to be null
-          const walker = document.createTreeWalker(fragment, 133 /* NodeFilter.SHOW_{ELEMENT|COMMENT|TEXT} */, null, false);
-          let partIndex = 0;
-          let nodeIndex = 0;
-          let part;
-          let node = walker.nextNode();
-          // Loop through all the nodes and parts of a template
-          while (partIndex < parts.length) {
-              part = parts[partIndex];
-              if (!isTemplatePartActive(part)) {
-                  this.__parts.push(undefined);
-                  partIndex++;
-                  continue;
-              }
-              // Progress the tree walker until we find our next part's node.
-              // Note that multiple parts may share the same node (attribute parts
-              // on a single element), so this loop may not run at all.
-              while (nodeIndex < part.index) {
-                  nodeIndex++;
-                  if (node.nodeName === 'TEMPLATE') {
-                      stack.push(node);
-                      walker.currentNode = node.content;
-                  }
-                  if ((node = walker.nextNode()) === null) {
-                      // We've exhausted the content inside a nested template element.
-                      // Because we still have parts (the outer for-loop), we know:
-                      // - There is a template in the stack
-                      // - The walker will find a nextNode outside the template
-                      walker.currentNode = stack.pop();
-                      node = walker.nextNode();
-                  }
-              }
-              // We've arrived at our part's node.
-              if (part.type === 'node') {
-                  const part = this.processor.handleTextExpression(this.options);
-                  part.insertAfterNode(node.previousSibling);
-                  this.__parts.push(part);
-              }
-              else {
-                  this.__parts.push(...this.processor.handleAttributeExpressions(node, part.name, part.strings, this.options));
-              }
-              partIndex++;
-          }
-          if (isCEPolyfill) {
-              document.adoptNode(fragment);
-              customElements.upgrade(fragment);
-          }
-          return fragment;
+
+      .inputs-wrapper {
+        flex: none;
       }
+    </style>
+
+    <div class="container">
+      <label part="label" on-click="focus" id="[[__labelId]]">[[label]]</label>
+      <div class="inputs-wrapper" on-change="__updateValue">
+        <slot id="slot"></slot>
+      </div>
+      <div part="error-message" id="[[__errorId]]" aria-live="assertive" aria-hidden\$="[[__getErrorMessageAriaHidden(invalid, errorMessage, __errorId)]]">[[errorMessage]]</div>
+    </div>
+`;
+    }
+
+    static get is() {
+      return 'vaadin-custom-field';
+    }
+    static get version() {
+      return '1.1.0';
+    }
+
+    static get properties() {
+      return {
+        /**
+         * String used for the label element.
+         */
+        label: {
+          type: String,
+          value: '',
+          observer: '_labelChanged'
+        },
+
+        /**
+         * The name of the control, which is submitted with the form data.
+         */
+        name: String,
+
+        /**
+         * Specifies that the user must fill in a value.
+         */
+        required: {
+          type: Boolean,
+          reflectToAttribute: true
+        },
+
+        /**
+         * The value of the field. When wrapping several inputs, it will contain `\t`
+         * (Tab character) as a delimiter indicating parts intended to be used as the
+         * corresponding inputs values. Use the [`i18n`](#/elements/vaadin-custom-field#property-i18n)
+         * property to customize this behavior.
+         */
+        value: {
+          type: String,
+          observer: '__valueChanged',
+          notify: true
+        },
+
+        /**
+         * This property is set to true when the control value is invalid.
+         */
+        invalid: {
+          type: Boolean,
+          reflectToAttribute: true,
+          notify: true,
+          value: false,
+          observer: '__invalidChanged'
+        },
+
+        /**
+         * Error to show when the input value is invalid.
+         */
+        errorMessage: {
+          type: String,
+          value: ''
+        }
+      };
+    }
+
+    static get observers() {
+      return [
+        '__getActiveErrorId(invalid, errorMessage, __errorId)',
+        '__getActiveLabelId(label, __labelId)',
+        '__toggleHasValue(value)'
+      ];
+    }
+
+    __invalidChanged(invalid) {
+      this.__setOrToggleAttribute('aria-invalid', invalid, this);
+    }
+
+    __toggleHasValue(value) {
+      if (value !== null && value.trim() !== '') {
+        this.setAttribute('has-value', '');
+      } else {
+        this.removeAttribute('has-value');
+      }
+    }
+
+    _labelChanged(label) {
+      if (label !== '' && label != null) {
+        this.setAttribute('has-label', '');
+      } else {
+        this.removeAttribute('has-label');
+      }
+    }
+
+    /**
+     * Returns true if `value` is valid.
+     * `<iron-form>` uses this to check the validity or all its elements.
+     *
+     * @return {boolean} True if the value is valid.
+     */
+    validate() {
+      return !(this.invalid = !this.checkValidity());
+    }
+
+    /**
+     * Returns true if the current inputs values satisfy all constraints (if any)
+     * @returns {boolean}
+     */
+    checkValidity() {
+      const invalidFields = this.inputs
+        .filter(input => !(input.validate || input.checkValidity).call(input));
+
+      if (invalidFields.length || (this.required && !this.value.trim())) {
+        // Either 1. one of the input fields is invalid or
+        // 2. the custom field itself is required but doesn't have a value
+        return false;
+      }
+      return true;
+    }
+
+    __setOrToggleAttribute(name, value, node) {
+      if (!name || !node) {
+        return;
+      }
+      if (node.hasAttribute(name) === !value) {
+        if (value) {
+          node.setAttribute(name, (typeof value === 'boolean') ? '' : value);
+        } else {
+          node.removeAttribute(name);
+        }
+      }
+    }
+
+    __getActiveErrorId(invalid, errorMessage, errorId) {
+      this.__setOrToggleAttribute('aria-describedby',
+        (errorMessage && invalid ? errorId : undefined),
+        this);
+    }
+
+    __getActiveLabelId(label, labelId) {
+      this.__setOrToggleAttribute('aria-labelledby',
+        (label ? labelId : undefined),
+        this);
+    }
+
+    __getErrorMessageAriaHidden(invalid, errorMessage, errorId) {
+      return (!(errorMessage && invalid ? errorId : undefined)).toString();
+    }
   }
 
-  /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
-   */
-  const commentMarker = ` ${marker} `;
-  /**
-   * The return type of `html`, which holds a Template and the values from
-   * interpolated expressions.
-   */
-  class TemplateResult {
-      constructor(strings, values, type, processor) {
-          this.strings = strings;
-          this.values = values;
-          this.type = type;
-          this.processor = processor;
-      }
-      /**
-       * Returns a string of HTML used to create a `<template>` element.
-       */
-      getHTML() {
-          const l = this.strings.length - 1;
-          let html = '';
-          let isCommentBinding = false;
-          for (let i = 0; i < l; i++) {
-              const s = this.strings[i];
-              // For each binding we want to determine the kind of marker to insert
-              // into the template source before it's parsed by the browser's HTML
-              // parser. The marker type is based on whether the expression is in an
-              // attribute, text, or comment position.
-              //   * For node-position bindings we insert a comment with the marker
-              //     sentinel as its text content, like <!--{{lit-guid}}-->.
-              //   * For attribute bindings we insert just the marker sentinel for the
-              //     first binding, so that we support unquoted attribute bindings.
-              //     Subsequent bindings can use a comment marker because multi-binding
-              //     attributes must be quoted.
-              //   * For comment bindings we insert just the marker sentinel so we don't
-              //     close the comment.
-              //
-              // The following code scans the template source, but is *not* an HTML
-              // parser. We don't need to track the tree structure of the HTML, only
-              // whether a binding is inside a comment, and if not, if it appears to be
-              // the first binding in an attribute.
-              const commentOpen = s.lastIndexOf('<!--');
-              // We're in comment position if we have a comment open with no following
-              // comment close. Because <-- can appear in an attribute value there can
-              // be false positives.
-              isCommentBinding = (commentOpen > -1 || isCommentBinding) &&
-                  s.indexOf('-->', commentOpen + 1) === -1;
-              // Check to see if we have an attribute-like sequence preceding the
-              // expression. This can match "name=value" like structures in text,
-              // comments, and attribute values, so there can be false-positives.
-              const attributeMatch = lastAttributeNameRegex.exec(s);
-              if (attributeMatch === null) {
-                  // We're only in this branch if we don't have a attribute-like
-                  // preceding sequence. For comments, this guards against unusual
-                  // attribute values like <div foo="<!--${'bar'}">. Cases like
-                  // <!-- foo=${'bar'}--> are handled correctly in the attribute branch
-                  // below.
-                  html += s + (isCommentBinding ? commentMarker : nodeMarker);
-              }
-              else {
-                  // For attributes we use just a marker sentinel, and also append a
-                  // $lit$ suffix to the name to opt-out of attribute-specific parsing
-                  // that IE and Edge do for style and certain SVG attributes.
-                  html += s.substr(0, attributeMatch.index) + attributeMatch[1] +
-                      attributeMatch[2] + boundAttributeSuffix + attributeMatch[3] +
-                      marker;
-              }
-          }
-          html += this.strings[l];
-          return html;
-      }
-      getTemplateElement() {
-          const template = document.createElement('template');
-          template.innerHTML = this.getHTML();
-          return template;
-      }
-  }
+  customElements.define(CustomFieldElement.is, CustomFieldElement);
 
-  /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
-   */
-  const isPrimitive = (value) => {
-      return (value === null ||
-          !(typeof value === 'object' || typeof value === 'function'));
-  };
-  const isIterable = (value) => {
-      return Array.isArray(value) ||
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          !!(value && value[Symbol.iterator]);
-  };
-  /**
-   * Writes attribute values to the DOM for a group of AttributeParts bound to a
-   * single attribute. The value is only set once even if there are multiple parts
-   * for an attribute.
-   */
-  class AttributeCommitter {
-      constructor(element, name, strings) {
-          this.dirty = true;
-          this.element = element;
-          this.name = name;
-          this.strings = strings;
-          this.parts = [];
-          for (let i = 0; i < strings.length - 1; i++) {
-              this.parts[i] = this._createPart();
-          }
+  const $_documentContainer$t = html`<dom-module id="lumo-dialog" theme-for="vaadin-dialog-overlay">
+  <template>
+    <style include="lumo-overlay">
+      /* Optical centering */
+      :host::before,
+      :host::after {
+        content: "";
+        flex-basis: 0;
+        flex-grow: 1;
       }
-      /**
-       * Creates a single part. Override this to create a differnt type of part.
-       */
-      _createPart() {
-          return new AttributePart(this);
+
+      :host::after {
+        flex-grow: 1.1;
       }
-      _getValue() {
-          const strings = this.strings;
-          const l = strings.length - 1;
-          let text = '';
-          for (let i = 0; i < l; i++) {
-              text += strings[i];
-              const part = this.parts[i];
-              if (part !== undefined) {
-                  const v = part.value;
-                  if (isPrimitive(v) || !isIterable(v)) {
-                      text += typeof v === 'string' ? v : String(v);
-                  }
-                  else {
-                      for (const t of v) {
-                          text += typeof t === 'string' ? t : String(t);
-                      }
-                  }
-              }
-          }
-          text += strings[l];
-          return text;
+
+      [part="overlay"] {
+        box-shadow: 0 0 0 1px var(--lumo-shade-5pct), var(--lumo-box-shadow-xl);
+        background-image: none;
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
       }
-      commit() {
-          if (this.dirty) {
-              this.dirty = false;
-              this.element.setAttribute(this.name, this._getValue());
-          }
+
+      [part="content"] {
+        padding: var(--lumo-space-l);
       }
-  }
-  /**
-   * A Part that controls all or part of an attribute value.
-   */
-  class AttributePart {
-      constructor(committer) {
-          this.value = undefined;
-          this.committer = committer;
+
+      /* Animations */
+
+      :host([opening]),
+      :host([closing]) {
+        animation: 0.25s lumo-overlay-dummy-animation;
       }
-      setValue(value) {
-          if (value !== noChange && (!isPrimitive(value) || value !== this.value)) {
-              this.value = value;
-              // If the value is a not a directive, dirty the committer so that it'll
-              // call setAttribute. If the value is a directive, it'll dirty the
-              // committer if it calls setValue().
-              if (!isDirective(value)) {
-                  this.committer.dirty = true;
-              }
-          }
+
+      :host([opening]) [part="overlay"] {
+        animation: 0.12s 0.05s vaadin-dialog-enter cubic-bezier(.215, .61, .355, 1) both;
       }
-      commit() {
-          while (isDirective(this.value)) {
-              const directive = this.value;
-              this.value = noChange;
-              directive(this);
-          }
-          if (this.value === noChange) {
-              return;
-          }
-          this.committer.commit();
+
+      @keyframes vaadin-dialog-enter {
+        0% {
+          opacity: 0;
+          transform: scale(0.95);
+        }
       }
-  }
-  /**
-   * A Part that controls a location within a Node tree. Like a Range, NodePart
-   * has start and end locations and can set and update the Nodes between those
-   * locations.
-   *
-   * NodeParts support several value types: primitives, Nodes, TemplateResults,
-   * as well as arrays and iterables of those types.
-   */
-  class NodePart {
-      constructor(options) {
-          this.value = undefined;
-          this.__pendingValue = undefined;
-          this.options = options;
+
+      :host([closing]) [part="overlay"] {
+        animation: 0.1s 0.03s vaadin-dialog-exit cubic-bezier(.55, .055, .675, .19) both;
       }
-      /**
-       * Appends this part into a container.
-       *
-       * This part must be empty, as its contents are not automatically moved.
-       */
-      appendInto(container) {
-          this.startNode = container.appendChild(createMarker());
-          this.endNode = container.appendChild(createMarker());
+
+      :host([closing]) [part="backdrop"] {
+        animation-delay: 0.05s;
       }
-      /**
-       * Inserts this part after the `ref` node (between `ref` and `ref`'s next
-       * sibling). Both `ref` and its next sibling must be static, unchanging nodes
-       * such as those that appear in a literal section of a template.
-       *
-       * This part must be empty, as its contents are not automatically moved.
-       */
-      insertAfterNode(ref) {
-          this.startNode = ref;
-          this.endNode = ref.nextSibling;
+
+      @keyframes vaadin-dialog-exit {
+        100% {
+          opacity: 0;
+          transform: scale(1.02);
+        }
       }
-      /**
-       * Appends this part into a parent part.
-       *
-       * This part must be empty, as its contents are not automatically moved.
-       */
-      appendIntoPart(part) {
-          part.__insert(this.startNode = createMarker());
-          part.__insert(this.endNode = createMarker());
-      }
-      /**
-       * Inserts this part after the `ref` part.
-       *
-       * This part must be empty, as its contents are not automatically moved.
-       */
-      insertAfterPart(ref) {
-          ref.__insert(this.startNode = createMarker());
-          this.endNode = ref.endNode;
-          ref.endNode = this.startNode;
-      }
-      setValue(value) {
-          this.__pendingValue = value;
-      }
-      commit() {
-          if (this.startNode.parentNode === null) {
-              return;
-          }
-          while (isDirective(this.__pendingValue)) {
-              const directive = this.__pendingValue;
-              this.__pendingValue = noChange;
-              directive(this);
-          }
-          const value = this.__pendingValue;
-          if (value === noChange) {
-              return;
-          }
-          if (isPrimitive(value)) {
-              if (value !== this.value) {
-                  this.__commitText(value);
-              }
-          }
-          else if (value instanceof TemplateResult) {
-              this.__commitTemplateResult(value);
-          }
-          else if (value instanceof Node) {
-              this.__commitNode(value);
-          }
-          else if (isIterable(value)) {
-              this.__commitIterable(value);
-          }
-          else if (value === nothing) {
-              this.value = nothing;
-              this.clear();
-          }
-          else {
-              // Fallback, will render the string representation
-              this.__commitText(value);
-          }
-      }
-      __insert(node) {
-          this.endNode.parentNode.insertBefore(node, this.endNode);
-      }
-      __commitNode(value) {
-          if (this.value === value) {
-              return;
-          }
-          this.clear();
-          this.__insert(value);
-          this.value = value;
-      }
-      __commitText(value) {
-          const node = this.startNode.nextSibling;
-          value = value == null ? '' : value;
-          // If `value` isn't already a string, we explicitly convert it here in case
-          // it can't be implicitly converted - i.e. it's a symbol.
-          const valueAsString = typeof value === 'string' ? value : String(value);
-          if (node === this.endNode.previousSibling &&
-              node.nodeType === 3 /* Node.TEXT_NODE */) {
-              // If we only have a single text node between the markers, we can just
-              // set its value, rather than replacing it.
-              // TODO(justinfagnani): Can we just check if this.value is primitive?
-              node.data = valueAsString;
-          }
-          else {
-              this.__commitNode(document.createTextNode(valueAsString));
-          }
-          this.value = value;
-      }
-      __commitTemplateResult(value) {
-          const template = this.options.templateFactory(value);
-          if (this.value instanceof TemplateInstance &&
-              this.value.template === template) {
-              this.value.update(value.values);
-          }
-          else {
-              // Make sure we propagate the template processor from the TemplateResult
-              // so that we use its syntax extension, etc. The template factory comes
-              // from the render function options so that it can control template
-              // caching and preprocessing.
-              const instance = new TemplateInstance(template, value.processor, this.options);
-              const fragment = instance._clone();
-              instance.update(value.values);
-              this.__commitNode(fragment);
-              this.value = instance;
-          }
-      }
-      __commitIterable(value) {
-          // For an Iterable, we create a new InstancePart per item, then set its
-          // value to the item. This is a little bit of overhead for every item in
-          // an Iterable, but it lets us recurse easily and efficiently update Arrays
-          // of TemplateResults that will be commonly returned from expressions like:
-          // array.map((i) => html`${i}`), by reusing existing TemplateInstances.
-          // If _value is an array, then the previous render was of an
-          // iterable and _value will contain the NodeParts from the previous
-          // render. If _value is not an array, clear this part and make a new
-          // array for NodeParts.
-          if (!Array.isArray(this.value)) {
-              this.value = [];
-              this.clear();
-          }
-          // Lets us keep track of how many items we stamped so we can clear leftover
-          // items from a previous render
-          const itemParts = this.value;
-          let partIndex = 0;
-          let itemPart;
-          for (const item of value) {
-              // Try to reuse an existing part
-              itemPart = itemParts[partIndex];
-              // If no existing part, create a new one
-              if (itemPart === undefined) {
-                  itemPart = new NodePart(this.options);
-                  itemParts.push(itemPart);
-                  if (partIndex === 0) {
-                      itemPart.appendIntoPart(this);
-                  }
-                  else {
-                      itemPart.insertAfterPart(itemParts[partIndex - 1]);
-                  }
-              }
-              itemPart.setValue(item);
-              itemPart.commit();
-              partIndex++;
-          }
-          if (partIndex < itemParts.length) {
-              // Truncate the parts array so _value reflects the current state
-              itemParts.length = partIndex;
-              this.clear(itemPart && itemPart.endNode);
-          }
-      }
-      clear(startNode = this.startNode) {
-          removeNodes(this.startNode.parentNode, startNode.nextSibling, this.endNode);
-      }
-  }
-  /**
-   * Implements a boolean attribute, roughly as defined in the HTML
-   * specification.
-   *
-   * If the value is truthy, then the attribute is present with a value of
-   * ''. If the value is falsey, the attribute is removed.
-   */
-  class BooleanAttributePart {
-      constructor(element, name, strings) {
-          this.value = undefined;
-          this.__pendingValue = undefined;
-          if (strings.length !== 2 || strings[0] !== '' || strings[1] !== '') {
-              throw new Error('Boolean attributes can only contain a single expression');
-          }
-          this.element = element;
-          this.name = name;
-          this.strings = strings;
-      }
-      setValue(value) {
-          this.__pendingValue = value;
-      }
-      commit() {
-          while (isDirective(this.__pendingValue)) {
-              const directive = this.__pendingValue;
-              this.__pendingValue = noChange;
-              directive(this);
-          }
-          if (this.__pendingValue === noChange) {
-              return;
-          }
-          const value = !!this.__pendingValue;
-          if (this.value !== value) {
-              if (value) {
-                  this.element.setAttribute(this.name, '');
-              }
-              else {
-                  this.element.removeAttribute(this.name);
-              }
-              this.value = value;
-          }
-          this.__pendingValue = noChange;
-      }
-  }
-  /**
-   * Sets attribute values for PropertyParts, so that the value is only set once
-   * even if there are multiple parts for a property.
-   *
-   * If an expression controls the whole property value, then the value is simply
-   * assigned to the property under control. If there are string literals or
-   * multiple expressions, then the strings are expressions are interpolated into
-   * a string first.
-   */
-  class PropertyCommitter extends AttributeCommitter {
-      constructor(element, name, strings) {
-          super(element, name, strings);
-          this.single =
-              (strings.length === 2 && strings[0] === '' && strings[1] === '');
-      }
-      _createPart() {
-          return new PropertyPart(this);
-      }
-      _getValue() {
-          if (this.single) {
-              return this.parts[0].value;
-          }
-          return super._getValue();
-      }
-      commit() {
-          if (this.dirty) {
-              this.dirty = false;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              this.element[this.name] = this._getValue();
-          }
-      }
-  }
-  class PropertyPart extends AttributePart {
-  }
-  // Detect event listener options support. If the `capture` property is read
-  // from the options object, then options are supported. If not, then the third
-  // argument to add/removeEventListener is interpreted as the boolean capture
-  // value so we should only pass the `capture` property.
-  let eventOptionsSupported = false;
-  // Wrap into an IIFE because MS Edge <= v41 does not support having try/catch
-  // blocks right into the body of a module
-  (() => {
-      try {
-          const options = {
-              get capture() {
-                  eventOptionsSupported = true;
-                  return false;
-              }
-          };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          window.addEventListener('test', options, options);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          window.removeEventListener('test', options, options);
-      }
-      catch (_e) {
-          // event options not supported
-      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$t.content);
+
+  const TOUCH_DEVICE = (() => {
+    try {
+      document.createEvent('TouchEvent');
+      return true;
+    } catch (e) {
+      return false;
+    }
   })();
-  class EventPart {
-      constructor(element, eventName, eventContext) {
-          this.value = undefined;
-          this.__pendingValue = undefined;
-          this.element = element;
-          this.eventName = eventName;
-          this.eventContext = eventContext;
-          this.__boundHandleEvent = (e) => this.handleEvent(e);
-      }
-      setValue(value) {
-          this.__pendingValue = value;
-      }
-      commit() {
-          while (isDirective(this.__pendingValue)) {
-              const directive = this.__pendingValue;
-              this.__pendingValue = noChange;
-              directive(this);
-          }
-          if (this.__pendingValue === noChange) {
-              return;
-          }
-          const newListener = this.__pendingValue;
-          const oldListener = this.value;
-          const shouldRemoveListener = newListener == null ||
-              oldListener != null &&
-                  (newListener.capture !== oldListener.capture ||
-                      newListener.once !== oldListener.once ||
-                      newListener.passive !== oldListener.passive);
-          const shouldAddListener = newListener != null && (oldListener == null || shouldRemoveListener);
-          if (shouldRemoveListener) {
-              this.element.removeEventListener(this.eventName, this.__boundHandleEvent, this.__options);
-          }
-          if (shouldAddListener) {
-              this.__options = getOptions(newListener);
-              this.element.addEventListener(this.eventName, this.__boundHandleEvent, this.__options);
-          }
-          this.value = newListener;
-          this.__pendingValue = noChange;
-      }
-      handleEvent(event) {
-          if (typeof this.value === 'function') {
-              this.value.call(this.eventContext || this.element, event);
-          }
-          else {
-              this.value.handleEvent(event);
-          }
-      }
-  }
-  // We copy options because of the inconsistent behavior of browsers when reading
-  // the third argument of add/removeEventListener. IE11 doesn't support options
-  // at all. Chrome 41 only reads `capture` if the argument is an object.
-  const getOptions = (o) => o &&
-      (eventOptionsSupported ?
-          { capture: o.capture, passive: o.passive, once: o.once } :
-          o.capture);
 
   /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
+   * @polymerMixin
    */
-  /**
-   * Creates Parts when a template is instantiated.
-   */
-  class DefaultTemplateProcessor {
-      /**
-       * Create parts for an attribute-position binding, given the event, attribute
-       * name, and string literals.
-       *
-       * @param element The element containing the binding
-       * @param name  The attribute name
-       * @param strings The string literals. There are always at least two strings,
-       *   event for fully-controlled bindings with a single expression.
-       */
-      handleAttributeExpressions(element, name, strings, options) {
-          const prefix = name[0];
-          if (prefix === '.') {
-              const committer = new PropertyCommitter(element, name.slice(1), strings);
-              return committer.parts;
+  const DialogDraggableMixin = (superClass) =>
+    class VaadinDialogDraggableMixin extends superClass {
+      static get properties() {
+        return {
+          _touchDevice: {
+            type: Boolean,
+            value: TOUCH_DEVICE
           }
-          if (prefix === '@') {
-              return [new EventPart(element, name.slice(1), options.eventContext)];
-          }
-          if (prefix === '?') {
-              return [new BooleanAttributePart(element, name.slice(1), strings)];
-          }
-          const committer = new AttributeCommitter(element, name, strings);
-          return committer.parts;
+        };
       }
-      /**
-       * Create parts for a text-position binding.
-       * @param templateFactory
-       */
-      handleTextExpression(options) {
-          return new NodePart(options);
+
+      ready() {
+        super.ready();
+        this._originalBounds = {};
+        this._originalMouseCoords = {};
+        this._startDrag = this._startDrag.bind(this);
+        this._drag = this._drag.bind(this);
+        this._stopDrag = this._stopDrag.bind(this);
+        this.$.overlay.$.overlay.addEventListener('mousedown', this._startDrag);
+        this.$.overlay.$.overlay.addEventListener('touchstart', this._startDrag);
       }
-  }
-  const defaultTemplateProcessor = new DefaultTemplateProcessor();
+
+      _startDrag(e) {
+        // Don't initiate when there's more than 1 touch (pinch zoom)
+        if (e.type === 'touchstart' && e.touches.length > 1) {
+          return;
+        }
+
+        if (this.draggable && (e.button === 0 || e.touches)) {
+          const resizerContainer = this.$.overlay.$.resizerContainer;
+          const isResizerContainer = e.target === resizerContainer;
+          const isResizerContainerScrollbar = e.offsetX > resizerContainer.clientWidth || e.offsetY > resizerContainer.clientHeight;
+          const isContentPart = e.target === this.$.overlay.$.content;
+          const isDraggable = e.target.classList.contains('draggable');
+          if ((isResizerContainer && !isResizerContainerScrollbar) || isContentPart || isDraggable) {
+            !isDraggable && e.preventDefault();
+            this._originalBounds = this._getOverlayBounds();
+            const event = this.__getMouseOrFirstTouchEvent(e);
+            this._originalMouseCoords = {top: event.pageY, left: event.pageX};
+            window.addEventListener('mouseup', this._stopDrag);
+            window.addEventListener('touchend', this._stopDrag);
+            window.addEventListener('mousemove', this._drag);
+            window.addEventListener('touchmove', this._drag);
+            if (this.$.overlay.$.overlay.style.position !== 'absolute') {
+              this._setBounds(this._originalBounds);
+            }
+          }
+        }
+      }
+
+      _drag(e) {
+        const event = this.__getMouseOrFirstTouchEvent(e);
+        if (this._eventInWindow(event)) {
+          const top = this._originalBounds.top + (event.pageY - this._originalMouseCoords.top);
+          const left = this._originalBounds.left + (event.pageX - this._originalMouseCoords.left);
+          this._setBounds({top, left});
+        }
+      }
+
+      _stopDrag() {
+        window.removeEventListener('mouseup', this._stopDrag);
+        window.removeEventListener('touchend', this._stopDrag);
+        window.removeEventListener('mousemove', this._drag);
+        window.removeEventListener('touchmove', this._drag);
+      }
+    };
+
+  const $_documentContainer$u = document.createElement('template');
+
+  $_documentContainer$u.innerHTML = `<dom-module id="vaadin-dialog-resizable-overlay-styles" theme-for="vaadin-dialog-overlay">
+  <template>
+    <style>
+      [part='overlay'] {
+        position: relative;
+        overflow: visible;
+        max-height: 100%;
+        display: flex;
+      }
+
+      [part='content'] {
+        box-sizing: border-box;
+        height: 100%;
+      }
+
+      .resizer-container {
+        overflow: auto;
+        flex-grow: 1;
+      }
+
+      [part='overlay'][style] .resizer-container {
+        height: 100%;
+        width: 100%;
+      }
+
+      :host(:not([resizable])) .resizer {
+        display: none;
+      }
+
+      .resizer {
+        position: absolute;
+        height: 16px;
+        width: 16px;
+      }
+
+      .resizer.edge {
+        height: 8px;
+        width: 8px;
+        top: -4px;
+        right: -4px;
+        bottom: -4px;
+        left: -4px;
+      }
+
+      .resizer.edge.n {
+        width: auto;
+        bottom: auto;
+        cursor: ns-resize;
+      }
+
+      .resizer.ne {
+        top: -4px;
+        right: -4px;
+        cursor: nesw-resize;
+      }
+
+      .resizer.edge.e {
+        height: auto;
+        left: auto;
+        cursor: ew-resize;
+      }
+
+      .resizer.se {
+        bottom: -4px;
+        right: -4px;
+        cursor: nwse-resize;
+      }
+
+      .resizer.edge.s {
+        width: auto;
+        top: auto;
+        cursor: ns-resize;
+      }
+
+      .resizer.sw {
+        bottom: -4px;
+        left: -4px;
+        cursor: nesw-resize;
+      }
+
+      .resizer.edge.w {
+        height: auto;
+        right: auto;
+        cursor: ew-resize;
+      }
+
+      .resizer.nw {
+        top: -4px;
+        left: -4px;
+        cursor: nwse-resize;
+      }
+
+      /* IE11 -only CSS */
+      _:-ms-fullscreen,
+      [part='overlay'] {
+        max-height: none;
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$u.content);
 
   /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
+   * @polymerMixin
    */
-  /**
-   * The default TemplateFactory which caches Templates keyed on
-   * result.type and result.strings.
-   */
-  function templateFactory(result) {
-      let templateCache = templateCaches.get(result.type);
-      if (templateCache === undefined) {
-          templateCache = {
-              stringsArray: new WeakMap(),
-              keyString: new Map()
-          };
-          templateCaches.set(result.type, templateCache);
+  const DialogResizableMixin = (superClass) =>
+    class VaadinDialogResizableMixin extends superClass {
+      ready() {
+        super.ready();
+        this._originalBounds = {};
+        this._originalMouseCoords = {};
+        this._resizeListeners = {start: {}, resize: {}, stop: {}};
+        this._addResizeListeners();
       }
-      let template = templateCache.stringsArray.get(result.strings);
-      if (template !== undefined) {
-          return template;
+
+      _addResizeListeners() {
+        // Note: edge controls added before corners
+        ['n', 'e', 's', 'w', 'nw', 'ne', 'se', 'sw'].forEach((direction) => {
+          const resizer = document.createElement('div');
+          this._resizeListeners.start[direction] = (e) => this._startResize(e, direction);
+          this._resizeListeners.resize[direction] = (e) => this._resize(e, direction);
+          this._resizeListeners.stop[direction] = () => this._stopResize(direction);
+          if (direction.length === 1) {
+            resizer.classList.add('edge');
+          }
+          resizer.classList.add('resizer');
+          resizer.classList.add(direction);
+          resizer.addEventListener('mousedown', this._resizeListeners.start[direction]);
+          resizer.addEventListener('touchstart', this._resizeListeners.start[direction]);
+          this.$.overlay.$.resizerContainer.appendChild(resizer);
+        });
       }
-      // If the TemplateStringsArray is new, generate a key from the strings
-      // This key is shared between all templates with identical content
-      const key = result.strings.join(marker);
-      // Check if we already have a Template for this key
-      template = templateCache.keyString.get(key);
-      if (template === undefined) {
-          // If we have not seen this key before, create a new Template
-          template = new Template(result, result.getTemplateElement());
-          // Cache the Template for this key
-          templateCache.keyString.set(key, template);
+
+      _startResize(e, direction) {
+        // Don't initiate when there's more than 1 touch (pinch zoom)
+        if (e.type === 'touchstart' && e.touches.length > 1) {
+          return;
+        }
+
+        if (e.button === 0 || e.touches) {
+          e.preventDefault();
+          this._originalBounds = this._getOverlayBounds();
+          const event = this.__getMouseOrFirstTouchEvent(e);
+          this._originalMouseCoords = {top: event.pageY, left: event.pageX};
+          window.addEventListener('mousemove', this._resizeListeners.resize[direction]);
+          window.addEventListener('touchmove', this._resizeListeners.resize[direction]);
+          window.addEventListener('mouseup', this._resizeListeners.stop[direction]);
+          window.addEventListener('touchend', this._resizeListeners.stop[direction]);
+          if (this.$.overlay.$.overlay.style.position !== 'absolute') {
+            this._setBounds(this._originalBounds);
+          }
+        }
       }
-      // Cache all future queries for this TemplateStringsArray
-      templateCache.stringsArray.set(result.strings, template);
-      return template;
-  }
-  const templateCaches = new Map();
+
+      _resize(e, resizer) {
+        const event = this.__getMouseOrFirstTouchEvent(e);
+        if (this._eventInWindow(event)) {
+          const minimumSize = 40;
+          resizer.split('').forEach((direction) => {
+            switch (direction) {
+              case 'n': {
+                const height = this._originalBounds.height - (event.pageY - this._originalMouseCoords.top);
+                const top = this._originalBounds.top + (event.pageY - this._originalMouseCoords.top);
+                if (height > minimumSize) {
+                  this._setBounds({top, height});
+                }
+                break;
+              }
+              case 'e': {
+                const width = this._originalBounds.width + (event.pageX - this._originalMouseCoords.left);
+                if (width > minimumSize) {
+                  this._setBounds({width});
+                }
+                break;
+              }
+              case 's': {
+                const height = this._originalBounds.height + (event.pageY - this._originalMouseCoords.top);
+                if (height > minimumSize) {
+                  this._setBounds({height});
+                }
+                break;
+              }
+              case 'w': {
+                const width = this._originalBounds.width - (event.pageX - this._originalMouseCoords.left);
+                const left = this._originalBounds.left + (event.pageX - this._originalMouseCoords.left);
+                if (width > minimumSize) {
+                  this._setBounds({left, width});
+                }
+                break;
+              }
+            }
+          });
+          this.$.overlay.notifyResize();
+        }
+      }
+
+      _stopResize(direction) {
+        window.removeEventListener('mousemove', this._resizeListeners.resize[direction]);
+        window.removeEventListener('touchmove', this._resizeListeners.resize[direction]);
+        window.removeEventListener('mouseup', this._resizeListeners.stop[direction]);
+        window.removeEventListener('touchend', this._resizeListeners.stop[direction]);
+        this.dispatchEvent(new CustomEvent('resize', {detail: this._getResizeDimensions()}));
+      }
+
+      _getResizeDimensions() {
+        const {width, height} = getComputedStyle(this.$.overlay.$.overlay);
+        const content = this.$.overlay.$.content;
+        content.setAttribute('style', 'position: absolute; top: 0; right: 0; bottom: 0; left: 0; box-sizing: content-box; height: auto;');
+        const {width: contentWidth, height: contentHeight} = getComputedStyle(content);
+        content.removeAttribute('style');
+        return {width, height, contentWidth, contentHeight};
+      }
+    };
 
   /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
-   */
-  const parts = new WeakMap();
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const $_documentContainer$v = document.createElement('template');
+
+  $_documentContainer$v.innerHTML = `<dom-module id="vaadin-dialog-overlay-styles" theme-for="vaadin-dialog-overlay">
+  <template>
+    <style>
+      /*
+        NOTE(platosha): Make some min-width to prevent collapsing of the content
+        taking the parent width, e. g., <vaadin-grid> and such.
+      */
+      [part="content"] {
+        min-width: 12em; /* matches the default <vaadin-text-field> width */
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$v.content);
+  let memoizedTemplate;
+
   /**
-   * Renders a template result or other value to a container.
+   * The overlay element.
    *
-   * To update a container with new values, reevaluate the template literal and
-   * call `render` with the new result.
+   * ### Styling
    *
-   * @param result Any value renderable by NodePart - typically a TemplateResult
-   *     created by evaluating a template tag like `html` or `svg`.
-   * @param container A DOM parent to render to. The entire contents are either
-   *     replaced, or efficiently updated if the same result type was previous
-   *     rendered there.
-   * @param options RenderOptions for the entire render tree rendered to this
-   *     container. Render options must *not* change between renders to the same
-   *     container, as those changes will not effect previously rendered DOM.
+   * See [`<vaadin-overlay>` documentation](https://github.com/vaadin/vaadin-overlay/blob/master/src/vaadin-overlay.html)
+   * for `<vaadin-dialog-overlay>` parts.
+   *
+   * @extends PolymerElement
+   * @private
    */
-  const render = (result, container, options) => {
-      let part = parts.get(container);
-      if (part === undefined) {
-          removeNodes(container, container.firstChild);
-          parts.set(container, part = new NodePart(Object.assign({ templateFactory }, options)));
-          part.appendInto(container);
+  class DialogOverlayElement extends mixinBehaviors(IronResizableBehavior, OverlayElement) {
+    static get is() {
+      return 'vaadin-dialog-overlay';
+    }
+
+    static get template() {
+      if (!memoizedTemplate) {
+        memoizedTemplate = super.template.cloneNode(true);
+        const contentPart = memoizedTemplate.content.querySelector('[part="content"]');
+        const overlayPart = memoizedTemplate.content.querySelector('[part="overlay"]');
+        const resizerContainer = document.createElement('div');
+        resizerContainer.id = 'resizerContainer';
+        resizerContainer.classList.add('resizer-container');
+        resizerContainer.appendChild(contentPart);
+        overlayPart.appendChild(resizerContainer);
       }
-      part.setValue(result);
-      part.commit();
-  };
+      return memoizedTemplate;
+    }
 
-  /**
-   * @license
-   * Copyright (c) 2017 The Polymer Project Authors. All rights reserved.
-   * This code may only be used under the BSD style license found at
-   * http://polymer.github.io/LICENSE.txt
-   * The complete set of authors may be found at
-   * http://polymer.github.io/AUTHORS.txt
-   * The complete set of contributors may be found at
-   * http://polymer.github.io/CONTRIBUTORS.txt
-   * Code distributed by Google as part of the polymer project is also
-   * subject to an additional IP rights grant found at
-   * http://polymer.github.io/PATENTS.txt
-   */
-  // IMPORTANT: do not change the property name or the assignment expression.
-  // This line will be used in regexes to search for lit-html usage.
-  // TODO(justinfagnani): inject version number at build time
-  if (typeof window !== 'undefined') {
-      (window['litHtmlVersions'] || (window['litHtmlVersions'] = [])).push('1.2.1');
+    static get properties() {
+      return {
+        modeless: Boolean,
+
+        withBackdrop: Boolean
+      };
+    }
   }
-  /**
-   * Interprets a template literal as an HTML template that can efficiently
-   * render to and update a container.
-   */
-  const html$1 = (strings, ...values) => new TemplateResult(strings, values, 'html', defaultTemplateProcessor);
 
-  const $_documentContainer$s = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
+  customElements.define(DialogOverlayElement.is, DialogOverlayElement);
+
+
+  /**
+   *
+   * `<vaadin-dialog>` is a Web Component for creating customized modal dialogs. The content of the
+   * dialog can be populated in two ways: imperatively by using renderer callback function and
+   * declaratively by using Polymer's Templates.
+   *
+   * ### Rendering
+   *
+   * By default, the dialog uses the content provided by using the renderer callback function.
+   *
+   * The renderer function provides `root`, `dialog` arguments.
+   * Generate DOM content, append it to the `root` element and control the state
+   * of the host element by accessing `dialog`. Before generating new content,
+   * users are able to check if there is already content in `root` for reusing it.
+   *
+   * ```html
+   * <vaadin-dialog id="dialog"></vaadin-dialog>
+   * ```
+   * ```js
+   * const dialog = document.querySelector('#dialog');
+   * dialog.renderer = function(root, dialog) {
+   *   root.textContent = "Sample dialog";
+   * };
+   * ```
+   *
+   * Renderer is called on the opening of the dialog.
+   * DOM generated during the renderer call can be reused
+   * in the next renderer call and will be provided with the `root` argument.
+   * On first call it will be empty.
+   *
+   * ### Polymer Templates
+   *
+   * Alternatively, the content can be provided with Polymer's Template.
+   * Dialog finds the first child template and uses that in case renderer callback function
+   * is not provided. You can also set a custom template using the `template` property.
+   *
+   * ```html
+   * <vaadin-dialog opened>
+   *   <template>
+   *     Sample dialog
+   *   </template>
+   * </vaadin-dialog>
+   * ```
+   *
+   * ### Styling
+   *
+   * See [`<vaadin-overlay>` documentation](https://github.com/vaadin/vaadin-overlay/blob/master/src/vaadin-overlay.html)
+   * for `<vaadin-dialog-overlay>` parts.
+   *
+   * Note: the `theme` attribute value set on `<vaadin-dialog>` is
+   * propagated to the internal `<vaadin-dialog-overlay>` component.
+   *
+   * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
+   *
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ThemePropertyMixin
+   * @demo demo/index.html
+   */
+  class DialogElement extends
+    ThemePropertyMixin(
+      ElementMixin$1(
+        DialogDraggableMixin(
+          DialogResizableMixin(
+            PolymerElement)))) {
+    static get template() {
+      return html`
+    <style>
+      :host {
+        display: none;
+      }
+    </style>
+
+    <vaadin-dialog-overlay id="overlay" on-opened-changed="_onOverlayOpened" on-mousedown="_bringOverlayToFront" on-touchstart="_bringOverlayToFront" theme\$="[[theme]]" modeless="[[modeless]]" with-backdrop="[[!modeless]]" resizable\$="[[resizable]]" focus-trap="">
+    </vaadin-dialog-overlay>
+`;
+    }
+
+    static get is() {
+      return 'vaadin-dialog';
+    }
+
+    static get version() {
+      return '2.4.2';
+    }
+
+    static get properties() {
+      return {
+        /**
+         * True if the overlay is currently displayed.
+         */
+        opened: {
+          type: Boolean,
+          value: false,
+          notify: true
+        },
+
+        /**
+         * Set to true to disable closing dialog on outside click
+         */
+        noCloseOnOutsideClick: {
+          type: Boolean,
+          value: false
+        },
+
+        /**
+         * Set to true to disable closing dialog on Escape press
+         */
+        noCloseOnEsc: {
+          type: Boolean,
+          value: false
+        },
+
+        /**
+         * Set the `aria-label` attribute for assistive technologies like
+         * screen readers. An `undefined` value for this property (the
+         * default) means that the `aria-label` attribute is not present at
+         * all.
+         */
+        ariaLabel: {
+          type: String
+        },
+
+        /**
+         * Theme to apply to the overlay element
+         */
+        theme: String,
+
+        _contentTemplate: Object,
+
+        /**
+         * Custom function for rendering the content of the dialog.
+         * Receives two arguments:
+         *
+         * - `root` The root container DOM element. Append your content to it.
+         * - `dialog` The reference to the `<vaadin-dialog>` element.
+         */
+        renderer: Function,
+
+        /**
+         * Set to true to remove backdrop and allow click events on background elements.
+         */
+        modeless: {
+          type: Boolean,
+          value: false
+        },
+
+        /**
+         * Set to true to enable repositioning the dialog by clicking and dragging.
+         *
+         * By default, only the overlay area can be used to drag the element. But,
+         * a child element can be marked as a draggable area by adding a
+         * "`draggable`" class to it.
+         */
+        draggable: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true
+        },
+
+        /**
+         * Set to true to enable resizing the dialog by dragging the corners and edges.
+         */
+        resizable: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true
+        },
+
+        _oldTemplate: Object,
+
+        _oldRenderer: Object
+      };
+    }
+
+    static get observers() {
+      return [
+        '_openedChanged(opened)',
+        '_ariaLabelChanged(ariaLabel)',
+        '_templateOrRendererChanged(_contentTemplate, renderer)'
+      ];
+    }
+
+    ready() {
+      super.ready();
+      this.$.overlay.setAttribute('role', 'dialog');
+      this.$.overlay.addEventListener('vaadin-overlay-outside-click', this._handleOutsideClick.bind(this));
+      this.$.overlay.addEventListener('vaadin-overlay-escape-press', this._handleEscPress.bind(this));
+
+      this._observer = new FlattenedNodesObserver(this, info => {
+        this._setTemplateFromNodes(info.addedNodes);
+      });
+    }
+
+    _setTemplateFromNodes(nodes) {
+      this._contentTemplate = nodes.filter(node => node.localName && node.localName === 'template')[0] || this._contentTemplate;
+    }
+
+    _removeNewRendererOrTemplate(template, oldTemplate, renderer, oldRenderer) {
+      if (template !== oldTemplate) {
+        this._contentTemplate = undefined;
+      } else if (renderer !== oldRenderer) {
+        this.renderer = undefined;
+      }
+    }
+
+    /**
+     * Manually invoke existing renderer.
+     */
+    render() {
+      this.$.overlay.render();
+    }
+
+    _templateOrRendererChanged(template, renderer) {
+      if (template && renderer) {
+        this._removeNewRendererOrTemplate(template, this._oldTemplate, renderer, this._oldRenderer);
+        throw new Error('You should only use either a renderer or a template for dialog content');
+      }
+
+      this._oldTemplate = template;
+      this._oldRenderer = renderer;
+
+      if (renderer) {
+        this.$.overlay.setProperties({owner: this, renderer: renderer});
+      }
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.opened = false;
+    }
+
+    _openedChanged(opened) {
+      if (opened) {
+        this.$.overlay.template = this.querySelector('template');
+      }
+      this.$.overlay.opened = opened;
+    }
+
+    _ariaLabelChanged(ariaLabel) {
+      if (ariaLabel !== undefined && ariaLabel !== null) {
+        this.$.overlay.setAttribute('aria-label', ariaLabel);
+      } else {
+        this.$.overlay.removeAttribute('aria-label');
+      }
+    }
+
+    _onOverlayOpened(e) {
+      if (e.detail.value === false) {
+        this.opened = false;
+      }
+    }
+
+    /**
+     * Close the dialog if `noCloseOnOutsideClick` isn't set to true
+     */
+    _handleOutsideClick(e) {
+      if (this.noCloseOnOutsideClick) {
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Close the dialog if `noCloseOnEsc` isn't set to true
+     */
+    _handleEscPress(e) {
+      if (this.noCloseOnEsc) {
+        e.preventDefault();
+      }
+    }
+
+    _setBounds(bounds) {
+      const overlay = this.$.overlay.$.overlay;
+      const parsedBounds = Object.assign({}, bounds);
+
+      if (overlay.style.position !== 'absolute') {
+        overlay.style.position = 'absolute';
+        overlay.style.maxWidth = 'none';
+      }
+
+      for (const arg in parsedBounds) {
+        if (typeof parsedBounds[arg] === 'number') {
+          parsedBounds[arg] = `${parsedBounds[arg]}px`;
+        }
+      }
+
+      Object.assign(overlay.style, parsedBounds);
+    }
+
+    _bringOverlayToFront() {
+      if (this.modeless) {
+        this.$.overlay.bringToFront();
+      }
+    }
+
+    _getOverlayBounds() {
+      const overlay = this.$.overlay.$.overlay;
+      const overlayBounds = overlay.getBoundingClientRect();
+      const containerBounds = this.$.overlay.getBoundingClientRect();
+      const top = overlayBounds.top - containerBounds.top;
+      const left = overlayBounds.left - containerBounds.left;
+      const width = overlayBounds.width;
+      const height = overlayBounds.height;
+      return {top, left, width, height};
+    }
+
+    _eventInWindow(e) {
+      return e.clientX >= 0 && e.clientX <= window.innerWidth && e.clientY >= 0 && e.clientY <= window.innerHeight;
+    }
+
+    __getMouseOrFirstTouchEvent(e) {
+      return e.touches ? e.touches[0] : e;
+    }
+  }
+
+  customElements.define(DialogElement.is, DialogElement);
+
+  const $_documentContainer$w = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
   <template>
     <style include="lumo-checkbox-style lumo-checkbox-effects">
       /* IE11 only */
@@ -35107,7 +36377,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$s.content);
+  document.head.appendChild($_documentContainer$w.content);
 
   /**
   @license
@@ -35418,7 +36688,7 @@
 
   customElements.define(CheckboxElement.is, CheckboxElement);
 
-  const $_documentContainer$t = html`<dom-module id="lumo-grid" theme-for="vaadin-grid">
+  const $_documentContainer$x = html`<dom-module id="lumo-grid" theme-for="vaadin-grid">
   <template>
     <style>
       :host {
@@ -35781,7 +37051,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$t.content);
+  document.head.appendChild($_documentContainer$x.content);
 
   /**
   @license
@@ -41754,7 +43024,7 @@
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
 
-  const TOUCH_DEVICE = (() => {
+  const TOUCH_DEVICE$1 = (() => {
     try {
       document.createEvent('TouchEvent');
       return true;
@@ -42100,7 +43370,7 @@
 
         _touchDevice: {
           type: Boolean,
-          value: TOUCH_DEVICE
+          value: TOUCH_DEVICE$1
         },
 
         /**
@@ -42616,22 +43886,40 @@
       }
   }
 
+  class Storager{
+      constructor(name){
+          this.slot = name;
+          this.storage = window.localStorage;
+      }
+
+      storager(response){       
+          this.storage.setItem(this.slot, response);
+      }
+
+      load(){
+          const stringified = this.storage.getItem(this.slot);
+          return stringified;
+      }
+  }
+
   class ClienteView extends HTMLElement{
       constructor(){
           super();
-          this.service = new Services();
-          this.loadingGrid();
+          this.storage = new Storager('clientes');
+          this.service = new Services();            
       }
       connectedCallback(){
-          this.callService();
-          this.attachListener();
+          this.createTemplate();
+          this.salvarEventListener();
           this.loadingGrid();
-          console.log('connectCallback');
       }
-      callService(){
+      createTemplate(){
           const templete = html$1 `
-        <vaadin-form-layout>
-            <vaadin-text-field label="Nome" id="nome"></vaadin-text-field>
+        <vaadin-dialog aria-label="simple"></vaadin-dialog>
+        <vaadin-form-layout>   
+            <vaadin-custom-field label="Nome" error-message="O nome do Cliente é obrigatório!">
+                <vaadin-text-field required style"width: 25em;" placeholder="Nome" style="width: 30em;" id="nome"></vaadin-text-field>
+            </vaadin-custom-field>                
             <vaadin-form-item>
                 <vaadin-button theme="primary">Salvar</vaadin-button>
             </vaadin-form-item>
@@ -42642,21 +43930,41 @@
         </vaadin-grid>`;
           render(templete, this);
       }    
-      attachListener(){
-          const button = this.querySelector('vaadin-button');
-          button.addEventListener('click', _ =>{
-              this.salvar();
+      salvarEventListener(){
+          customElements.whenDefined('vaadin-form-layout').then(_ =>{
+              const customField = this.querySelector('vaadin-custom-field');
+              const button = this.querySelector('vaadin-button');
+              button.addEventListener('click', _ =>{          
+                  customField.validate(); 
+                  this.salvar();
+              });
           });
       }
       salvar(){
           const nome = this.querySelector('#nome');
-          const data = {nome: nome.value};
-          this.service.postServices("http://localhost:8080/clientes", data)
-          .then(response =>{ 
-              console.log('response',response);
-              this.loadingGrid();
-              const textfield = this.querySelector('vaadin-text-field');
-              console.log('campo',textfield);
+          const data = {nome: nome.value};        
+          if(nome.value != null && nome.value != ""){
+              console.log('salvar');
+              this.service.postServices("http://localhost:8080/clientes", data)
+              .then(response =>{ 
+                  if(response.ok){
+                      console.log('response',response);
+                      this.loadingGrid();
+                      const textfield = this.querySelector('vaadin-text-field');
+                      textfield.value = "";         
+                      this.showDialog("Cliente salvo com sucesso!");
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              });
+
+          }        
+      }
+      loadingStorage(){
+          this.service.getServices("http://localhost:8080/clientes")
+          .then(data =>{
+              this.storage.storager(JSON.stringify(data));
           });
       }
       loadingGrid(){
@@ -42667,11 +43975,22 @@
             //      .then(response => response.json()).then(
            //           json => callback(json, json.length));
            //
-              grid.dataProvider =(params, callback) =>{
-                  this.service.getServices("http://localhost:8080/clientes")
-                  .then(data => callback(data, data.length));
+          this.loadingStorage();
+          let data = JSON.parse(this.storage.load());
+          grid.dataProvider =(params, callback) =>{
+                  callback(data, data.length);
               };
           });
+      }
+      showDialog(message){
+          customElements.whenDefined('vaadin-dialog').then(_ =>{
+              const dialog = this.querySelector('vaadin-dialog');
+              console.log(dialog);
+              dialog.renderer= function(root, dialog){
+                  root.textContent=message;
+              };
+              dialog.opened =true;
+          });       
       }
   }
   customElements.define('cliente-view',ClienteView);

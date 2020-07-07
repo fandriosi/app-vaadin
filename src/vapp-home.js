@@ -1,21 +1,35 @@
-import {html, PolymerElement} from '@polymer/polymer';
+import {html, render} from 'lit-html/lit-html';
 import '@vaadin/vaadin-form-layout';
 import '@vaadin/vaadin-text-field/vaadin-text-area';
 import '@vaadin/vaadin-text-field/vaadin-text-field';
 import '@vaadin/vaadin-button';
 import '@vaadin/vaadin-date-picker';
 
-export default class VappHome extends PolymerElement{
-    ready(){
-        super.ready();     
-        let i = 0;
-        let button = this.shadowRoot.getElementById('vaadin-button')
-        button.addEventListener('click', function() {
-            button.nextElementSibling.textContent = ++i;
-        });
+export default class VappHome extends HTMLElement{
+    constructor(){
+        super();       
+        
+    }
+    connectedCallback(){
+        this.callServer();
+        this.attachDate();
+        this.attachListner();
+    }
+    callServer(){
+        const templete = html `
+        <vaadin-form-layout>
+            <vaadin-text-field label="First Name" value="Jane"></vaadin-text-field>
+            <vaadin-text-field label="Last Name" value="Doe"></vaadin-text-field>
+            <vaadin-text-field label="Email" value="jane.doe@example.com"></vaadin-text-field>
+            <vaadin-date-picker label="Birthday"></vaadin-date-picker>
+            <vaadin-text-area label="Bio" colspan="2" value="My name is Jane."></vaadin-text-area>
+            <vaadin-button theme="primary" id="vaadin-button">Salvar</vaadin-button>
+        </vaadin-form-layout>`
+        render(templete, this);
+    }
+    attachDate(){
         Sugar.Date.setLocale('pt');
-        var datepicker = this.shadowRoot.querySelector('vaadin-date-picker');
-        console.log('data', datepicker);
+        var datepicker = this.querySelector('vaadin-date-picker');
         datepicker.i18n = {
             week: 'semana',
             calendar: 'calendario',
@@ -44,16 +58,15 @@ export default class VappHome extends PolymerElement{
             }
         };
     }
-    static get template(){
-        return html `
-        <vaadin-form-layout>
-            <vaadin-text-field label="First Name" value="Jane"></vaadin-text-field>
-            <vaadin-text-field label="Last Name" value="Doe"></vaadin-text-field>
-            <vaadin-text-field label="Email" value="jane.doe@example.com"></vaadin-text-field>
-            <vaadin-date-picker label="Birthday"></vaadin-date-picker>
-            <vaadin-text-area label="Bio" colspan="2" value="My name is Jane."></vaadin-text-area>
-            <vaadin-button theme="primary" id="vaadin-button">Salvar</vaadin-button>
-        </vaadin-form-layout>`
+    attachListner(){
+        customElements.whenDefined('vaadin-button').then(_ =>{
+            let i = 0;
+            let button = this.querySelector('vaadin-button')
+            button.addEventListener('click', function() {
+                console.log('click');
+                button.nextElementSibling.textContent = ++i;
+            });
+        });
     }
 }
 customElements.define('vapp-home',VappHome);
