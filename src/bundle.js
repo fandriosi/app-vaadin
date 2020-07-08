@@ -43921,8 +43921,11 @@
                 <vaadin-text-field required style"width: 25em;" placeholder="Nome" style="width: 30em;" id="nome"></vaadin-text-field>
             </vaadin-custom-field>                
             <vaadin-form-item>
-                <vaadin-button theme="primary">Salvar</vaadin-button>
+                <vaadin-button theme="primary" id="buttomSalvar">Salvar</vaadin-button>
             </vaadin-form-item>
+            <vaadin-form-item>
+                <vaadin-button theme="primary" id="buttonDeletar">Deletar</vaadin-button>
+             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
             <vaadin-grid-column path="id" header="Código"></vaadin-grid-column>
@@ -43933,8 +43936,8 @@
       salvarEventListener(){
           customElements.whenDefined('vaadin-form-layout').then(_ =>{
               const customField = this.querySelector('vaadin-custom-field');
-              const button = this.querySelector('vaadin-button');
-              button.addEventListener('click', _ =>{          
+              const button = this.querySelector('#buttonSalvar');
+              button.addEventListener('click', _ =>{
                   customField.validate(); 
                   this.salvar();
               });
