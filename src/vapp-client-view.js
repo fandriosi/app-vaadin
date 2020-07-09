@@ -2,7 +2,7 @@ import {html, render} from 'lit-html/lit-html.js';
 import '@vaadin/vaadin-form-layout' ;
 import '@vaadin/vaadin-custom-field';
 import '@vaadin/vaadin-text-field';
-import '@vaadin/vaadin-text-field';
+import '@vaadin/vaadin-text-field/vaadin-email-field';
 import '@vaadin/vaadin-dialog';
 import '@vaadin/vaadin-button';
 import '@vaadin/vaadin-grid';
@@ -13,13 +13,11 @@ export default class ClienteView extends HTMLElement{
     constructor(){
         super();
         this.storage = new Storage('clientes');
-        this.service = new Service();          
-        this.loadingGrid();
-        this.difinedCustomElementsForms();
-        this.showDialog();
+        this.service = new Service();      
     }
     connectedCallback(){
         this.createTemplate(); 
+        this.loadingGrid();
         this.selectItemsEventListener(); 
         this.fiedEventListener();       
         this.salvarEventListener();
@@ -30,19 +28,13 @@ export default class ClienteView extends HTMLElement{
         const templete = html `
         <vaadin-dialog aria-label="simple"></vaadin-dialog>
         <vaadin-form-layout>
-            <vaadin-custom-field label="Código">
-                <vaadin-text-field disabled="true" placeholder="Código" id="id"></vaadin-text-field>
-            </vaadin-custom-field>        
-            <vaadin-custom-field label="Nome" error-message="O nome do Cliente é obrigatório!">                
-                <vaadin-text-field required style="width: 40em;" placeholder="Nome" id="nome"></vaadin-text-field>      
-            </vaadin-custom-field>  
+            <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
+            <vaadin-text-field required style="width: 100%;" placeholder="Nome" id="nome" error-message="O nome do Cliente é obrigatório!" clear-button-visible></vaadin-text-field>
+            <vaadin-email-field label="Email" style="width: 100%;" id="email" error-message="Please enter a valid email address" clear-button-visible></vaadin-email-field>    
             <vaadin-custom-field label="Número Telefone">
-                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="3" placeholder="Area"></vaadin-text-field>
-                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="9" placeholder="Número"></vaadin-text-field>
-            </vaadin-custom-field>  
-            </vaadin-custom-field label="Email">  
-                <vaadin-email-field label="Email" name="email" error-message="Please enter a valid email address" clear-button-visible></vaadin-email-field>       
-            </vaadin-custom-field> 
+                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="3" placeholder="Area" id="area"></vaadin-text-field>
+                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="9" placeholder="Número" id="numero"></vaadin-text-field>
+            </vaadin-custom-field>       
             <vaadin-form-item>
                 <vaadin-button theme="primary" id="buttonSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" id="buttonDeletar">Excluir</vaadin-button>
@@ -52,14 +44,13 @@ export default class ClienteView extends HTMLElement{
         <vaadin-grid>
             <vaadin-grid-column path="id" header="Código"></vaadin-grid-column>
             <vaadin-grid-column path="nome" header="Nome"></vaadin-grid-column>
+            <vaadin-grid-column path="email" header="E-mail"></vaadin-grid-column>
+            <vaadin-grid-column path="phone" header="Telefone"></vaadin-grid-column>
         </vaadin-grid>`;
         render(templete, this);
-    }    
-    difinedCustomElementsForms(){
-        customElements.whenDefined('vaadin-form-layou').then(_ =>{});
-    }
+    } 
     salvarEventListener(){
-        let customField = this.querySelector('vaadin-custom-field');
+        let customField = this.querySelector('#nome');
         let buttonSalvar = this.querySelector('#buttonSalvar');
         buttonSalvar.addEventListener('click', _ =>{  
             console.log('salvar');        
@@ -69,7 +60,7 @@ export default class ClienteView extends HTMLElement{
         });
     }
     editarEventListener(){
-        let customField = this.querySelector('vaadin-custom-field');
+        let customField = this.querySelector('#nome');
         let buttonSalvar = this.querySelector('#buttonEditar');
         buttonSalvar.addEventListener('click', _ =>{          
             customField.validate(); 
@@ -116,8 +107,11 @@ export default class ClienteView extends HTMLElement{
         });           
     }
     salvar(){
-        const nome = this.querySelector('#nome');
-        const data = {nome: nome.value};        
+        let nome = this.querySelector('#nome');
+        let email = this.querySelector('#email');
+        let area = this.querySelector('#area');
+        let numero = this.querySelector('#numero');
+        let data = {nome: nome.value, email: email.value, phone: area.value +" "+numero.value};        
         if(nome.value != null && nome.value != ""){
             this.service.postServices("http://localhost:8080/clientes", data)
             .then(response =>{ 
@@ -172,14 +166,12 @@ export default class ClienteView extends HTMLElement{
 
         }       
     }
-    loadingGrid(){
-        customElements.whenDefined('vaadin-grid').then(_ =>{
-            const grid = this.querySelector('vaadin-grid');
-            grid.dataProvider =(params, callback) =>{
-                this.service.getServices("http://localhost:8080/clientes").then(
-                    json => callback(json, json.length));
-            }   
-        });                   
+    loadingGrid(){        
+        const grid = this.querySelector('vaadin-grid');
+        grid.dataProvider =(params, callback) =>{
+            this.service.getServices("http://localhost:8080/clientes").then(
+                json => callback(json, json.length));
+        }                
     }
     showDialog(message){
         customElements.whenDefined('vaadin-dialog').then(_ =>{
@@ -187,12 +179,14 @@ export default class ClienteView extends HTMLElement{
             dialog.renderer= function(root, dialog){
                 root.textContent=message;
             }
-            dialog.opened =true;  
+            dialog.opened =true;
         });          
     }
     cleanFields(){
         let idField = this.querySelector('#id');
         let nomeField = this.querySelector('#nome');
+        let emailField = this.querySelector('#nome');
+        let foneField = this.querySelector('#nome');
         idField.value = "";
         nomeField.value= "";
     }

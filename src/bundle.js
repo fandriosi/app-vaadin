@@ -35457,7 +35457,121 @@
 
   customElements.define(CustomFieldElement.is, CustomFieldElement);
 
-  const $_documentContainer$t = html`<dom-module id="lumo-dialog" theme-for="vaadin-dialog-overlay">
+  const $_documentContainer$t = html`<dom-module id="lumo-email-field" theme-for="vaadin-email-field">
+  <template>
+    <style>
+      :not(*):placeholder-shown, /* to prevent broken styles on IE */
+      :host([dir="rtl"]) [part="value"]:placeholder-shown,
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input:placeholder-shown) {
+        --_lumo-text-field-overflow-mask-image: none;
+      }
+
+      :host([dir="rtl"]) [part="value"],
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input) {
+        --_lumo-text-field-overflow-mask-image: linear-gradient(to left, transparent, #000 1.25em);
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$t.content);
+
+  /**
+  @license
+  Copyright (c) 2018 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const $_documentContainer$u = document.createElement('template');
+
+  $_documentContainer$u.innerHTML = `<dom-module id="vaadin-email-field-template">
+  <template>
+    <style>
+      :host([dir="rtl"]) [part="input-field"] {
+        direction: ltr;
+      }
+
+      :host([dir="rtl"]) [part="value"]::placeholder {
+        direction: rtl;
+        text-align: left;
+      }
+
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input)::placeholder {
+        direction: rtl;
+        text-align: left;
+      }
+
+      :host([dir="rtl"]) [part="value"]:-ms-input-placeholder,
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input):-ms-input-placeholder {
+        direction: rtl;
+        text-align: left;
+      }
+    </style>
+  </template>
+  
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$u.content);
+  let memoizedTemplate;
+
+  /**
+   * `<vaadin-email-field>` is a Web Component for email field control in forms.
+   *
+   * ```html
+   * <vaadin-email-field label="Email">
+   * </vaadin-email-field>
+   * ```
+   *
+   * ### Styling
+   *
+   * See vaadin-text-field.html for the styling documentation
+   *
+   * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
+   *
+   * @extends PolymerElement
+   * @demo demo/index.html
+   */
+  class EmailFieldElement extends TextFieldElement {
+    static get is() {
+      return 'vaadin-email-field';
+    }
+
+    static get version() {
+      return '2.6.2';
+    }
+
+    static get template() {
+      if (!memoizedTemplate) {
+        // Clone the superclass template
+        memoizedTemplate = super.template.cloneNode(true);
+
+        // Retrieve this element's dom-module template
+        const thisTemplate = DomModule.import(this.is + '-template', 'template');
+        const styles = thisTemplate.content.querySelector('style');
+
+        // Add the and styles to the text-field template
+        memoizedTemplate.content.appendChild(styles);
+      }
+
+      return memoizedTemplate;
+    }
+
+    ready() {
+      super.ready();
+      this.inputElement.type = 'email';
+      this.inputElement.autocapitalize = 'off';
+    }
+
+    _createConstraintsObserver() {
+      // NOTE: pattern needs to be set before constraints observer is initialized
+      this.pattern = '^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$';
+
+      super._createConstraintsObserver();
+    }
+  }
+
+  customElements.define(EmailFieldElement.is, EmailFieldElement);
+
+  const $_documentContainer$v = html`<dom-module id="lumo-dialog" theme-for="vaadin-dialog-overlay">
   <template>
     <style include="lumo-overlay">
       /* Optical centering */
@@ -35519,7 +35633,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$t.content);
+  document.head.appendChild($_documentContainer$v.content);
 
   const TOUCH_DEVICE = (() => {
     try {
@@ -35600,9 +35714,9 @@
       }
     };
 
-  const $_documentContainer$u = document.createElement('template');
+  const $_documentContainer$w = document.createElement('template');
 
-  $_documentContainer$u.innerHTML = `<dom-module id="vaadin-dialog-resizable-overlay-styles" theme-for="vaadin-dialog-overlay">
+  $_documentContainer$w.innerHTML = `<dom-module id="vaadin-dialog-resizable-overlay-styles" theme-for="vaadin-dialog-overlay">
   <template>
     <style>
       [part='overlay'] {
@@ -35703,7 +35817,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$u.content);
+  document.head.appendChild($_documentContainer$w.content);
 
   /**
    * @polymerMixin
@@ -35822,9 +35936,9 @@
   Copyright (c) 2017 Vaadin Ltd.
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
-  const $_documentContainer$v = document.createElement('template');
+  const $_documentContainer$x = document.createElement('template');
 
-  $_documentContainer$v.innerHTML = `<dom-module id="vaadin-dialog-overlay-styles" theme-for="vaadin-dialog-overlay">
+  $_documentContainer$x.innerHTML = `<dom-module id="vaadin-dialog-overlay-styles" theme-for="vaadin-dialog-overlay">
   <template>
     <style>
       /*
@@ -35838,8 +35952,8 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$v.content);
-  let memoizedTemplate;
+  document.head.appendChild($_documentContainer$x.content);
+  let memoizedTemplate$1;
 
   /**
    * The overlay element.
@@ -35858,17 +35972,17 @@
     }
 
     static get template() {
-      if (!memoizedTemplate) {
-        memoizedTemplate = super.template.cloneNode(true);
-        const contentPart = memoizedTemplate.content.querySelector('[part="content"]');
-        const overlayPart = memoizedTemplate.content.querySelector('[part="overlay"]');
+      if (!memoizedTemplate$1) {
+        memoizedTemplate$1 = super.template.cloneNode(true);
+        const contentPart = memoizedTemplate$1.content.querySelector('[part="content"]');
+        const overlayPart = memoizedTemplate$1.content.querySelector('[part="overlay"]');
         const resizerContainer = document.createElement('div');
         resizerContainer.id = 'resizerContainer';
         resizerContainer.classList.add('resizer-container');
         resizerContainer.appendChild(contentPart);
         overlayPart.appendChild(resizerContainer);
       }
-      return memoizedTemplate;
+      return memoizedTemplate$1;
     }
 
     static get properties() {
@@ -36200,7 +36314,7 @@
 
   customElements.define(DialogElement.is, DialogElement);
 
-  const $_documentContainer$w = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
+  const $_documentContainer$y = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
   <template>
     <style include="lumo-checkbox-style lumo-checkbox-effects">
       /* IE11 only */
@@ -36377,7 +36491,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$w.content);
+  document.head.appendChild($_documentContainer$y.content);
 
   /**
   @license
@@ -36688,7 +36802,7 @@
 
   customElements.define(CheckboxElement.is, CheckboxElement);
 
-  const $_documentContainer$x = html`<dom-module id="lumo-grid" theme-for="vaadin-grid">
+  const $_documentContainer$z = html`<dom-module id="lumo-grid" theme-for="vaadin-grid">
   <template>
     <style>
       :host {
@@ -37051,7 +37165,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$x.content);
+  document.head.appendChild($_documentContainer$z.content);
 
   /**
   @license
@@ -43940,13 +44054,11 @@
       constructor(){
           super();
           this.storage = new Storager('clientes');
-          this.service = new Services();          
-          this.loadingGrid();
-          this.difinedCustomElementsForms();
-          this.showDialog();
+          this.service = new Services();      
       }
       connectedCallback(){
           this.createTemplate(); 
+          this.loadingGrid();
           this.selectItemsEventListener(); 
           this.fiedEventListener();       
           this.salvarEventListener();
@@ -43957,19 +44069,13 @@
           const templete = html$1 `
         <vaadin-dialog aria-label="simple"></vaadin-dialog>
         <vaadin-form-layout>
-            <vaadin-custom-field label="Código">
-                <vaadin-text-field disabled="true" placeholder="Código" id="id"></vaadin-text-field>
-            </vaadin-custom-field>        
-            <vaadin-custom-field label="Nome" error-message="O nome do Cliente é obrigatório!">                
-                <vaadin-text-field required style="width: 40em;" placeholder="Nome" id="nome"></vaadin-text-field>      
-            </vaadin-custom-field>  
+            <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
+            <vaadin-text-field required style="width: 100%;" placeholder="Nome" id="nome" error-message="O nome do Cliente é obrigatório!" clear-button-visible></vaadin-text-field>
+            <vaadin-email-field label="Email" style="width: 100%;" id="email" error-message="Please enter a valid email address" clear-button-visible></vaadin-email-field>    
             <vaadin-custom-field label="Número Telefone">
-                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="3" placeholder="Area"></vaadin-text-field>
-                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="9" placeholder="Número"></vaadin-text-field>
-            </vaadin-custom-field>  
-            </vaadin-custom-field label="Email">  
-                <vaadin-email-field label="Email" name="email" error-message="Please enter a valid email address" clear-button-visible></vaadin-email-field>       
-            </vaadin-custom-field> 
+                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="3" placeholder="Area" id="area"></vaadin-text-field>
+                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="9" placeholder="Número" id="numero"></vaadin-text-field>
+            </vaadin-custom-field>       
             <vaadin-form-item>
                 <vaadin-button theme="primary" id="buttonSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" id="buttonDeletar">Excluir</vaadin-button>
@@ -43979,14 +44085,13 @@
         <vaadin-grid>
             <vaadin-grid-column path="id" header="Código"></vaadin-grid-column>
             <vaadin-grid-column path="nome" header="Nome"></vaadin-grid-column>
+            <vaadin-grid-column path="email" header="E-mail"></vaadin-grid-column>
+            <vaadin-grid-column path="phone" header="Telefone"></vaadin-grid-column>
         </vaadin-grid>`;
           render(templete, this);
-      }    
-      difinedCustomElementsForms(){
-          customElements.whenDefined('vaadin-form-layou').then(_ =>{});
-      }
+      } 
       salvarEventListener(){
-          let customField = this.querySelector('vaadin-custom-field');
+          let customField = this.querySelector('#nome');
           let buttonSalvar = this.querySelector('#buttonSalvar');
           buttonSalvar.addEventListener('click', _ =>{  
               console.log('salvar');        
@@ -43996,7 +44101,7 @@
           });
       }
       editarEventListener(){
-          let customField = this.querySelector('vaadin-custom-field');
+          let customField = this.querySelector('#nome');
           let buttonSalvar = this.querySelector('#buttonEditar');
           buttonSalvar.addEventListener('click', _ =>{          
               customField.validate(); 
@@ -44043,8 +44148,11 @@
           });           
       }
       salvar(){
-          const nome = this.querySelector('#nome');
-          const data = {nome: nome.value};        
+          let nome = this.querySelector('#nome');
+          let email = this.querySelector('#email');
+          let area = this.querySelector('#area');
+          let numero = this.querySelector('#numero');
+          let data = {nome: nome.value, email: email.value, phone: area.value +" "+numero.value};        
           if(nome.value != null && nome.value != ""){
               this.service.postServices("http://localhost:8080/clientes", data)
               .then(response =>{ 
@@ -44099,14 +44207,12 @@
 
           }       
       }
-      loadingGrid(){
-          customElements.whenDefined('vaadin-grid').then(_ =>{
-              const grid = this.querySelector('vaadin-grid');
-              grid.dataProvider =(params, callback) =>{
-                  this.service.getServices("http://localhost:8080/clientes").then(
-                      json => callback(json, json.length));
-              };   
-          });                   
+      loadingGrid(){        
+          const grid = this.querySelector('vaadin-grid');
+          grid.dataProvider =(params, callback) =>{
+              this.service.getServices("http://localhost:8080/clientes").then(
+                  json => callback(json, json.length));
+          };                
       }
       showDialog(message){
           customElements.whenDefined('vaadin-dialog').then(_ =>{
@@ -44114,12 +44220,14 @@
               dialog.renderer= function(root, dialog){
                   root.textContent=message;
               };
-              dialog.opened =true;  
+              dialog.opened =true;
           });          
       }
       cleanFields(){
           let idField = this.querySelector('#id');
           let nomeField = this.querySelector('#nome');
+          let emailField = this.querySelector('#nome');
+          let foneField = this.querySelector('#nome');
           idField.value = "";
           nomeField.value= "";
       }
