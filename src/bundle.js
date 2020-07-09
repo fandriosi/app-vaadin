@@ -43881,6 +43881,7 @@
       deleteServices(url = ``, data = {}) {
           // Default options are marked with *
           console.log('data', data);
+          console.log('data', data);
           return fetch(url, {
               method: "DELETE", // *GET, POST, PUT, DELETE, etc.
               mode: "cors", // no-cors, cors, *same-origin
@@ -43939,30 +43940,40 @@
       constructor(){
           super();
           this.storage = new Storager('clientes');
-          this.service = new Services();            
+          this.service = new Services();          
+          this.loadingGrid();
+          this.difinedCustomElementsForms();
+          this.showDialog();
       }
       connectedCallback(){
-          this.createTemplate();        
-          this.loadingGrid();
+          this.createTemplate(); 
           this.selectItemsEventListener(); 
           this.fiedEventListener();       
           this.salvarEventListener();
           this.editarEventListener();
-          this.deletarEventListern();
+          this.deletarEventListern();       
       }
       createTemplate(){
           const templete = html$1 `
         <vaadin-dialog aria-label="simple"></vaadin-dialog>
-        <vaadin-form-layout>   
-            <vaadin-custom-field label="Nome" error-message="O nome do Cliente é obrigatório!">
-                <vaadin-text-field disabled="true" placeholder="id" style="width: 4em;" id="id"></vaadin-text-field>
-                <vaadin-text-field required style="width: 25em;" placeholder="Nome" id="nome"></vaadin-text-field>
-            </vaadin-custom-field>                
+        <vaadin-form-layout>
+            <vaadin-custom-field label="Código">
+                <vaadin-text-field disabled="true" placeholder="Código" id="id"></vaadin-text-field>
+            </vaadin-custom-field>        
+            <vaadin-custom-field label="Nome" error-message="O nome do Cliente é obrigatório!">                
+                <vaadin-text-field required style="width: 40em;" placeholder="Nome" id="nome"></vaadin-text-field>      
+            </vaadin-custom-field>  
+            <vaadin-custom-field label="Número Telefone">
+                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="3" placeholder="Area"></vaadin-text-field>
+                <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="9" placeholder="Número"></vaadin-text-field>
+            </vaadin-custom-field>  
+            </vaadin-custom-field label="Email">  
+                <vaadin-email-field label="Email" name="email" error-message="Please enter a valid email address" clear-button-visible></vaadin-email-field>       
+            </vaadin-custom-field> 
             <vaadin-form-item>
-                <vaadin-button theme="primary" id="buttonSalvar" onclick=${salvar()}>Salvar</vaadin-button>
+                <vaadin-button theme="primary" id="buttonSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" id="buttonDeletar">Excluir</vaadin-button>
                 <vaadin-button theme="primary" id="buttonEditar">Editar</vaadin-button>
-                <vaadin-button theme="primary" id="buttonDeletar">Deletar</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
@@ -43971,12 +43982,17 @@
         </vaadin-grid>`;
           render(templete, this);
       }    
+      difinedCustomElementsForms(){
+          customElements.whenDefined('vaadin-form-layou').then(_ =>{});
+      }
       salvarEventListener(){
           let customField = this.querySelector('vaadin-custom-field');
           let buttonSalvar = this.querySelector('#buttonSalvar');
-          buttonSalvar.addEventListener('click', _ =>{          
+          buttonSalvar.addEventListener('click', _ =>{  
+              console.log('salvar');        
               customField.validate(); 
               this.salvar();
+              this.cleanFields();
           });
       }
       editarEventListener(){
@@ -43985,6 +44001,7 @@
           buttonSalvar.addEventListener('click', _ =>{          
               customField.validate(); 
               this.editar();
+              this.cleanFields();
           });
       }
       deletarEventListern(){
@@ -43993,7 +44010,8 @@
           buttonDeletar.addEventListener('click',_ =>{
               buttonDeletar.disabled= true;
               buttonSalvar.disabled= false;
-              this.deletar();     
+              this.deletar();  
+              this.cleanFields();   
           });        
       }
       fiedEventListener(){
@@ -44082,18 +44100,28 @@
           }       
       }
       loadingGrid(){
-          const grid = this.querySelector('vaadin-grid');
-          grid.dataProvider =(params, callback) =>{
-              this.service.getServices("http://localhost:8080/clientes").then(
-                  json => callback(json, json.length));
-          };              
+          customElements.whenDefined('vaadin-grid').then(_ =>{
+              const grid = this.querySelector('vaadin-grid');
+              grid.dataProvider =(params, callback) =>{
+                  this.service.getServices("http://localhost:8080/clientes").then(
+                      json => callback(json, json.length));
+              };   
+          });                   
       }
       showDialog(message){
-          const dialog = this.querySelector('vaadin-dialog');
-          dialog.renderer= function(root, dialog){
-              root.textContent=message;
-          };
-          dialog.opened =true;    
+          customElements.whenDefined('vaadin-dialog').then(_ =>{
+              const dialog = this.querySelector('vaadin-dialog');
+              dialog.renderer= function(root, dialog){
+                  root.textContent=message;
+              };
+              dialog.opened =true;  
+          });          
+      }
+      cleanFields(){
+          let idField = this.querySelector('#id');
+          let nomeField = this.querySelector('#nome');
+          idField.value = "";
+          nomeField.value= "";
       }
   }
   customElements.define('cliente-view',ClienteView);
