@@ -16,8 +16,14 @@ export default class ClienteView extends HTMLElement{
         this.service = new Service();      
     }
     connectedCallback(){
+<<<<<<< HEAD
         this.createTemplate(); 
+=======
+        this.createTemplate();
+>>>>>>> a310ccaa1d979fe92976adcf60ff1b499ab9aaab
         this.loadingGrid();
+        this.salvarEventListener();
+        this.deletarEventListern();        
         this.selectItemsEventListener(); 
         this.fiedEventListener();       
         this.salvarEventListener();
@@ -166,12 +172,24 @@ export default class ClienteView extends HTMLElement{
 
         }       
     }
+<<<<<<< HEAD
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
         grid.dataProvider =(params, callback) =>{
             this.service.getServices("http://localhost:8080/clientes").then(
                 json => callback(json, json.length));
         }                
+=======
+    loadingGrid(){
+        customElements.whenDefined('vaadin-grid').then(_ =>{
+            const grid = this.querySelector('vaadin-grid');
+            grid.dataProvider =(params, callback) =>{
+                this.service.getServices("http://localhost:8080/clientes").
+                then(response => response.json()).then(
+                    json => callback(json, json.length));
+            }
+        });               
+>>>>>>> a310ccaa1d979fe92976adcf60ff1b499ab9aaab
     }
     showDialog(message){
         customElements.whenDefined('vaadin-dialog').then(_ =>{
@@ -187,6 +205,12 @@ export default class ClienteView extends HTMLElement{
         let nomeField = this.querySelector('#nome');
         let emailField = this.querySelector('#nome');
         let foneField = this.querySelector('#nome');
+        idField.value = "";
+        nomeField.value= "";
+    }
+    cleanFields(){
+        let idField = this.querySelector('#id');
+        let nomeField = this.querySelector('#nome');
         idField.value = "";
         nomeField.value= "";
     }
