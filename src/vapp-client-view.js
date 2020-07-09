@@ -16,11 +16,7 @@ export default class ClienteView extends HTMLElement{
         this.service = new Service();      
     }
     connectedCallback(){
-<<<<<<< HEAD
         this.createTemplate(); 
-=======
-        this.createTemplate();
->>>>>>> a310ccaa1d979fe92976adcf60ff1b499ab9aaab
         this.loadingGrid();
         this.salvarEventListener();
         this.deletarEventListern();        
