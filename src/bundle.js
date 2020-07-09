@@ -43881,6 +43881,7 @@
       deleteServices(url = ``, data = {}) {
           // Default options are marked with *
           console.log('data', data);
+          console.log('data', data);
           return fetch(url, {
               method: "DELETE", // *GET, POST, PUT, DELETE, etc.
               mode: "cors", // no-cors, cors, *same-origin
@@ -43942,9 +43943,9 @@
       }
       connectedCallback(){
           this.createTemplate();
-          this.salvarEventListener();
-          this.deletarEventListern();
           this.loadingGrid();
+          this.salvarEventListener();
+          this.deletarEventListern();        
           this.selectItemsEventListener(); 
           this.fiedEventListener();       
           this.editarEventListener();
@@ -43975,6 +43976,7 @@
           buttonSalvar.addEventListener('click', _ =>{          
               customField.validate(); 
               this.salvar();
+              this.cleanFields();
           });
       }
       editarEventListener(){
@@ -43983,6 +43985,7 @@
           buttonSalvar.addEventListener('click', _ =>{          
               customField.validate(); 
               this.editar();
+              this.cleanFields();
           });
       }
       deletarEventListern(){
@@ -43991,7 +43994,8 @@
           buttonDeletar.addEventListener('click',_ =>{
               buttonDeletar.disabled= true;
               buttonSalvar.disabled= false;
-              this.deletar();     
+              this.deletar();  
+              this.cleanFields();   
           });        
       }
       fiedEventListener(){
@@ -44084,9 +44088,6 @@
 
           }       
       }
-      loadingFromStorage(){
-
-      }
       loadingGrid(){
           customElements.whenDefined('vaadin-grid').then(_ =>{
               const grid = this.querySelector('vaadin-grid');
@@ -44105,6 +44106,12 @@
               };
               dialog.opened =true;
           });       
+      }
+      cleanFields(){
+          let idField = this.querySelector('#id');
+          let nomeField = this.querySelector('#nome');
+          idField.value = "";
+          nomeField.value= "";
       }
   }
   customElements.define('cliente-view',ClienteView);

@@ -22,6 +22,7 @@ export default class Services{
     deleteServices(url = ``, data = {}) {
         // Default options are marked with *
         console.log('data', data);
+        console.log('data', data);
         return fetch(url, {
             method: "DELETE", // *GET, POST, PUT, DELETE, etc.
             mode: "cors", // no-cors, cors, *same-origin

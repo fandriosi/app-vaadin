@@ -16,9 +16,9 @@ export default class ClienteView extends HTMLElement{
     }
     connectedCallback(){
         this.createTemplate();
-        this.salvarEventListener();
-        this.deletarEventListern();
         this.loadingGrid();
+        this.salvarEventListener();
+        this.deletarEventListern();        
         this.selectItemsEventListener(); 
         this.fiedEventListener();       
         this.editarEventListener();
@@ -49,6 +49,7 @@ export default class ClienteView extends HTMLElement{
         buttonSalvar.addEventListener('click', _ =>{          
             customField.validate(); 
             this.salvar();
+            this.cleanFields();
         });
     }
     editarEventListener(){
@@ -57,6 +58,7 @@ export default class ClienteView extends HTMLElement{
         buttonSalvar.addEventListener('click', _ =>{          
             customField.validate(); 
             this.editar();
+            this.cleanFields();
         });
     }
     deletarEventListern(){
@@ -65,7 +67,8 @@ export default class ClienteView extends HTMLElement{
         buttonDeletar.addEventListener('click',_ =>{
             buttonDeletar.disabled= true;
             buttonSalvar.disabled= false;
-            this.deletar();     
+            this.deletar();  
+            this.cleanFields();   
         });        
     }
     fiedEventListener(){
@@ -158,9 +161,6 @@ export default class ClienteView extends HTMLElement{
 
         }       
     }
-    loadingFromStorage(){
-
-    }
     loadingGrid(){
         customElements.whenDefined('vaadin-grid').then(_ =>{
             const grid = this.querySelector('vaadin-grid');
@@ -179,6 +179,12 @@ export default class ClienteView extends HTMLElement{
             }
             dialog.opened =true;
         });       
+    }
+    cleanFields(){
+        let idField = this.querySelector('#id');
+        let nomeField = this.querySelector('#nome');
+        idField.value = "";
+        nomeField.value= "";
     }
 }
 customElements.define('cliente-view',ClienteView);
