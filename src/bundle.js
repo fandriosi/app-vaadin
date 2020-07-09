@@ -43878,10 +43878,43 @@
               body: JSON.stringify(data), // body data type must match "Content-Type" header            
           }); // parses response to JSO    
       }   
-      
+      deleteServices(url = ``, data = {}) {
+          // Default options are marked with *
+          console.log('data', data);
+          return fetch(url, {
+              method: "DELETE", // *GET, POST, PUT, DELETE, etc.
+              mode: "cors", // no-cors, cors, *same-origin
+              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+              credentials: "same-origin", // include, *same-origin, omit
+              headers: {
+                  "Content-Type": "application/json",
+                  // "Content-Type": "application/x-www-form-urlencoded",
+              },
+              redirect: "follow", // manual, *follow, error
+              referrer: "no-referrer", // no-referrer, *client
+              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+          }); // parses response to JSO    
+      }   
+      putServices(url = ``, data = {}) {
+          // Default options are marked with *
+          console.log('data', data);
+          return fetch(url, {
+              method: "PUT", // *GET, POST, PUT, DELETE, etc.
+              mode: "cors", // no-cors, cors, *same-origin
+              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+              credentials: "same-origin", // include, *same-origin, omit
+              headers: {
+                  "Content-Type": "application/json",
+                  // "Content-Type": "application/x-www-form-urlencoded",
+              },
+              redirect: "follow", // manual, *follow, error
+              referrer: "no-referrer", // no-referrer, *client
+              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+          }); // parses response to JSO    
+      }   
       async getServices(url= ``){
           const request = await fetch(url);
-          const payload = await request.json(); 
+          const payload = await request.json();
           return payload;
       }
   }
@@ -43909,23 +43942,28 @@
           this.service = new Services();            
       }
       connectedCallback(){
-          this.createTemplate();
-          this.salvarEventListener();
+          this.createTemplate();        
           this.loadingGrid();
+          this.selectItemsEventListener(); 
+          this.fiedEventListener();       
+          this.salvarEventListener();
+          this.editarEventListener();
+          this.deletarEventListern();
       }
       createTemplate(){
           const templete = html$1 `
         <vaadin-dialog aria-label="simple"></vaadin-dialog>
         <vaadin-form-layout>   
             <vaadin-custom-field label="Nome" error-message="O nome do Cliente é obrigatório!">
-                <vaadin-text-field required style"width: 25em;" placeholder="Nome" style="width: 30em;" id="nome"></vaadin-text-field>
+                <vaadin-text-field disabled="true" placeholder="id" style="width: 4em;" id="id"></vaadin-text-field>
+                <vaadin-text-field required style="width: 25em;" placeholder="Nome" id="nome"></vaadin-text-field>
             </vaadin-custom-field>                
             <vaadin-form-item>
-                <vaadin-button theme="primary" id="buttomSalvar">Salvar</vaadin-button>
-            </vaadin-form-item>
-            <vaadin-form-item>
+                <vaadin-button theme="primary" id="buttonSalvar" onclick=${salvar()}>Salvar</vaadin-button>
+                <vaadin-button theme="primary" id="buttonDeletar">Excluir</vaadin-button>
+                <vaadin-button theme="primary" id="buttonEditar">Editar</vaadin-button>
                 <vaadin-button theme="primary" id="buttonDeletar">Deletar</vaadin-button>
-             </vaadin-form-item>
+            </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
             <vaadin-grid-column path="id" header="Código"></vaadin-grid-column>
@@ -43934,24 +43972,65 @@
           render(templete, this);
       }    
       salvarEventListener(){
-          customElements.whenDefined('vaadin-form-layout').then(_ =>{
-              const customField = this.querySelector('vaadin-custom-field');
-              const button = this.querySelector('#buttonSalvar');
-              button.addEventListener('click', _ =>{
-                  customField.validate(); 
-                  this.salvar();
-              });
+          let customField = this.querySelector('vaadin-custom-field');
+          let buttonSalvar = this.querySelector('#buttonSalvar');
+          buttonSalvar.addEventListener('click', _ =>{          
+              customField.validate(); 
+              this.salvar();
           });
+      }
+      editarEventListener(){
+          let customField = this.querySelector('vaadin-custom-field');
+          let buttonSalvar = this.querySelector('#buttonEditar');
+          buttonSalvar.addEventListener('click', _ =>{          
+              customField.validate(); 
+              this.editar();
+          });
+      }
+      deletarEventListern(){
+          let buttonDeletar = this.querySelector('#buttonDeletar');
+          let buttonSalvar = this.querySelector('#buttonSalvar');
+          buttonDeletar.addEventListener('click',_ =>{
+              buttonDeletar.disabled= true;
+              buttonSalvar.disabled= false;
+              this.deletar();     
+          });        
+      }
+      fiedEventListener(){
+          let nomeTextfield = this.querySelector('#nome');
+          let buttonSalvar = this.querySelector('#buttonSalvar');
+          let buttonDeletar = this.querySelector('#buttonDeletar');
+          nomeTextfield.addEventListener('click',_ =>{                
+              if(buttonSalvar.disabled){
+                  console.log('field click');
+                  nomeTextfield.readonly=false;
+                  buttonSalvar.disabled=false;
+                  buttonDeletar.disabled=true;
+              }
+          }); 
+      }
+      selectItemsEventListener(){            
+          const grid = this.querySelector('vaadin-grid');
+          let nomeCliente = this.querySelector('#nome');
+          let buttonSalvar = this.querySelector('#buttonSalvar');
+          let buttonDeletar = this.querySelector('#buttonDeletar');
+          grid.addEventListener('active-item-changed', function(event){
+              const item = event.detail.value;
+              grid.selectedItems = item ? [item]:[];
+              idCliente.value=item.id;
+              nomeCliente.value=item.nome;
+              nomeCliente.readonly=true;
+              buttonSalvar.disabled=true;
+              buttonDeletar.disabled=false;       
+          });           
       }
       salvar(){
           const nome = this.querySelector('#nome');
           const data = {nome: nome.value};        
           if(nome.value != null && nome.value != ""){
-              console.log('salvar');
               this.service.postServices("http://localhost:8080/clientes", data)
               .then(response =>{ 
                   if(response.ok){
-                      console.log('response',response);
                       this.loadingGrid();
                       const textfield = this.querySelector('vaadin-text-field');
                       textfield.value = "";         
@@ -43961,39 +44040,60 @@
                   this.showDialog("Erro na conexão como Servidor!");
                   console.log(erro.message);
               });
-
-          }        
+          }       
       }
-      loadingStorage(){
-          this.service.getServices("http://localhost:8080/clientes")
-          .then(data =>{
-              this.storage.storager(JSON.stringify(data));
-          });
+      editar(){
+          let id = this.querySelector('#id');
+          let nome = this.querySelector('#nome');
+          const data = {id: id.value, nome: nome.value};        
+          if(nome.value != null && nome.value != ""){
+              this.service.putServices("http://localhost:8080/clientes", data)
+              .then(response =>{ 
+                  if(response.ok){
+                      this.loadingGrid();
+                      const textfield = this.querySelector('vaadin-text-field');
+                      textfield.value = "";         
+                      this.showDialog("Cliente alterado com sucesso!");
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              });
+          }       
+      }
+      deletar(){
+          let id = this.querySelector('#id');
+          let nome = this.querySelector('#nome');        
+          let data = {id: id.value, nome: nome.value};        
+          if(nome.value != null && nome.value != ""){
+              this.service.deleteServices("http://localhost:8080/clientes", data)
+              .then(response =>{ 
+                  if(response.ok){
+                      console.log('response',response);
+                      this.loadingGrid();
+                      textfield.value = "";         
+                      this.showDialog("Cliente delatado com sucesso!");
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              });
+
+          }       
       }
       loadingGrid(){
-          customElements.whenDefined('vaadin-grid').then(_ =>{
-              const grid = this.querySelector('vaadin-grid');
-            //  grid.dataProvider = (params, callback) =>{
-            //      fetch("")
-            //      .then(response => response.json()).then(
-           //           json => callback(json, json.length));
-           //
-          this.loadingStorage();
-          let data = JSON.parse(this.storage.load());
+          const grid = this.querySelector('vaadin-grid');
           grid.dataProvider =(params, callback) =>{
-                  callback(data, data.length);
-              };
-          });
+              this.service.getServices("http://localhost:8080/clientes").then(
+                  json => callback(json, json.length));
+          };              
       }
       showDialog(message){
-          customElements.whenDefined('vaadin-dialog').then(_ =>{
-              const dialog = this.querySelector('vaadin-dialog');
-              console.log(dialog);
-              dialog.renderer= function(root, dialog){
-                  root.textContent=message;
-              };
-              dialog.opened =true;
-          });       
+          const dialog = this.querySelector('vaadin-dialog');
+          dialog.renderer= function(root, dialog){
+              root.textContent=message;
+          };
+          dialog.opened =true;    
       }
   }
   customElements.define('cliente-view',ClienteView);
