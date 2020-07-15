@@ -35097,25 +35097,121 @@
 
   customElements.define(DatePickerElement.is, DatePickerElement);
 
+  class Services{
+      message(){
+          return "Hello Campinas";    
+      }
+      postServices(url = ``, data = {}) {
+          // Default options are marked with *
+          console.log('data', data);
+          return fetch(url, {
+              method: "POST", // *GET, POST, PUT, DELETE, etc.
+              mode: "cors", // no-cors, cors, *same-origin
+              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+              credentials: "same-origin", // include, *same-origin, omit
+              headers: {
+                  "Content-Type": "application/json",
+                  // "Content-Type": "application/x-www-form-urlencoded",
+              },
+              redirect: "follow", // manual, *follow, error
+              referrer: "no-referrer", // no-referrer, *client
+              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+          }); // parses response to JSO    
+      }   
+      deleteServices(url = ``, data = {}) {
+          // Default options are marked with *
+          console.log('data', data);
+          return fetch(url, {
+              method: "DELETE", // *GET, POST, PUT, DELETE, etc.
+              mode: "cors", // no-cors, cors, *same-origin
+              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+              credentials: "same-origin", // include, *same-origin, omit
+              headers: {
+                  "Content-Type": "application/json",
+                  // "Content-Type": "application/x-www-form-urlencoded",
+              },
+              redirect: "follow", // manual, *follow, error
+              referrer: "no-referrer", // no-referrer, *client
+              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+          }); // parses response to JSO    
+      }   
+      putServices(url = ``, data = {}) {
+          // Default options are marked with *
+          console.log('data', data);
+          return fetch(url, {
+              method: "PUT", // *GET, POST, PUT, DELETE, etc.
+              mode: "cors", // no-cors, cors, *same-origin
+              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+              credentials: "same-origin", // include, *same-origin, omit
+              headers: {
+                  "Content-Type": "application/json",
+                  // "Content-Type": "application/x-www-form-urlencoded",
+              },
+              redirect: "follow", // manual, *follow, error
+              referrer: "no-referrer", // no-referrer, *client
+              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+          }); // parses response to JSO    
+      }   
+      async getServices(url= ``){
+          const request = await fetch(url);
+          const payload = await request.json();
+          return payload;
+      }   
+     async getServicesJson(url = ``) {
+          // Default options are marked with *
+          const request = await fetch(url, {
+              method: "GET", // *GET, POST, PUT, DELETE, etc.
+              mode: "cors", // no-cors, cors, *same-origin
+              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+              credentials: "same-origin", // include, *same-origin, omit
+              headers: {
+                  "Content-Type": "application/json",
+                  // "Content-Type": "application/x-www-form-urlencoded",
+              },
+              redirect: "follow", // manual, *follow, error
+              referrer: "no-referrer", // no-referrer, *clienTE          
+          }); // parses response to JSO    
+          const payload = await request.json();
+          return payload;
+      }   
+  }
+
   class VappHome extends HTMLElement{
       constructor(){
-          super();       
-          
+          super();    
+          this.service = new Services();
+
       }
       connectedCallback(){
           this.callServer();
+          this.loadingGrid();
           this.attachDate();
           this.attachListner();
+          this.attachComboBox();
       }
       callServer(){
           const templete = html$1 `
         <vaadin-form-layout>
-            <vaadin-text-field label="First Name" value="Jane"></vaadin-text-field>
-            <vaadin-text-field label="Last Name" value="Doe"></vaadin-text-field>
-            <vaadin-text-field label="Email" value="jane.doe@example.com"></vaadin-text-field>
-            <vaadin-date-picker label="Birthday"></vaadin-date-picker>
-            <vaadin-text-area label="Bio" colspan="2" value="My name is Jane."></vaadin-text-area>
-            <vaadin-button theme="primary" id="vaadin-button">Salvar</vaadin-button>
+            <vaadin-text-field label="Quantidade" id="quantidade"></vaadin-text-field>
+            <vaadin-date-picker label="Data da Compra"></vaadin-date-picker>
+            <vaadin-date-picker label="Data Pagamento"></vaadin-date-picker>
+            <vaadin-combo-box label="Cliente" item-label-path="nome" item-value-path="id" id="clientes"></vaadin-combo-box>
+            <vaadin-combo-box label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
+            <vaadin-form-item>
+                <vaadin-button theme="primary" id="btnSalvar" @click=${_ => this.salvar()}>Salvar</vaadin-button>
+                <vaadin-button theme="primary" id="btnExcluir" @click=${_ => this.deletar()}>Excluir</vaadin-button>
+                <vaadin-button theme="primary" id="btnEditar" @click=${_ => this.editar()}>Editar</vaadin-button>
+                <vaadin-button theme="primary" id="btnCancelar" @click=${_ => this.cancelar()}>Cancelar</vaadin-button>
+            </vaadin-form-item>
+        </vaadin-form-layout>
+        <vaadin-grid>
+            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
+            <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
+            <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
+            <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
+            <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
+        </vaadin-grid>
         </vaadin-form-layout>`;
           render(templete, this);
       }
@@ -35159,6 +35255,25 @@
                   button.nextElementSibling.textContent = ++i;
               });
           });
+      }
+      attachComboBox(){
+          customElements.whenDefined('vaadin-combo-box').then(_ =>{
+              let clienteComboBox = this.querySelector('#clientes');
+              let produtoComboBox = this.querySelector('#produtos');
+              this.service.getServicesJson("http://localhost:8080/clientes").then(json =>{
+                  clienteComboBox.items = json;
+              });
+              this.service.getServicesJson("http://localhost:8080/produtos").then(json =>{
+                  produtoComboBox.items = json;
+              });
+          });
+      }
+      loadingGrid(){        
+          const grid = this.querySelector('vaadin-grid');
+          grid.dataProvider =(params, callback) =>{
+              this.service.getServices("http://localhost:8080/venda").then(
+                  json => console.log(json));
+          };                
       }
   }
   customElements.define('vapp-home',VappHome);
@@ -44191,85 +44306,6 @@
 
   customElements.define(GridElement.is, GridElement);
 
-  class Services{
-      message(){
-          return "Hello Campinas";    
-      }
-      postServices(url = ``, data = {}) {
-          // Default options are marked with *
-          console.log('data', data);
-          return fetch(url, {
-              method: "POST", // *GET, POST, PUT, DELETE, etc.
-              mode: "cors", // no-cors, cors, *same-origin
-              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
-              credentials: "same-origin", // include, *same-origin, omit
-              headers: {
-                  "Content-Type": "application/json",
-                  // "Content-Type": "application/x-www-form-urlencoded",
-              },
-              redirect: "follow", // manual, *follow, error
-              referrer: "no-referrer", // no-referrer, *client
-              body: JSON.stringify(data), // body data type must match "Content-Type" header            
-          }); // parses response to JSO    
-      }   
-      deleteServices(url = ``, data = {}) {
-          // Default options are marked with *
-          console.log('data', data);
-          return fetch(url, {
-              method: "DELETE", // *GET, POST, PUT, DELETE, etc.
-              mode: "cors", // no-cors, cors, *same-origin
-              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
-              credentials: "same-origin", // include, *same-origin, omit
-              headers: {
-                  "Content-Type": "application/json",
-                  // "Content-Type": "application/x-www-form-urlencoded",
-              },
-              redirect: "follow", // manual, *follow, error
-              referrer: "no-referrer", // no-referrer, *client
-              body: JSON.stringify(data), // body data type must match "Content-Type" header            
-          }); // parses response to JSO    
-      }   
-      putServices(url = ``, data = {}) {
-          // Default options are marked with *
-          console.log('data', data);
-          return fetch(url, {
-              method: "PUT", // *GET, POST, PUT, DELETE, etc.
-              mode: "cors", // no-cors, cors, *same-origin
-              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
-              credentials: "same-origin", // include, *same-origin, omit
-              headers: {
-                  "Content-Type": "application/json",
-                  // "Content-Type": "application/x-www-form-urlencoded",
-              },
-              redirect: "follow", // manual, *follow, error
-              referrer: "no-referrer", // no-referrer, *client
-              body: JSON.stringify(data), // body data type must match "Content-Type" header            
-          }); // parses response to JSO    
-      }   
-      async getServices(url= ``){
-          const request = await fetch(url);
-          const payload = await request.json();
-          return payload;
-      }   
-     async getServicesJson(url = ``) {
-          // Default options are marked with *
-          const request = await fetch(url, {
-              method: "GET", // *GET, POST, PUT, DELETE, etc.
-              mode: "cors", // no-cors, cors, *same-origin
-              cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
-              credentials: "same-origin", // include, *same-origin, omit
-              headers: {
-                  "Content-Type": "application/json",
-                  // "Content-Type": "application/x-www-form-urlencoded",
-              },
-              redirect: "follow", // manual, *follow, error
-              referrer: "no-referrer", // no-referrer, *clienTE          
-          }); // parses response to JSO    
-          const payload = await request.json();
-          return payload;
-      }   
-  }
-
   class Storager{
       constructor(name){
           this.slot = name;
@@ -44314,6 +44350,7 @@
                 <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Cancelar</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
@@ -44458,6 +44495,10 @@
                   this.showDialog("Erro na conexão como Servidor!");
                   console.log(erro.message);
               });   
+      }
+      cancelar(){
+          this.editionField(true);
+          this.disabledInsercao(true);
       }
       loadingGrid(){        
           const grid = this.querySelector('vaadin-grid');
@@ -49863,6 +49904,7 @@
                 <vaadin-button theme="primary" id="btnSalvar" @click=${_ => this.salvar()}>Salvar</vaadin-button>
                 <vaadin-button theme="primary" id="btnExcluir" @click=${_ => this.deletar()}>Excluir</vaadin-button>
                 <vaadin-button theme="primary" id="btnEditar" @click=${_ => this.editar()}>Editar</vaadin-button>
+                <vaadin-button theme="primary" id="btnCancelar" @click=${_ => this.cancelar()}>Cancelar</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
@@ -49994,6 +50036,10 @@
                   console.log(erro.message);
               });   
       }
+      cancelar(){
+          this.editionField(true);
+          this.disabledInsercao(true);
+      }
       loadingGrid(){        
           const grid = this.querySelector('vaadin-grid');
           grid.dataProvider =(params, callback) =>{
@@ -50080,6 +50126,7 @@
                 <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Cancelar</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
@@ -50192,6 +50239,10 @@
               };
               dialog.opened =true;
           });          
+      }
+      cancelar(){
+          this.editionField(true);
+          this.disabledInsercao(true);
       }
       editionField(option){
           let idField = this.querySelector('#id');

@@ -4,26 +4,44 @@ import '@vaadin/vaadin-text-field/vaadin-text-area';
 import '@vaadin/vaadin-text-field/vaadin-text-field';
 import '@vaadin/vaadin-button';
 import '@vaadin/vaadin-date-picker';
+import Service from '../util/services';
 
 export default class VappHome extends HTMLElement{
     constructor(){
-        super();       
-        
+        super();    
+        this.service = new Service();
+
     }
     connectedCallback(){
         this.callServer();
+        this.loadingGrid();
         this.attachDate();
         this.attachListner();
+        this.attachComboBox();
     }
     callServer(){
         const templete = html `
         <vaadin-form-layout>
-            <vaadin-text-field label="First Name" value="Jane"></vaadin-text-field>
-            <vaadin-text-field label="Last Name" value="Doe"></vaadin-text-field>
-            <vaadin-text-field label="Email" value="jane.doe@example.com"></vaadin-text-field>
-            <vaadin-date-picker label="Birthday"></vaadin-date-picker>
-            <vaadin-text-area label="Bio" colspan="2" value="My name is Jane."></vaadin-text-area>
-            <vaadin-button theme="primary" id="vaadin-button">Salvar</vaadin-button>
+            <vaadin-text-field label="Quantidade" id="quantidade"></vaadin-text-field>
+            <vaadin-date-picker label="Data da Compra"></vaadin-date-picker>
+            <vaadin-date-picker label="Data Pagamento"></vaadin-date-picker>
+            <vaadin-combo-box label="Cliente" item-label-path="nome" item-value-path="id" id="clientes"></vaadin-combo-box>
+            <vaadin-combo-box label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
+            <vaadin-form-item>
+                <vaadin-button theme="primary" id="btnSalvar" @click=${_ => this.salvar()}>Salvar</vaadin-button>
+                <vaadin-button theme="primary" id="btnExcluir" @click=${_ => this.deletar()}>Excluir</vaadin-button>
+                <vaadin-button theme="primary" id="btnEditar" @click=${_ => this.editar()}>Editar</vaadin-button>
+                <vaadin-button theme="primary" id="btnCancelar" @click=${_ => this.cancelar()}>Cancelar</vaadin-button>
+            </vaadin-form-item>
+        </vaadin-form-layout>
+        <vaadin-grid>
+            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
+            <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
+            <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
+            <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
+            <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
+        </vaadin-grid>
         </vaadin-form-layout>`
         render(templete, this);
     }
@@ -67,6 +85,25 @@ export default class VappHome extends HTMLElement{
                 button.nextElementSibling.textContent = ++i;
             });
         });
+    }
+    attachComboBox(){
+        customElements.whenDefined('vaadin-combo-box').then(_ =>{
+            let clienteComboBox = this.querySelector('#clientes');
+            let produtoComboBox = this.querySelector('#produtos')
+            this.service.getServicesJson("http://localhost:8080/clientes").then(json =>{
+                clienteComboBox.items = json;
+            });
+            this.service.getServicesJson("http://localhost:8080/produtos").then(json =>{
+                produtoComboBox.items = json;
+            });
+        });
+    }
+    loadingGrid(){        
+        const grid = this.querySelector('vaadin-grid');
+        grid.dataProvider =(params, callback) =>{
+            this.service.getServices("http://localhost:8080/venda").then(
+                json => console.log(json));
+        }                
     }
 }
 customElements.define('vapp-home',VappHome);

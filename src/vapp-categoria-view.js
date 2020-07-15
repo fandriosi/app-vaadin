@@ -29,6 +29,7 @@ export default class CategoriaView extends HTMLElement{
                 <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Cancelar</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
@@ -141,6 +142,10 @@ export default class CategoriaView extends HTMLElement{
             }
             dialog.opened =true
         });          
+    }
+    cancelar(){
+        this.editionField(true);
+        this.disabledInsercao(true);
     }
     editionField(option){
         let idField = this.querySelector('#id');
