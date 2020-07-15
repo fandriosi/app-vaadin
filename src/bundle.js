@@ -44068,8 +44068,8 @@
         <vaadin-dialog aria-label="simple"></vaadin-dialog>
         <vaadin-form-layout>
             <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
-            <vaadin-text-field required style="width: 100%;" placeholder="Nome" id="nome" error-message="O nome do Cliente é obrigatório!" clear-button-visible></vaadin-text-field>
-            <vaadin-email-field label="Email" style="width: 100%;" id="email" error-message="Please enter a valid email address" clear-button-visible></vaadin-email-field>    
+            <vaadin-text-field required style="width: 100%;" label="Nome" placeholder="Nome" id="nome" error-message="O nome do Cliente é obrigatório!" clear-button-visible></vaadin-text-field>
+            <vaadin-email-field label="Email" placeholder="E-mail" style="width: 100%;" id="email" error-message="Please enter a valid email address" clear-button-visible></vaadin-email-field>    
             <vaadin-custom-field label="Número Telefone">
                 <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="3" placeholder="Area" id="area"></vaadin-text-field>
                 <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="9" placeholder="Número" id="numero"></vaadin-text-field>
@@ -44090,8 +44090,7 @@
       } 
       fiedEventListener(){
           let nomeTextfield = this.querySelector('#nome');
-          let buttonSalvar = this.querySelector('#buttonSalvar');
-          let buttonDeletar = this.querySelector('#buttonDeletar');
+          let buttonSalvar = this.querySelector('#btnSalvar');
           nomeTextfield.addEventListener('click',_ =>{             
               console.log('fiel click');   
               if(buttonSalvar.disabled){
@@ -44179,7 +44178,7 @@
           let emailTextfiel= this.querySelector('#email');   
           console.log('click editar');     
           if(nomeTextfield.validate()){
-              if( emailTextfiel.value !="" && emailTextfiel.validate()){
+              if( emailTextfiel.value !=" " && emailTextfiel.validate()){
                   this.service.putServices("http://localhost:8080/clientes", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
