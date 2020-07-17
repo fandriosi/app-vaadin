@@ -114,7 +114,7 @@ export default class ProdutosView extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     this.loadingGrid();
-                    this.showDialog("Cliente salvo com sucesso!");
+                    this.showDialog("Produto salvo com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
                  }              
@@ -125,38 +125,21 @@ export default class ProdutosView extends HTMLElement{
         }     
     }
     editar(){
-        let nomeTextfield = this.querySelector('#nome');
-        let emailTextfiel= this.querySelector('#email');   
-        console.log('click editar');     
-        if(nomeTextfield.validate()){
-            if( emailTextfiel.value !="" && emailTextfiel.validate()){
-                this.service.putServices("http://localhost:8080/produtos", this.getJson())
-                .then(response =>{ 
-                    if(response.ok){
-                        this.loadingGrid();
-                        this.showDialog("Produto alterado com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
-                    }              
-                }).catch(erro =>{
-                    this.showDialog("Erro na conexão como Servidor!");
-                    console.log(erro.message);
-                });
-            }else{
-                this.service.putServices("http://localhost:8080/produtos", this.getJson())
-                .then(response =>{ 
-                    if(response.ok){
-                        this.loadingGrid();
-                        this.showDialog("Produtos alterado com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
-                    }              
-                }).catch(erro =>{
-                    this.showDialog("Erro na conexão como Servidor!");
-                    console.log(erro.message);
-                });
-            }            
-        }        
+        let descricaoTextfield = this.querySelector('#descricao'); 
+        if(descricaoTextfield.validate()){
+            this.service.putServices("http://localhost:8080/produtos", this.getJson())
+            .then(response =>{ 
+                if(response.ok){
+                    this.loadingGrid();
+                    this.showDialog("Produto alterado com sucesso!");
+                    this.editionField(true);
+                    this.disabledInsercao(true);
+                }              
+            }).catch(erro =>{
+                this.showDialog("Erro na conexão como Servidor!");
+                console.log(erro.message);
+            });
+        }       
     }
     deletar(){
         this.service.deleteServices("http://localhost:8080/produtos", this.getJson())

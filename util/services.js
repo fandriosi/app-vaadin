@@ -4,7 +4,6 @@ export default class Services{
     }
     postServices(url = ``, data = {}) {
         // Default options are marked with *
-        console.log('data', data);
         return fetch(url, {
             method: "POST", // *GET, POST, PUT, DELETE, etc.
             mode: "cors", // no-cors, cors, *same-origin
@@ -21,7 +20,6 @@ export default class Services{
     }   
     deleteServices(url = ``, data = {}) {
         // Default options are marked with *
-        console.log('data', data);
         return fetch(url, {
             method: "DELETE", // *GET, POST, PUT, DELETE, etc.
             mode: "cors", // no-cors, cors, *same-origin
@@ -38,7 +36,6 @@ export default class Services{
     }   
     putServices(url = ``, data = {}) {
         // Default options are marked with *
-        console.log('data', data);
         return fetch(url, {
             method: "PUT", // *GET, POST, PUT, DELETE, etc.
             mode: "cors", // no-cors, cors, *same-origin
