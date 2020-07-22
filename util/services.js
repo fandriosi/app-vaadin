@@ -2,7 +2,7 @@ export default class Services{
     message(){
         return "Hello Campinas";    
     }
-    postServices(url = ``, data = {}) {
+    postServices(url = ``, data ) {
         // Default options are marked with *
         return fetch(url, {
             method: "POST", // *GET, POST, PUT, DELETE, etc.
@@ -15,7 +15,7 @@ export default class Services{
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *client
-            body: JSON.stringify(data), // body data type must match "Content-Type" header            
+            body: data, // body data type must match "Content-Type" header            
         }); // parses response to JSO    
     }   
     deleteServices(url = ``, data = {}) {
