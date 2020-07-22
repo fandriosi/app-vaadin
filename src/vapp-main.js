@@ -6,20 +6,22 @@ import '@vaadin/vaadin-app-layout/vaadin-drawer-toggle';
 import '@vaadin/vaadin-tabs/vaadin-tabs';
 import '@vaadin/vaadin-tabs/vaadin-tab';
 import '@vaadin/vaadin-icons/vaadin-icons';
-import './vapp-home';
+import './vapp-vendas-view';
 import './vapp-client-view';
 import './vapp-produtos-veiw';
 import './vapp-categoria-view';
+import './vapp-estoque-view';
 
 export default class VappMain extends PolymerElement{    
     ready(){      
       super.ready();
       const router = new Router(this.shadowRoot.getElementById('outlet'));
       router.setRoutes([
-        {path: '/', component: 'vapp-home'},
+        {path: '/', component: 'vapp-vendas-view'},
         {path: '/Clinte', component: 'vapp-cliente-view'},
         {path: '/Produtos', component: 'vapp-produtos-view'},
         {path: '/Categoria', component: 'vapp-categoria-view'},
+        {path: '/Estoque', component: 'vapp-estoque-view'},
       ]);
     }
     static get template(){
@@ -33,8 +35,8 @@ export default class VappMain extends PolymerElement{
           <vaadin-tabs orientation="vertical" slot="drawer">
             <vaadin-tab>
               <a href="/">
-                <iron-icon icon="vaadin:home"></iron-icon>
-                 Page 1
+                <iron-icon icon="vaadin:cart"></iron-icon>
+                 Vendas
               </a>
             </vaadin-tab>
             <vaadin-tab>
@@ -51,8 +53,14 @@ export default class VappMain extends PolymerElement{
             </vaadin-tab>
             <vaadin-tab>
               <a href="Categoria">
-                <iron-icon icon="vaadin:cubes"></iron-icon>
+                <iron-icon icon="vaadin:cube"></iron-icon>
                 Categorias
+              </a>
+            </vaadin-tab>
+            <vaadin-tab>
+              <a href="Estoque">
+                <iron-icon icon="vaadin:cubes"></iron-icon>
+                Estoque
               </a>
             </vaadin-tab>
           </vaadin-tabs>

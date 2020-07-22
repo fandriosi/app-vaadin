@@ -35101,9 +35101,8 @@
       message(){
           return "Hello Campinas";    
       }
-      postServices(url = ``, data = {}) {
+      postServices(url = ``, data ) {
           // Default options are marked with *
-          console.log('data', data);
           return fetch(url, {
               method: "POST", // *GET, POST, PUT, DELETE, etc.
               mode: "cors", // no-cors, cors, *same-origin
@@ -35115,12 +35114,11 @@
               },
               redirect: "follow", // manual, *follow, error
               referrer: "no-referrer", // no-referrer, *client
-              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+              body: data, // body data type must match "Content-Type" header            
           }); // parses response to JSO    
       }   
       deleteServices(url = ``, data = {}) {
           // Default options are marked with *
-          console.log('data', data);
           return fetch(url, {
               method: "DELETE", // *GET, POST, PUT, DELETE, etc.
               mode: "cors", // no-cors, cors, *same-origin
@@ -35137,7 +35135,6 @@
       }   
       putServices(url = ``, data = {}) {
           // Default options are marked with *
-          console.log('data', data);
           return fetch(url, {
               method: "PUT", // *GET, POST, PUT, DELETE, etc.
               mode: "cors", // no-cors, cors, *same-origin
@@ -35176,49 +35173,10 @@
       }   
   }
 
-  class VappHome extends HTMLElement{
-      constructor(){
-          super();    
-          this.service = new Services();
-
-      }
-      connectedCallback(){
-          this.callServer();
-          this.loadingGrid();
-          this.attachDate();
-          this.attachListner();
-          this.attachComboBox();
-      }
-      callServer(){
-          const templete = html$1 `
-        <vaadin-form-layout>
-            <vaadin-text-field label="Quantidade" id="quantidade"></vaadin-text-field>
-            <vaadin-date-picker label="Data da Compra"></vaadin-date-picker>
-            <vaadin-date-picker label="Data Pagamento"></vaadin-date-picker>
-            <vaadin-combo-box label="Cliente" item-label-path="nome" item-value-path="id" id="clientes"></vaadin-combo-box>
-            <vaadin-combo-box label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
-            <vaadin-form-item>
-                <vaadin-button theme="primary" id="btnSalvar" @click=${_ => this.salvar()}>Salvar</vaadin-button>
-                <vaadin-button theme="primary" id="btnExcluir" @click=${_ => this.deletar()}>Excluir</vaadin-button>
-                <vaadin-button theme="primary" id="btnEditar" @click=${_ => this.editar()}>Editar</vaadin-button>
-                <vaadin-button theme="primary" id="btnCancelar" @click=${_ => this.cancelar()}>Cancelar</vaadin-button>
-            </vaadin-form-item>
-        </vaadin-form-layout>
-        <vaadin-grid>
-            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
-            <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
-            <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
-            <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
-            <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
-            <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
-        </vaadin-grid>
-        </vaadin-form-layout>`;
-          render(templete, this);
-      }
-      attachDate(){
+  class DataFormat{
+      static get data(){
           Sugar.Date.setLocale('pt');
-          var datepicker = this.querySelector('vaadin-date-picker');
-          datepicker.i18n = {
+          return {
               week: 'semana',
               calendar: 'calendario',
               clear: 'limpar',
@@ -35246,37 +35204,86 @@
               }
           };
       }
-      attachListner(){
-          customElements.whenDefined('vaadin-button').then(_ =>{
-              let i = 0;
-              let button = this.querySelector('vaadin-button');
-              button.addEventListener('click', function() {
-                  console.log('click');
-                  button.nextElementSibling.textContent = ++i;
-              });
-          });
+  }
+
+  class VappVendas extends HTMLElement{
+      constructor(){
+          super();    
+          this.service = new Services();
+
+      }
+      connectedCallback(){
+          this.callServer();
+          this.loadingGrid();
+          this.attachDate();
+          this.attachComboBox();
+      }
+      callServer(){
+          const templete = html$1 `
+        <vaadin-form-layout>
+            <vaadin-text-field label="Quantidade" id="quantidade"></vaadin-text-field>
+            <vaadin-date-picker label="Data da Compra" id="dataCompra"></vaadin-date-picker>
+            <vaadin-date-picker label="Data Pagamento" id="dataPagamento"></vaadin-date-picker>
+            <vaadin-combo-box label="Cliente" item-label-path="nome" item-value-path="id" id="clientes"></vaadin-combo-box>
+            <vaadin-combo-box label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
+            <vaadin-form-item>
+                <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Cancelar</vaadin-button>
+            </vaadin-form-item>
+        </vaadin-form-layout>
+        <vaadin-grid>
+            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
+            <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
+            <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
+            <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
+            <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
+        </vaadin-grid>
+        </vaadin-form-layout>`;
+          render(templete, this);
+      }
+      salvar(){
+          var data = this.querySelector('#dataCompra');
+          console.log('data', data.value);
+      }
+      deletar(){
+
+      }
+      editar(){
+
+      }
+      cancelar(){
+
+      }
+      attachDate(){
+          this.querySelector('#dataCompra').i18n=DataFormat.data;
+          this.querySelector('#dataPagamento').i18n=DataFormat.data;
       }
       attachComboBox(){
           customElements.whenDefined('vaadin-combo-box').then(_ =>{
-              let clienteComboBox = this.querySelector('#clientes');
-              let produtoComboBox = this.querySelector('#produtos');
-              this.service.getServicesJson("http://localhost:8080/clientes").then(json =>{
-                  clienteComboBox.items = json;
-              });
-              this.service.getServicesJson("http://localhost:8080/produtos").then(json =>{
-                  produtoComboBox.items = json;
-              });
+              this.querySelector('#clientes').dataProvider = (params, callback) =>{
+                  this.service.getServicesJson("http://localhost:8080/resources/clientes").then(
+                      json => callback(json, json.length)
+                  );
+              };
+              this.querySelector('#produtos').dataProvider = (params, callback) =>{
+                  this.service.getServicesJson("http://localhost:8080/resources/produtos").then(
+                      json => callback(json, json.length)
+                  );
+              };
           });
       }
       loadingGrid(){        
           const grid = this.querySelector('vaadin-grid');
           grid.dataProvider =(params, callback) =>{
-              this.service.getServices("http://localhost:8080/venda").then(
-                  json => console.log(json));
+              this.service.getServices("http://localhost:8080/resources/vendas").then(
+                  json => callback(json, json.length));
           };                
       }
   }
-  customElements.define('vapp-home',VappHome);
+  customElements.define('vapp-vendas-view',VappVendas);
 
   const $_documentContainer$s = html`<dom-module id="lumo-custom-field" theme-for="vaadin-custom-field">
   <template>
@@ -44322,11 +44329,30 @@
       }
   }
 
+  class Cliente{
+      constructor(id, nome, email, area, phone){
+          this.id = id;
+          this.nome= nome;
+          this.email = email;
+          this.area= area;
+          this.phone = phone;
+      }
+      
+      get json(){
+          return JSON.stringify({
+              id: this.id,
+              nome: this.nome,
+              email: this.email,
+              phone: this.area + " " + this.phone
+          });
+      }
+  }
+
   class ClienteView extends HTMLElement{
       constructor(){
           super();
           this.storage = new Storager('clientes');
-          this.service = new Services();      
+          this.service = new Services();  
       }
       connectedCallback(){
           this.createTemplate(); 
@@ -44402,8 +44428,6 @@
           let buttonExcluir = this.querySelector('#btnExcluir');
           let buttonEditar = this.querySelector('#btnEditar');
           let idTextfield = this.querySelector('#id');
-          console.log('id', idTextfield.value);
-          console.log('optin', option);
           if(option && idTextfield.value == 0){
               buttonExcluir.disabled=true;
               buttonSalvar.disabled=false;
@@ -44419,7 +44443,7 @@
           let emailTextfiel= this.querySelector('#email');        
           if(nomeTextfield.validate()){
               if( emailTextfiel.value !="" && emailTextfiel.validate()){
-                  this.service.postServices("http://localhost:8080/clientes", this.getJson())
+                  this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
                           this.loadingGrid();
@@ -44432,7 +44456,7 @@
                       console.log(erro.message);
                   });
               }else {
-                  this.service.postServices("http://localhost:8080/clientes", this.getJson())
+                  this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
                           this.loadingGrid();
@@ -44450,10 +44474,14 @@
       editar(){
           let nomeTextfield = this.querySelector('#nome');
           let emailTextfiel= this.querySelector('#email');   
-          console.log('click editar');     
           if(nomeTextfield.validate()){
+<<<<<<< HEAD
               if( emailTextfiel.value !=" " && emailTextfiel.validate()){
                   this.service.putServices("http://localhost:8080/clientes", this.getJson())
+=======
+              if( emailTextfiel.value !="" && emailTextfiel.validate()){
+                  this.service.putServices("http://localhost:8080/resources/cliente", this.getJson())
+>>>>>>> 538683cc530de1f3b6564ba0b76279f0adf8d8ca
                   .then(response =>{ 
                       if(response.ok){
                           this.loadingGrid();
@@ -44482,7 +44510,7 @@
           }        
       }
       deletar(){
-          this.service.deleteServices("http://localhost:8080/clientes", this.getJson())
+          this.service.deleteServices("http://localhost:8080/resources/cliente", this.getJson())
               .then(response =>{ 
                   if(response.ok){
                       console.log('response',response);
@@ -44503,7 +44531,7 @@
       loadingGrid(){        
           const grid = this.querySelector('vaadin-grid');
           grid.dataProvider =(params, callback) =>{
-              this.service.getServices("http://localhost:8080/clientes").then(
+              this.service.getServices("http://localhost:8080/resources/clientes").then(
                   json => callback(json, json.length));
           };                
       }
@@ -44537,13 +44565,9 @@
           
       }
       getJson(){
-          let id = this.querySelector('#id');
-          let nome = this.querySelector('#nome');
-          let email = this.querySelector('#email');
-          let area = this.querySelector('#area');
-          let numero = this.querySelector('#numero');
-          let data = {id: id.value, nome: nome.value, email: email.value, phone: area.value +" "+numero.value}; 
-          return data;
+          const clinte = new Cliente(this.querySelector('#id').value,this.querySelector('#nome').value, 
+          this.querySelector('#email').value, this.querySelector('#area').value, this.querySelector('#numero').value);
+          return clinte.json;
       }
   }
   customElements.define('vapp-cliente-view',ClienteView);
@@ -49873,6 +49897,29 @@
 
   customElements.define(ComboBoxElement.is, ComboBoxElement);
 
+  class Produto{
+      constructor(id, descricao, codigoBarra, precoCusto, preco, catId){
+          this.id = id;
+          this.descricao = descricao;
+          this.codigoBarra= codigoBarra;
+          this.precoCusto =precoCusto;
+          this.preco= preco;        
+          this.catId = catId;
+      }
+      get json(){
+          return JSON.stringify({
+              id: this.id,
+              descricao: this.descricao,
+              codigoBarra: this.codigoBarra,
+              precoCusto: this.precoCusto,
+              preco: this.preco,
+              categoria: {
+                  id: this.catId
+              }
+          });
+      }
+  }
+
   class ProdutosView extends HTMLElement{
       constructor(){
           super();
@@ -49908,7 +49955,7 @@
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
-            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column width="7%" flex-grow="0" path="id" header="Código" width="4%"></vaadin-grid-column>
             <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
             <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
             <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
@@ -49938,7 +49985,6 @@
           grid.addEventListener('active-item-changed', function(event){
               const item = event.detail.value;
               grid.selectedItems = item ? [item]:[];
-              console.log(item);
               idTextfield.value=item.id;
               descricaoTextfield.value=item.descricao; 
               referenciaTextfiel.value=item.codigoBarra;
@@ -49973,11 +50019,11 @@
       salvar(){       
           let descricaoTextfield = this.querySelector('#descricao');    
           if(descricaoTextfield.validate()){
-              this.service.postServices("http://localhost:8080/produtos", this.getJson())
+              this.service.postServices("http://localhost:8080/resources/produto", this.getJson())
               .then(response =>{ 
                   if(response.ok){
                       this.loadingGrid();
-                      this.showDialog("Cliente salvo com sucesso!");
+                      this.showDialog("Produto salvo com sucesso!");
                       this.editionField(true);
                       this.disabledInsercao(true);
                    }              
@@ -49988,46 +50034,29 @@
           }     
       }
       editar(){
-          let nomeTextfield = this.querySelector('#nome');
-          let emailTextfiel= this.querySelector('#email');   
-          console.log('click editar');     
-          if(nomeTextfield.validate()){
-              if( emailTextfiel.value !="" && emailTextfiel.validate()){
-                  this.service.putServices("http://localhost:8080/produtos", this.getJson())
-                  .then(response =>{ 
-                      if(response.ok){
-                          this.loadingGrid();
-                          this.showDialog("Produto alterado com sucesso!");
-                          this.editionField(true);
-                          this.disabledInsercao(true);
-                      }              
-                  }).catch(erro =>{
-                      this.showDialog("Erro na conexão como Servidor!");
-                      console.log(erro.message);
-                  });
-              }else {
-                  this.service.putServices("http://localhost:8080/produtos", this.getJson())
-                  .then(response =>{ 
-                      if(response.ok){
-                          this.loadingGrid();
-                          this.showDialog("Produtos alterado com sucesso!");
-                          this.editionField(true);
-                          this.disabledInsercao(true);
-                      }              
-                  }).catch(erro =>{
-                      this.showDialog("Erro na conexão como Servidor!");
-                      console.log(erro.message);
-                  });
-              }            
-          }        
+          let descricaoTextfield = this.querySelector('#descricao'); 
+          if(descricaoTextfield.validate()){
+              this.service.putServices("http://localhost:8080/resources/produto", this.getJson())
+              .then(response =>{ 
+                  if(response.ok){
+                      this.loadingGrid();
+                      this.showDialog("Produto alterado com sucesso!");
+                      this.editionField(true);
+                      this.disabledInsercao(true);
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              });
+          }       
       }
       deletar(){
-          this.service.deleteServices("http://localhost:8080/produtos", this.getJson())
+          this.service.deleteServices("http://localhost:8080/resources/produto", this.getJson())
               .then(response =>{ 
                   if(response.ok){
                       console.log('response',response);
                       this.loadingGrid();       
-                      this.showDialog("Produtos delatado com sucesso!");
+                      this.showDialog("produto delatado com sucesso!");
                       this.editionField(true);
                           this.disabledInsercao(true);
                   }              
@@ -50043,7 +50072,7 @@
       loadingGrid(){        
           const grid = this.querySelector('vaadin-grid');
           grid.dataProvider =(params, callback) =>{
-              this.service.getServices("http://localhost:8080/produtos").then(
+              this.service.getServices("http://localhost:8080/resources/produtos").then(
                   json => callback(json, json.length));
           };                
       }
@@ -50077,31 +50106,37 @@
           
       }
       getJson(){
-          let id = this.querySelector('#id');
-          let descricao = this.querySelector('#descricao');
-          let codigoBarra = this.querySelector('#referencia');
-          let precoCusto= this.querySelector('#custo');
-          let preco = this.querySelector('#venda');
-          let categoria =this.querySelector('vaadin-combo-box');
-          let data = {categoria:{
-                  id: categoria.value},
-              id: id.value, 
-              descricao: descricao.value, 
-              codigoBarra: codigoBarra.value,
-              precoCusto: precoCusto.value,
-              preco: preco.value            
-              }; 
-          return data;
+          const produto = new Produto(this.querySelector('#id').value, this.querySelector('#descricao').value,
+              this.querySelector('#referencia').value, this.querySelector('#custo').value, this.querySelector('#venda').value,
+              this.querySelector('vaadin-combo-box').value);        
+          return produto.json;
       }
       attachComboBox(){
-          customElements.whenDefined('vaadin-combo-box').then(_ =>{
-              this.service.getServicesJson("http://localhost:8080/categoria").then(json =>{
-                  this.querySelector('vaadin-combo-box').items = json;
-              });
-          });
+          //customElements.whenDefined('vaadin-combo-box').then(_ =>{
+          //    this.service.getServicesJson("").then(json =>{
+          //         this.querySelector('vaadin-combo-box').items = json;
+          //    });
+         // });
+          this.querySelector('vaadin-combo-box').dataProvider = (params, callback)=>{
+              this.service.getServicesJson("http://localhost:8080/resources/categorias").then(
+                  json => callback(json, json.length));
+          };
       }
   }
   customElements.define('vapp-produtos-view', ProdutosView);
+
+  class Categoria{
+      constructor(id, descricao){
+          this.id = id;
+          this.descricao= descricao;
+      }
+      get json(){
+          return JSON.stringify({
+              id: this.id,
+              descricao: this.descricao
+          });
+      }
+  }
 
   class CategoriaView extends HTMLElement{
      
@@ -50179,7 +50214,7 @@
       salvar(){       
           let descricaoTextfield = this.querySelector('#descricao');      
           if(descricaoTextfield.validate()){
-              this.service.postServices("http://localhost:8080/categoria", this.getJson())
+              this.service.postServices("http://localhost:8080/resources/categoria", this.getJson())
               .then(response =>{ 
                   if(response.ok){
                       this.loadingGrid();
@@ -50196,7 +50231,7 @@
       editar(){
           let descricaoTextfield = this.querySelector('#descricao');
           if(descricaoTextfield.validate()){
-              this.service.putServices("http://localhost:8080/categoria", this.getJson())
+              this.service.putServices("http://localhost:8080/resources/categoria", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
                           this.loadingGrid();
@@ -50211,7 +50246,7 @@
           }        
       }
       deletar(){
-          this.service.deleteServices("http://localhost:8080/categoria", this.getJson())
+          this.service.deleteServices("http://localhost:8080/resources/categoria", this.getJson())
               .then(response =>{ 
                   if(response.ok){
                       this.loadingGrid();       
@@ -50227,7 +50262,7 @@
       loadingGrid(){        
           const grid = this.querySelector('vaadin-grid');
           grid.dataProvider =(params, callback) =>{
-              this.service.getServices("http://localhost:8080/categoria").then(
+              this.service.getServices("http://localhost:8080/resources/categorias").then(
                   json => callback(json, json.length));
           };                
       }
@@ -50256,22 +50291,302 @@
           
       }
       getJson(){
-          let id = this.querySelector('#id');
-          let descricao = this.querySelector('#descricao');        let data = {id: id.value, descricao: descricao.value}; 
-          return data;
+          const categoria = new Categoria(this.querySelector('#id').value, this.querySelector('#descricao').value);
+          console.log(categoria.json);
+          return categoria.json;
       }
   }
   customElements.define('vapp-categoria-view', CategoriaView);
+
+  /**
+  @license
+  Copyright (c) 2019 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const $_documentContainer$I = document.createElement('template');
+
+  $_documentContainer$I.innerHTML = `<dom-module id="vaadin-integer-field-template">
+
+  
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$I.content);
+
+  /**
+  * `<vaadin-integer-field>` is a Web Component for integer field control in forms.
+  *
+  * ```html
+  * <vaadin-integer-field label="Number">
+  * </vaadin-integer-field>
+  * ```
+  *
+  * @extends PolymerElement
+  * @demo demo/index.html
+  */
+  class IntegerFieldElement extends NumberFieldElement {
+    static get is() {
+      return 'vaadin-integer-field';
+    }
+
+    static get version() {
+      return '2.6.2';
+    }
+
+    static get properties() {
+      // Hide inherited props that don't work with <input type="number"> from JSDoc.
+      return {
+        /**
+         * @private
+         */
+        pattern: String,
+        /**
+         * @private
+         */
+        preventInvalidInput: Boolean,
+        /**
+         * @private
+         */
+        minlength: Number,
+        /**
+         * @private
+         */
+        maxlength: Number
+      };
+    }
+
+    ready() {
+      super.ready();
+      this._enabledCharPattern = '[-+\\d]';
+    }
+
+    _valueChanged(newVal, oldVal) {
+      if (newVal !== '' && !this.__isInteger(newVal)) {
+        console.warn(`Trying to set non-integer value "${newVal}" to <vaadin-integer-field>.`
+          + ` Clearing the value.`);
+        this.value = '';
+        return;
+      }
+      super._valueChanged(newVal, oldVal);
+    }
+
+    _stepChanged(newVal, oldVal) {
+      if (!this.__hasOnlyDigits(newVal)) {
+        console.warn(`Trying to set invalid step size "${newVal}",`
+          + ` which is not a positive integer, to <vaadin-integer-field>.`
+          + ` Resetting the default value 1.`);
+        this.step = 1;
+        return;
+      }
+      super._stepChanged(newVal, oldVal);
+    }
+
+    __isInteger(value) {
+      return /^(-\d)?\d*$/.test(String(value));
+    }
+
+    __hasOnlyDigits(value) {
+      return /^\d*$/.test(String(value));
+    }
+  }
+
+  window.customElements.define(IntegerFieldElement.is, IntegerFieldElement);
+
+  class Estoque{
+      constructor(id, quantidade, idProduto){
+          this.id = id;
+          this.quantidade = quantidade;
+          this.idProduto = idProduto;
+      }
+      get json(){
+          return JSON.stringify({
+              id: this.id,
+              quantidade: this.quantidade,
+              produto:{
+                  id: this.idProduto
+              }
+          });
+      }
+  }
+
+  class VappEstoque extends HTMLElement{
+      constructor(){
+          super();    
+          this.service = new Services();
+      }
+      connectedCallback(){
+          this.callServer();
+          this.loadingGrid();
+          this.attachComboBox();
+          this.selectItemsEventListener();
+          this.disabledInsercao(true);
+      }
+      callServer(){
+          const templete = html$1 `
+        <vaadin-dialog aria-label="simple"></vaadin-dialog>
+        <vaadin-form-layout>
+            <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
+            <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
+            <vaadin-combo-box required label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
+            <vaadin-form-item>
+                <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Cancelar</vaadin-button>
+            </vaadin-form-item>
+        </vaadin-form-layout>
+        <vaadin-grid>
+            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column path="quantidade" header="Quantidade" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column path= "produto.descricao" header="Produto" width="70%"></vaadin-grid-column>
+        </vaadin-grid>
+        </vaadin-form-layout>`;
+          render(templete, this);
+      }
+      disabledInsercao(option){
+          let buttonSalvar = this.querySelector('#btnSalvar');
+          let buttonExcluir = this.querySelector('#btnExcluir');
+          let buttonEditar = this.querySelector('#btnEditar');
+          let idTextfield = this.querySelector('#id');
+          let produtosComobobox = this.querySelector('#produtos');
+          if(option && idTextfield.value == 0){
+              buttonExcluir.disabled=true;
+              buttonSalvar.disabled=false;
+              buttonEditar.disabled=true;
+              produtosComobobox.disabled = false;
+          }else {
+              buttonExcluir.disabled=false;
+              buttonSalvar.disabled=true;
+              buttonEditar.disabled=false;
+              produtosComobobox.disabled = true;
+          }
+      }
+      selectItemsEventListener(){            
+          const grid = this.querySelector('vaadin-grid');
+          let idTextfield = this.querySelector('#id');
+          let quantidadeTextfield = this.querySelector('#quantidade');
+          let produtoCombobox = this.querySelector('#produtos'); 
+          let btnExcluir = this.querySelector('#btnExcluir');      
+          let btnEditar = this.querySelector('#btnEditar');
+          let btnSalvar = this.querySelector('#btnSalvar');
+          grid.addEventListener('active-item-changed', function(event){
+              const item = event.detail.value;
+              grid.selectedItems = item ? [item]:[];
+              idTextfield.value=item.id;
+              quantidadeTextfield.value=item.quantidade; 
+              produtoCombobox.value = item.produto.id;  
+              produtoCombobox.disabled = true;
+              btnExcluir.disabled=false; 
+              btnEditar.disabled=false;
+              btnSalvar.disabled=true;
+          });           
+      }
+      salvar(){
+          if(this.querySelector("#produtos").validate()){
+              this.service.postServices("http://localhost:8080/resources/estoque", this.getJson())
+              .then(response =>{ 
+                  if(response.ok){
+                      this.loadingGrid();
+                      this.showDialog("Estoque salvo com sucesso!");
+                      this.editionField(true);
+                      this.disabledInsercao(true);
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              });
+          }        
+      }
+      editar(){
+         if(this.querySelector('#produtos').validate()){
+              this.service.putServices("http://localhost:8080/resources/estoque", this.getJson())
+              .then(response =>{ 
+                  if(response.ok){
+                      this.loadingGrid();
+                      this.showDialog("Estoque alterado com sucesso!");
+                      this.editionField(true);
+                      this.disabledInsercao(true);
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              });
+          }       
+      }
+      deletar(){
+          this.service.deleteServices("http://localhost:8080/resources/estoque", this.getJson())
+              .then(response =>{ 
+                  if(response.ok){
+                      console.log('response',response);
+                      this.loadingGrid();       
+                      this.showDialog("Estoque delatado com sucesso!");
+                      this.editionField(true);
+                          this.disabledInsercao(true);
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              });   
+      }
+      cancelar(){
+          this.editionField(true);
+          this.disabledInsercao(true);
+      }
+      showDialog(message){
+          customElements.whenDefined('vaadin-dialog').then(_ =>{
+              const dialog = this.querySelector('vaadin-dialog');
+              dialog.renderer= function(root, dialog){
+                  root.textContent=message;
+              };
+              dialog.opened =true;
+          });          
+      }
+      editionField(option){
+          let idField = this.querySelector('#id');
+          let produtosComobobox = this.querySelector('#produtos');
+          if(option){
+              idField.value = "";
+              produtosComobobox.value = "";
+          }else {
+              produtosComobobox.readonly = false;
+          }
+          
+      }
+      attachComboBox(){
+          customElements.whenDefined('vaadin-combo-box').then(_ =>{
+              this.querySelector('#produtos').dataProvider = (params, callback) =>{
+                  this.service.getServicesJson("http://localhost:8080/resources/produtos").then(
+                      json => callback(json, json.length)
+                  );
+              };
+          });
+      }
+      loadingGrid(){        
+          const grid = this.querySelector('vaadin-grid');
+          grid.dataProvider =(params, callback) =>{
+              this.service.getServices("http://localhost:8080/resources/estoques").then(
+                  json => callback(json, json.length));
+          };                
+      }
+      getJson(){
+          const estoque= new Estoque(this.querySelector('#id').value, this.querySelector('#quantidade').value,
+          this.querySelector("#produtos").value);
+          console.log(estoque.json);
+          return estoque.json;
+      }
+      
+  }
+  customElements.define('vapp-estoque-view',VappEstoque);
 
   class VappMain extends PolymerElement{    
       ready(){      
         super.ready();
         const router = new Router(this.shadowRoot.getElementById('outlet'));
         router.setRoutes([
-          {path: '/', component: 'vapp-home'},
+          {path: '/', component: 'vapp-vendas-view'},
           {path: '/Clinte', component: 'vapp-cliente-view'},
           {path: '/Produtos', component: 'vapp-produtos-view'},
           {path: '/Categoria', component: 'vapp-categoria-view'},
+          {path: '/Estoque', component: 'vapp-estoque-view'},
         ]);
       }
       static get template(){
@@ -50285,8 +50600,8 @@
           <vaadin-tabs orientation="vertical" slot="drawer">
             <vaadin-tab>
               <a href="/">
-                <iron-icon icon="vaadin:home"></iron-icon>
-                 Page 1
+                <iron-icon icon="vaadin:cart"></iron-icon>
+                 Vendas
               </a>
             </vaadin-tab>
             <vaadin-tab>
@@ -50303,8 +50618,14 @@
             </vaadin-tab>
             <vaadin-tab>
               <a href="Categoria">
-                <iron-icon icon="vaadin:cubes"></iron-icon>
+                <iron-icon icon="vaadin:cube"></iron-icon>
                 Categorias
+              </a>
+            </vaadin-tab>
+            <vaadin-tab>
+              <a href="Estoque">
+                <iron-icon icon="vaadin:cubes"></iron-icon>
+                Estoque
               </a>
             </vaadin-tab>
           </vaadin-tabs>

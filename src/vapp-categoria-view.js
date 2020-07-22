@@ -6,6 +6,7 @@ import '@vaadin/vaadin-dialog';
 import '@vaadin/vaadin-button';
 import '@vaadin/vaadin-grid';
 import Service from '../util/services';
+import Categoria from '../beans/categoria'
 export default class CategoriaView extends HTMLElement{
    
     constructor(){
@@ -82,7 +83,7 @@ export default class CategoriaView extends HTMLElement{
     salvar(){       
         let descricaoTextfield = this.querySelector('#descricao');      
         if(descricaoTextfield.validate()){
-            this.service.postServices("http://localhost:8080/categoria", this.getJson())
+            this.service.postServices("http://localhost:8080/resources/categoria", this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     this.loadingGrid();
@@ -99,7 +100,7 @@ export default class CategoriaView extends HTMLElement{
     editar(){
         let descricaoTextfield = this.querySelector('#descricao');
         if(descricaoTextfield.validate()){
-            this.service.putServices("http://localhost:8080/categoria", this.getJson())
+            this.service.putServices("http://localhost:8080/resources/categoria", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
                         this.loadingGrid();
@@ -114,7 +115,7 @@ export default class CategoriaView extends HTMLElement{
         }        
     }
     deletar(){
-        this.service.deleteServices("http://localhost:8080/categoria", this.getJson())
+        this.service.deleteServices("http://localhost:8080/resources/categoria", this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     this.loadingGrid();       
@@ -130,7 +131,7 @@ export default class CategoriaView extends HTMLElement{
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
         grid.dataProvider =(params, callback) =>{
-            this.service.getServices("http://localhost:8080/categoria").then(
+            this.service.getServices("http://localhost:8080/resources/categorias").then(
                 json => callback(json, json.length));
         }                
     }
@@ -159,10 +160,9 @@ export default class CategoriaView extends HTMLElement{
         
     }
     getJson(){
-        let id = this.querySelector('#id');
-        let descricao = this.querySelector('#descricao');;
-        let data = {id: id.value, descricao: descricao.value}; 
-        return data;
+        const categoria = new Categoria(this.querySelector('#id').value, this.querySelector('#descricao').value);
+        console.log(categoria.json)
+        return categoria.json;
     }
 }
 customElements.define('vapp-categoria-view', CategoriaView);

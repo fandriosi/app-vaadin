@@ -9,6 +9,7 @@ import '@vaadin/vaadin-button';
 import '@vaadin/vaadin-grid';
 
 import Service from '../util/services';
+import Produto from '../beans/produto';
 
 export default class ProdutosView extends HTMLElement{
     constructor(){
@@ -45,7 +46,7 @@ export default class ProdutosView extends HTMLElement{
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
-            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column width="7%" flex-grow="0" path="id" header="Código" width="4%"></vaadin-grid-column>
             <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
             <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
             <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
@@ -75,7 +76,6 @@ export default class ProdutosView extends HTMLElement{
         grid.addEventListener('active-item-changed', function(event){
             const item = event.detail.value;
             grid.selectedItems = item ? [item]:[];
-            console.log(item);
             idTextfield.value=item.id;
             descricaoTextfield.value=item.descricao; 
             referenciaTextfiel.value=item.codigoBarra;
@@ -110,11 +110,11 @@ export default class ProdutosView extends HTMLElement{
     salvar(){       
         let descricaoTextfield = this.querySelector('#descricao');    
         if(descricaoTextfield.validate()){
-            this.service.postServices("http://localhost:8080/produtos", this.getJson())
+            this.service.postServices("http://localhost:8080/resources/produto", this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     this.loadingGrid();
-                    this.showDialog("Cliente salvo com sucesso!");
+                    this.showDialog("Produto salvo com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
                  }              
@@ -125,46 +125,29 @@ export default class ProdutosView extends HTMLElement{
         }     
     }
     editar(){
-        let nomeTextfield = this.querySelector('#nome');
-        let emailTextfiel= this.querySelector('#email');   
-        console.log('click editar');     
-        if(nomeTextfield.validate()){
-            if( emailTextfiel.value !="" && emailTextfiel.validate()){
-                this.service.putServices("http://localhost:8080/produtos", this.getJson())
-                .then(response =>{ 
-                    if(response.ok){
-                        this.loadingGrid();
-                        this.showDialog("Produto alterado com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
-                    }              
-                }).catch(erro =>{
-                    this.showDialog("Erro na conexão como Servidor!");
-                    console.log(erro.message);
-                });
-            }else{
-                this.service.putServices("http://localhost:8080/produtos", this.getJson())
-                .then(response =>{ 
-                    if(response.ok){
-                        this.loadingGrid();
-                        this.showDialog("Produtos alterado com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
-                    }              
-                }).catch(erro =>{
-                    this.showDialog("Erro na conexão como Servidor!");
-                    console.log(erro.message);
-                });
-            }            
-        }        
+        let descricaoTextfield = this.querySelector('#descricao'); 
+        if(descricaoTextfield.validate()){
+            this.service.putServices("http://localhost:8080/resources/produto", this.getJson())
+            .then(response =>{ 
+                if(response.ok){
+                    this.loadingGrid();
+                    this.showDialog("Produto alterado com sucesso!");
+                    this.editionField(true);
+                    this.disabledInsercao(true);
+                }              
+            }).catch(erro =>{
+                this.showDialog("Erro na conexão como Servidor!");
+                console.log(erro.message);
+            });
+        }       
     }
     deletar(){
-        this.service.deleteServices("http://localhost:8080/produtos", this.getJson())
+        this.service.deleteServices("http://localhost:8080/resources/produto", this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     console.log('response',response);
                     this.loadingGrid();       
-                    this.showDialog("Produtos delatado com sucesso!");
+                    this.showDialog("produto delatado com sucesso!");
                     this.editionField(true);
                         this.disabledInsercao(true);
                 }              
@@ -180,7 +163,7 @@ export default class ProdutosView extends HTMLElement{
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
         grid.dataProvider =(params, callback) =>{
-            this.service.getServices("http://localhost:8080/produtos").then(
+            this.service.getServices("http://localhost:8080/resources/produtos").then(
                 json => callback(json, json.length));
         }                
     }
@@ -214,28 +197,21 @@ export default class ProdutosView extends HTMLElement{
         
     }
     getJson(){
-        let id = this.querySelector('#id');
-        let descricao = this.querySelector('#descricao');
-        let codigoBarra = this.querySelector('#referencia');
-        let precoCusto= this.querySelector('#custo');
-        let preco = this.querySelector('#venda');
-        let categoria =this.querySelector('vaadin-combo-box');
-        let data = {categoria:{
-                id: categoria.value},
-            id: id.value, 
-            descricao: descricao.value, 
-            codigoBarra: codigoBarra.value,
-            precoCusto: precoCusto.value,
-            preco: preco.value            
-            }; 
-        return data;
+        const produto = new Produto(this.querySelector('#id').value, this.querySelector('#descricao').value,
+            this.querySelector('#referencia').value, this.querySelector('#custo').value, this.querySelector('#venda').value,
+            this.querySelector('vaadin-combo-box').value);        
+        return produto.json;
     }
     attachComboBox(){
-        customElements.whenDefined('vaadin-combo-box').then(_ =>{
-            this.service.getServicesJson("http://localhost:8080/categoria").then(json =>{
-                this.querySelector('vaadin-combo-box').items = json;
-            });
-        });
+        //customElements.whenDefined('vaadin-combo-box').then(_ =>{
+        //    this.service.getServicesJson("").then(json =>{
+        //         this.querySelector('vaadin-combo-box').items = json;
+        //    });
+       // });
+        this.querySelector('vaadin-combo-box').dataProvider = (params, callback)=>{
+            this.service.getServicesJson("http://localhost:8080/resources/categorias").then(
+                json => callback(json, json.length));
+        }
     }
 }
 customElements.define('vapp-produtos-view', ProdutosView);

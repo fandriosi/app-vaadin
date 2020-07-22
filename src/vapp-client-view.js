@@ -8,12 +8,13 @@ import '@vaadin/vaadin-button';
 import '@vaadin/vaadin-grid';
 import Service from '../util/services';
 import Storage from '../util/storage';
+import Cliente from '../beans/cliente';
 
 export default class ClienteView extends HTMLElement{
     constructor(){
         super();
         this.storage = new Storage('clientes');
-        this.service = new Service();      
+        this.service = new Service();  
     }
     connectedCallback(){
         this.createTemplate(); 
@@ -89,8 +90,6 @@ export default class ClienteView extends HTMLElement{
         let buttonExcluir = this.querySelector('#btnExcluir');
         let buttonEditar = this.querySelector('#btnEditar');
         let idTextfield = this.querySelector('#id');
-        console.log('id', idTextfield.value);
-        console.log('optin', option);
         if(option && idTextfield.value == 0){
             buttonExcluir.disabled=true;
             buttonSalvar.disabled=false;
@@ -106,7 +105,7 @@ export default class ClienteView extends HTMLElement{
         let emailTextfiel= this.querySelector('#email');        
         if(nomeTextfield.validate()){
             if( emailTextfiel.value !="" && emailTextfiel.validate()){
-                this.service.postServices("http://localhost:8080/clientes", this.getJson())
+                this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
                         this.loadingGrid();
@@ -119,7 +118,7 @@ export default class ClienteView extends HTMLElement{
                     console.log(erro.message);
                 });
             }else{
-                this.service.postServices("http://localhost:8080/clientes", this.getJson())
+                this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
                         this.loadingGrid();
@@ -137,10 +136,14 @@ export default class ClienteView extends HTMLElement{
     editar(){
         let nomeTextfield = this.querySelector('#nome');
         let emailTextfiel= this.querySelector('#email');   
-        console.log('click editar');     
         if(nomeTextfield.validate()){
+<<<<<<< HEAD
             if( emailTextfiel.value !=" " && emailTextfiel.validate()){
                 this.service.putServices("http://localhost:8080/clientes", this.getJson())
+=======
+            if( emailTextfiel.value !="" && emailTextfiel.validate()){
+                this.service.putServices("http://localhost:8080/resources/cliente", this.getJson())
+>>>>>>> 538683cc530de1f3b6564ba0b76279f0adf8d8ca
                 .then(response =>{ 
                     if(response.ok){
                         this.loadingGrid();
@@ -169,7 +172,7 @@ export default class ClienteView extends HTMLElement{
         }        
     }
     deletar(){
-        this.service.deleteServices("http://localhost:8080/clientes", this.getJson())
+        this.service.deleteServices("http://localhost:8080/resources/cliente", this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     console.log('response',response);
@@ -190,7 +193,7 @@ export default class ClienteView extends HTMLElement{
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
         grid.dataProvider =(params, callback) =>{
-            this.service.getServices("http://localhost:8080/clientes").then(
+            this.service.getServices("http://localhost:8080/resources/clientes").then(
                 json => callback(json, json.length));
         }                
     }
@@ -224,13 +227,9 @@ export default class ClienteView extends HTMLElement{
         
     }
     getJson(){
-        let id = this.querySelector('#id');
-        let nome = this.querySelector('#nome');
-        let email = this.querySelector('#email');
-        let area = this.querySelector('#area');
-        let numero = this.querySelector('#numero');
-        let data = {id: id.value, nome: nome.value, email: email.value, phone: area.value +" "+numero.value}; 
-        return data;
+        const clinte = new Cliente(this.querySelector('#id').value,this.querySelector('#nome').value, 
+        this.querySelector('#email').value, this.querySelector('#area').value, this.querySelector('#numero').value);
+        return clinte.json;
     }
 }
 customElements.define('vapp-cliente-view',ClienteView);
