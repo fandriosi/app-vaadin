@@ -20,7 +20,7 @@ export default class ClienteView extends HTMLElement{
         this.loadingGrid();
         this.fiedEventListener();        
         this.selectItemsEventListener();
-        this.disabledExclusao(false);
+        this.disabledInsercao(true);
     }
     createTemplate(){
         const templete = html `
@@ -37,10 +37,11 @@ export default class ClienteView extends HTMLElement{
                 <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Cancelar</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
-            <vaadin-grid-column path="id" header="Código"></vaadin-grid-column>
+            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
             <vaadin-grid-column path="nome" header="Nome"></vaadin-grid-column>
             <vaadin-grid-column path="email" header="E-mail"></vaadin-grid-column>
             <vaadin-grid-column path="phone" header="Telefone"></vaadin-grid-column>
@@ -49,14 +50,9 @@ export default class ClienteView extends HTMLElement{
     } 
     fiedEventListener(){
         let nomeTextfield = this.querySelector('#nome');
-        let buttonSalvar = this.querySelector('#btnSalvar');
-        nomeTextfield.addEventListener('click',_ =>{             
-            console.log('fiel click');   
-            if(buttonSalvar.disabled){
-                console.log('field click');
-                this.disabledExclusao(false);
-                this.editionField(false);
-            }
+        nomeTextfield.addEventListener('click',_ =>{      
+            this.disabledInsercao(true);
+            this.editionField(false);
         }); 
     }
     selectItemsEventListener(){            
@@ -67,10 +63,11 @@ export default class ClienteView extends HTMLElement{
         let areaTextfield = this.querySelector('#area');
         let numeroTextfield = this.querySelector('#numero');  
         let btnExcluir = this.querySelector('#btnExcluir');      
+        let btnEditar = this.querySelector('#btnEditar');
+        let btnSalvar = this.querySelector('#btnSalvar');
         grid.addEventListener('active-item-changed', function(event){
             const item = event.detail.value;
             grid.selectedItems = item ? [item]:[];
-            console.log(item);
             var str = item.phone;
             idTextfield.value=item.id;
             nomeTextfield.value=item.nome; 
@@ -82,22 +79,25 @@ export default class ClienteView extends HTMLElement{
             areaTextfield.disabled=true;
             numeroTextfield.disabled=true;        
             btnExcluir.disabled=false; 
+            btnEditar.disabled=false;
+            btnSalvar.disabled=true;
         });           
         
     }
-    disabledExclusao(option){
-        console.log('disble', option);
+    disabledInsercao(option){
         let buttonSalvar = this.querySelector('#btnSalvar');
         let buttonExcluir = this.querySelector('#btnExcluir');
         let buttonEditar = this.querySelector('#btnEditar');
-        console.log(buttonExcluir);
-        if(option){
-            buttonExcluir.disabled=false;
-            buttonSalvar.disabled=true;
-            buttonEditar.disabled=true;
-        }else{
+        let idTextfield = this.querySelector('#id');
+        console.log('id', idTextfield.value);
+        console.log('optin', option);
+        if(option && idTextfield.value == 0){
             buttonExcluir.disabled=true;
             buttonSalvar.disabled=false;
+            buttonEditar.disabled=true;
+        }else{
+            buttonExcluir.disabled=false;
+            buttonSalvar.disabled=true;
             buttonEditar.disabled=false;
         }
     }
@@ -111,7 +111,8 @@ export default class ClienteView extends HTMLElement{
                     if(response.ok){
                         this.loadingGrid();
                         this.showDialog("Cliente salvo com sucesso!");
-                        this.editionField(true)
+                        this.editionField(true);
+                        this.disabledInsercao(true);
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
@@ -124,6 +125,7 @@ export default class ClienteView extends HTMLElement{
                         this.loadingGrid();
                         this.showDialog("Cliente salvo com sucesso!");
                         this.editionField(true);
+                        this.disabledInsercao(true);
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
@@ -142,8 +144,9 @@ export default class ClienteView extends HTMLElement{
                 .then(response =>{ 
                     if(response.ok){
                         this.loadingGrid();
-                        this.showDialog("Cliente salvo com sucesso!");
+                        this.showDialog("Cliente alterado com sucesso!");
                         this.editionField(true);
+                        this.disabledInsercao(true);
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
@@ -154,8 +157,9 @@ export default class ClienteView extends HTMLElement{
                 .then(response =>{ 
                     if(response.ok){
                         this.loadingGrid();
-                        this.showDialog("Cliente salvo com sucesso!");
+                        this.showDialog("Cliente alterado com sucesso!");
                         this.editionField(true);
+                        this.disabledInsercao(true);
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
@@ -172,11 +176,16 @@ export default class ClienteView extends HTMLElement{
                     this.loadingGrid();       
                     this.showDialog("Cliente delatado com sucesso!");
                     this.editionField(true);
+                        this.disabledInsercao(true);
                 }              
             }).catch(erro =>{
                 this.showDialog("Erro na conexão como Servidor!");
                 console.log(erro.message);
             });   
+    }
+    cancelar(){
+        this.editionField(true);
+        this.disabledInsercao(true);
     }
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
@@ -191,7 +200,7 @@ export default class ClienteView extends HTMLElement{
             dialog.renderer= function(root, dialog){
                 root.textContent=message;
             }
-            dialog.opened =true;
+            dialog.opened =true
         });          
     }
     editionField(option){
@@ -214,20 +223,14 @@ export default class ClienteView extends HTMLElement{
         }
         
     }
-    cleanFields(){
-        let idField = this.querySelector('#id');
-        let nomeField = this.querySelector('#nome');
-        idField.value = "";
-        nomeField.value= "";
-    }
     getJson(){
+        let id = this.querySelector('#id');
         let nome = this.querySelector('#nome');
         let email = this.querySelector('#email');
         let area = this.querySelector('#area');
         let numero = this.querySelector('#numero');
-        let data = {nome: nome.value, email: email.value, phone: area.value +" "+numero.value}; 
+        let data = {id: id.value, nome: nome.value, email: email.value, phone: area.value +" "+numero.value}; 
         return data;
     }
 }
-customElements.define('cliente-view',ClienteView);
-
+customElements.define('vapp-cliente-view',ClienteView);

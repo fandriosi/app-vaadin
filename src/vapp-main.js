@@ -8,7 +8,8 @@ import '@vaadin/vaadin-tabs/vaadin-tab';
 import '@vaadin/vaadin-icons/vaadin-icons';
 import './vapp-home';
 import './vapp-client-view';
-import './vapp-page3';
+import './vapp-produtos-veiw';
+import './vapp-categoria-view';
 
 export default class VappMain extends PolymerElement{    
     ready(){      
@@ -16,8 +17,9 @@ export default class VappMain extends PolymerElement{
       const router = new Router(this.shadowRoot.getElementById('outlet'));
       router.setRoutes([
         {path: '/', component: 'vapp-home'},
-        {path: '/Clinte', component: 'cliente-view'},
-        {path: '/page3', component: 'vapp-page3'},
+        {path: '/Clinte', component: 'vapp-cliente-view'},
+        {path: '/Produtos', component: 'vapp-produtos-view'},
+        {path: '/Categoria', component: 'vapp-categoria-view'},
       ]);
     }
     static get template(){
@@ -27,7 +29,7 @@ export default class VappMain extends PolymerElement{
         </custom-style>         
         <vaadin-app-layout>
           <vaadin-drawer-toggle slot="navbar"></vaadin-drawer-toggle>
-          <h2 slot="navbar">App Name</h2>
+          <h2 slot="navbar">Be Modas</h2>
           <vaadin-tabs orientation="vertical" slot="drawer">
             <vaadin-tab>
               <a href="/">
@@ -38,13 +40,19 @@ export default class VappMain extends PolymerElement{
             <vaadin-tab>
               <a href="Clinte">
                 <iron-icon icon="vaadin:list"></iron-icon>
-                  Clintes
+                   <span>Clintes</span>
               </a>
             </vaadin-tab>
             <vaadin-tab>
-              <a href="page3">
-                <iron-icon icon="vaadin:options"></iron-icon>
-                Page 3
+              <a href="Produtos">
+                <iron-icon icon="vaadin:shop"></iron-icon>
+                Produtos
+              </a>
+            </vaadin-tab>
+            <vaadin-tab>
+              <a href="Categoria">
+                <iron-icon icon="vaadin:cubes"></iron-icon>
+                Categorias
               </a>
             </vaadin-tab>
           </vaadin-tabs>

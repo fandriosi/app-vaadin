@@ -1,3 +1,7 @@
 node_modules
+<<<<<<< HEAD
+=======
+/nbproject/private/
+>>>>>>> f2be0c58bc1482cab7c07b43541e021de4f8a5d0
 .idea
 .vscode

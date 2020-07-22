@@ -22,7 +22,6 @@ export default class Services{
     deleteServices(url = ``, data = {}) {
         // Default options are marked with *
         console.log('data', data);
-        console.log('data', data);
         return fetch(url, {
             method: "DELETE", // *GET, POST, PUT, DELETE, etc.
             mode: "cors", // no-cors, cors, *same-origin
@@ -58,5 +57,22 @@ export default class Services{
         const request = await fetch(url);
         const payload = await request.json();
         return payload;
-    }
+    }   
+   async getServicesJson(url = ``) {
+        // Default options are marked with *
+        const request = await fetch(url, {
+            method: "GET", // *GET, POST, PUT, DELETE, etc.
+            mode: "cors", // no-cors, cors, *same-origin
+            cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+            credentials: "same-origin", // include, *same-origin, omit
+            headers: {
+                "Content-Type": "application/json",
+                // "Content-Type": "application/x-www-form-urlencoded",
+            },
+            redirect: "follow", // manual, *follow, error
+            referrer: "no-referrer", // no-referrer, *clienTE          
+        }); // parses response to JSO    
+        const payload = await request.json();
+        return payload;
+    }   
 }
