@@ -87,9 +87,9 @@ export default class CategoriaView extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
+                        response.json().then(
                             json => callback(json, json.length)
-                         ));
+                        );
                     }
                     this.showDialog("Categoria salva com sucesso!");
                     this.editionField(true);
@@ -108,9 +108,9 @@ export default class CategoriaView extends HTMLElement{
                 .then(response =>{ 
                     if(response.ok){
                         this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                            console.log(response.json().then(
+                            response.json().then(
                                 json => callback(json, json.length)
-                             ));
+                            );
                         }
                         this.showDialog("Categoria alterada com sucesso!");
                         this.editionField(true);

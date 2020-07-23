@@ -114,9 +114,9 @@ export default class ProdutosView extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
+                        response.json().then(
                             json => callback(json, json.length)
-                         ));
+                        );
                     }
                     this.showDialog("Produto salvo com sucesso!");
                     this.editionField(true);
@@ -135,9 +135,9 @@ export default class ProdutosView extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
+                        response.json().then(
                             json => callback(json, json.length)
-                         ));
+                        );
                     }
                     this.showDialog("Produto alterado com sucesso!");
                     this.editionField(true);
@@ -153,11 +153,10 @@ export default class ProdutosView extends HTMLElement{
         this.service.deleteServices("http://localhost:8080/resources/produto", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    console.log('response',response);
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
+                        response.json().then(
                             json => callback(json, json.length)
-                         ));
+                         );
                     }     
                     this.showDialog("produto delatado com sucesso!");
                     this.editionField(true);
