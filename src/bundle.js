@@ -35117,7 +35117,7 @@
               body: data, // body data type must match "Content-Type" header            
           }); // parses response to JSO    
       }   
-      deleteServices(url = ``, data = {}) {
+      deleteServices(url = ``, data) {
           // Default options are marked with *
           return fetch(url, {
               method: "DELETE", // *GET, POST, PUT, DELETE, etc.
@@ -35130,10 +35130,10 @@
               },
               redirect: "follow", // manual, *follow, error
               referrer: "no-referrer", // no-referrer, *client
-              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+              body: data, // body data type must match "Content-Type" header            
           }); // parses response to JSO    
       }   
-      putServices(url = ``, data = {}) {
+      putServices(url = ``, data) {
           // Default options are marked with *
           return fetch(url, {
               method: "PUT", // *GET, POST, PUT, DELETE, etc.
@@ -35146,7 +35146,7 @@
               },
               redirect: "follow", // manual, *follow, error
               referrer: "no-referrer", // no-referrer, *client
-              body: JSON.stringify(data), // body data type must match "Content-Type" header            
+              body: data, // body data type must match "Content-Type" header            
           }); // parses response to JSO    
       }   
       async getServices(url= ``){
@@ -44475,13 +44475,8 @@
           let nomeTextfield = this.querySelector('#nome');
           let emailTextfiel= this.querySelector('#email');   
           if(nomeTextfield.validate()){
-<<<<<<< HEAD
-              if( emailTextfiel.value !=" " && emailTextfiel.validate()){
-                  this.service.putServices("http://localhost:8080/clientes", this.getJson())
-=======
               if( emailTextfiel.value !="" && emailTextfiel.validate()){
                   this.service.putServices("http://localhost:8080/resources/cliente", this.getJson())
->>>>>>> 538683cc530de1f3b6564ba0b76279f0adf8d8ca
                   .then(response =>{ 
                       if(response.ok){
                           this.loadingGrid();

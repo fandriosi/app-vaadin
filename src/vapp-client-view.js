@@ -137,13 +137,8 @@ export default class ClienteView extends HTMLElement{
         let nomeTextfield = this.querySelector('#nome');
         let emailTextfiel= this.querySelector('#email');   
         if(nomeTextfield.validate()){
-<<<<<<< HEAD
-            if( emailTextfiel.value !=" " && emailTextfiel.validate()){
-                this.service.putServices("http://localhost:8080/clientes", this.getJson())
-=======
             if( emailTextfiel.value !="" && emailTextfiel.validate()){
                 this.service.putServices("http://localhost:8080/resources/cliente", this.getJson())
->>>>>>> 538683cc530de1f3b6564ba0b76279f0adf8d8ca
                 .then(response =>{ 
                     if(response.ok){
                         this.loadingGrid();
