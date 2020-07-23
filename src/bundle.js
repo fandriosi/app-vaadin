@@ -44446,7 +44446,11 @@
                   this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
-                          this.loadingGrid();
+                          this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                              console.log(response.json().then(
+                                  json => callback(json, json.length)
+                               ));
+                          };
                           this.showDialog("Cliente salvo com sucesso!");
                           this.editionField(true);
                           this.disabledInsercao(true);
@@ -44459,7 +44463,11 @@
                   this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
-                          this.loadingGrid();
+                          this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                              console.log(response.json().then(
+                                  json => callback(json, json.length)
+                               ));
+                          };
                           this.showDialog("Cliente salvo com sucesso!");
                           this.editionField(true);
                           this.disabledInsercao(true);
@@ -44479,7 +44487,11 @@
                   this.service.putServices("http://localhost:8080/resources/cliente", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
-                          this.loadingGrid();
+                          this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                              console.log(response.json().then(
+                                  json => callback(json, json.length)
+                               ));
+                          };
                           this.showDialog("Cliente alterado com sucesso!");
                           this.editionField(true);
                           this.disabledInsercao(true);
@@ -44492,7 +44504,11 @@
                   this.service.putServices("http://localhost:8080/clientes", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
-                          this.loadingGrid();
+                          this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                              console.log(response.json().then(
+                                  json => callback(json, json.length)
+                               ));
+                          };
                           this.showDialog("Cliente alterado com sucesso!");
                           this.editionField(true);
                           this.disabledInsercao(true);
@@ -44509,7 +44525,11 @@
               .then(response =>{ 
                   if(response.ok){
                       console.log('response',response);
-                      this.loadingGrid();       
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          console.log(response.json().then(
+                              json => callback(json, json.length)
+                           ));
+                      };       
                       this.showDialog("Cliente delatado com sucesso!");
                       this.editionField(true);
                           this.disabledInsercao(true);
@@ -50018,9 +50038,9 @@
               .then(response =>{ 
                   if(response.ok){
                       this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                          console.log(response.json().then(
+                          response.json().then(
                               json => callback(json, json.length)
-                           ));
+                          );
                       };
                       this.showDialog("Produto salvo com sucesso!");
                       this.editionField(true);
@@ -50038,7 +50058,11 @@
               this.service.putServices("http://localhost:8080/resources/produto", this.getJson())
               .then(response =>{ 
                   if(response.ok){
-                      this.loadingGrid();
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          response.json().then(
+                              json => callback(json, json.length)
+                          );
+                      };
                       this.showDialog("Produto alterado com sucesso!");
                       this.editionField(true);
                       this.disabledInsercao(true);
@@ -50053,8 +50077,11 @@
           this.service.deleteServices("http://localhost:8080/resources/produto", this.getJson())
               .then(response =>{ 
                   if(response.ok){
-                      console.log('response',response);
-                      this.loadingGrid();       
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          response.json().then(
+                              json => callback(json, json.length)
+                           );
+                      };     
                       this.showDialog("produto delatado com sucesso!");
                       this.editionField(true);
                           this.disabledInsercao(true);
@@ -50216,7 +50243,11 @@
               this.service.postServices("http://localhost:8080/resources/categoria", this.getJson())
               .then(response =>{ 
                   if(response.ok){
-                      this.loadingGrid();
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          response.json().then(
+                              json => callback(json, json.length)
+                          );
+                      };
                       this.showDialog("Categoria salva com sucesso!");
                       this.editionField(true);
                       this.disabledInsercao(true);
@@ -50233,7 +50264,11 @@
               this.service.putServices("http://localhost:8080/resources/categoria", this.getJson())
                   .then(response =>{ 
                       if(response.ok){
-                          this.loadingGrid();
+                          this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                              response.json().then(
+                                  json => callback(json, json.length)
+                              );
+                          };
                           this.showDialog("Categoria alterada com sucesso!");
                           this.editionField(true);
                           this.disabledInsercao(true);
@@ -50248,7 +50283,11 @@
           this.service.deleteServices("http://localhost:8080/resources/categoria", this.getJson())
               .then(response =>{ 
                   if(response.ok){
-                      this.loadingGrid();       
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          response.json().then(
+                              json => callback(json, json.length)
+                          );
+                      };       
                       this.showDialog("Categoria delatado com sucesso!");
                       this.editionField(true);
                           this.disabledInsercao(true);
@@ -50484,7 +50523,11 @@
               this.service.postServices("http://localhost:8080/resources/estoque", this.getJson())
               .then(response =>{ 
                   if(response.ok){
-                      this.loadingGrid();
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          console.log(response.json().then(
+                              json => callback(json, json.length)
+                          ));
+                      };
                       this.showDialog("Estoque salvo com sucesso!");
                       this.editionField(true);
                       this.disabledInsercao(true);
@@ -50500,7 +50543,11 @@
               this.service.putServices("http://localhost:8080/resources/estoque", this.getJson())
               .then(response =>{ 
                   if(response.ok){
-                      this.loadingGrid();
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          console.log(response.json().then(
+                              json => callback(json, json.length)
+                          ));
+                      };
                       this.showDialog("Estoque alterado com sucesso!");
                       this.editionField(true);
                       this.disabledInsercao(true);
@@ -50515,8 +50562,11 @@
           this.service.deleteServices("http://localhost:8080/resources/estoque", this.getJson())
               .then(response =>{ 
                   if(response.ok){
-                      console.log('response',response);
-                      this.loadingGrid();       
+                      this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                          console.log(response.json().then(
+                              json => callback(json, json.length)
+                          ));
+                      };      
                       this.showDialog("Estoque delatado com sucesso!");
                       this.editionField(true);
                           this.disabledInsercao(true);
