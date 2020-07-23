@@ -68,7 +68,7 @@ export default class Services{
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *clienTE          
-        }); // parses response to JSO    
+        }); // parses response to JSOn    
         const payload = await request.json();
         return payload;
     }   
