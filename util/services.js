@@ -18,7 +18,7 @@ export default class Services{
             body: data, // body data type must match "Content-Type" header            
         }); // parses response to JSO    
     }   
-    deleteServices(url = ``, data = {}) {
+    deleteServices(url = ``, data) {
         // Default options are marked with *
         return fetch(url, {
             method: "DELETE", // *GET, POST, PUT, DELETE, etc.
@@ -31,10 +31,10 @@ export default class Services{
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *client
-            body: JSON.stringify(data), // body data type must match "Content-Type" header            
+            body: data, // body data type must match "Content-Type" header            
         }); // parses response to JSO    
     }   
-    putServices(url = ``, data = {}) {
+    putServices(url = ``, data) {
         // Default options are marked with *
         return fetch(url, {
             method: "PUT", // *GET, POST, PUT, DELETE, etc.
@@ -47,7 +47,7 @@ export default class Services{
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *client
-            body: JSON.stringify(data), // body data type must match "Content-Type" header            
+            body: data, // body data type must match "Content-Type" header            
         }); // parses response to JSO    
     }   
     async getServices(url= ``){
@@ -68,7 +68,7 @@ export default class Services{
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *clienTE          
-        }); // parses response to JSO    
+        }); // parses response to JSOn    
         const payload = await request.json();
         return payload;
     }   

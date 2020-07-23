@@ -84,7 +84,11 @@ export default class VappEstoque extends HTMLElement{
             this.service.postServices("http://localhost:8080/resources/estoque", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    this.loadingGrid();
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                        ));
+                    }
                     this.showDialog("Estoque salvo com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
@@ -100,7 +104,11 @@ export default class VappEstoque extends HTMLElement{
             this.service.putServices("http://localhost:8080/resources/estoque", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    this.loadingGrid();
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                        ));
+                    }
                     this.showDialog("Estoque alterado com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
@@ -115,8 +123,11 @@ export default class VappEstoque extends HTMLElement{
         this.service.deleteServices("http://localhost:8080/resources/estoque", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    console.log('response',response);
-                    this.loadingGrid();       
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                        ));
+                    }      
                     this.showDialog("Estoque delatado com sucesso!");
                     this.editionField(true);
                         this.disabledInsercao(true);

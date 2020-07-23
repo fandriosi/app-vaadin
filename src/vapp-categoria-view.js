@@ -86,7 +86,11 @@ export default class CategoriaView extends HTMLElement{
             this.service.postServices("http://localhost:8080/resources/categoria", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    this.loadingGrid();
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                         ));
+                    }
                     this.showDialog("Categoria salva com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
@@ -103,7 +107,11 @@ export default class CategoriaView extends HTMLElement{
             this.service.putServices("http://localhost:8080/resources/categoria", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
-                        this.loadingGrid();
+                        this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                            console.log(response.json().then(
+                                json => callback(json, json.length)
+                             ));
+                        }
                         this.showDialog("Categoria alterada com sucesso!");
                         this.editionField(true);
                         this.disabledInsercao(true);
@@ -118,7 +126,11 @@ export default class CategoriaView extends HTMLElement{
         this.service.deleteServices("http://localhost:8080/resources/categoria", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    this.loadingGrid();       
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                         ));
+                    }       
                     this.showDialog("Categoria delatado com sucesso!");
                     this.editionField(true);
                         this.disabledInsercao(true);

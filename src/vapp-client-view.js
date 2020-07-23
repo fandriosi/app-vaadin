@@ -108,7 +108,11 @@ export default class ClienteView extends HTMLElement{
                 this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
-                        this.loadingGrid();
+                        this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                            console.log(response.json().then(
+                                json => callback(json, json.length)
+                             ));
+                        }
                         this.showDialog("Cliente salvo com sucesso!");
                         this.editionField(true);
                         this.disabledInsercao(true);
@@ -121,7 +125,11 @@ export default class ClienteView extends HTMLElement{
                 this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
-                        this.loadingGrid();
+                        this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                            console.log(response.json().then(
+                                json => callback(json, json.length)
+                             ));
+                        }
                         this.showDialog("Cliente salvo com sucesso!");
                         this.editionField(true);
                         this.disabledInsercao(true);
@@ -141,7 +149,11 @@ export default class ClienteView extends HTMLElement{
                 this.service.putServices("http://localhost:8080/resources/cliente", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
-                        this.loadingGrid();
+                        this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                            console.log(response.json().then(
+                                json => callback(json, json.length)
+                             ));
+                        }
                         this.showDialog("Cliente alterado com sucesso!");
                         this.editionField(true);
                         this.disabledInsercao(true);
@@ -154,7 +166,11 @@ export default class ClienteView extends HTMLElement{
                 this.service.putServices("http://localhost:8080/clientes", this.getJson())
                 .then(response =>{ 
                     if(response.ok){
-                        this.loadingGrid();
+                        this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                            console.log(response.json().then(
+                                json => callback(json, json.length)
+                             ));
+                        }
                         this.showDialog("Cliente alterado com sucesso!");
                         this.editionField(true);
                         this.disabledInsercao(true);
@@ -171,7 +187,11 @@ export default class ClienteView extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     console.log('response',response);
-                    this.loadingGrid();       
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                         ));
+                    }       
                     this.showDialog("Cliente delatado com sucesso!");
                     this.editionField(true);
                         this.disabledInsercao(true);

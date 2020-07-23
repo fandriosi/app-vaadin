@@ -47,7 +47,7 @@ export default class ProdutosView extends HTMLElement{
         </vaadin-form-layout>
         <vaadin-grid>
             <vaadin-grid-column width="7%" flex-grow="0" path="id" header="Código" width="4%"></vaadin-grid-column>
-            <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
+            <vaadin-grid-column width="30%" path="descricao" header="Descrição"></vaadin-grid-column>
             <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
             <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
             <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
@@ -113,7 +113,11 @@ export default class ProdutosView extends HTMLElement{
             this.service.postServices("http://localhost:8080/resources/produto", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    this.loadingGrid();
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                         ));
+                    }
                     this.showDialog("Produto salvo com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
@@ -130,7 +134,11 @@ export default class ProdutosView extends HTMLElement{
             this.service.putServices("http://localhost:8080/resources/produto", this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    this.loadingGrid();
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                         ));
+                    }
                     this.showDialog("Produto alterado com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
@@ -146,7 +154,11 @@ export default class ProdutosView extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     console.log('response',response);
-                    this.loadingGrid();       
+                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                        console.log(response.json().then(
+                            json => callback(json, json.length)
+                         ));
+                    }     
                     this.showDialog("produto delatado com sucesso!");
                     this.editionField(true);
                         this.disabledInsercao(true);
@@ -199,7 +211,7 @@ export default class ProdutosView extends HTMLElement{
     getJson(){
         const produto = new Produto(this.querySelector('#id').value, this.querySelector('#descricao').value,
             this.querySelector('#referencia').value, this.querySelector('#custo').value, this.querySelector('#venda').value,
-            this.querySelector('vaadin-combo-box').value);        
+            this.querySelector('vaadin-combo-box').value);   
         return produto.json;
     }
     attachComboBox(){
