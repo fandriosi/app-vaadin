@@ -62,8 +62,7 @@ export default class CategoriaView extends HTMLElement{
             btnExcluir.disabled=false; 
             btnEditar.disabled=false;
             btnSalvar.disabled=true;
-        });           
-        
+        });          
     }
     disabledInsercao(option){
         let buttonSalvar = this.querySelector('#btnSalvar');

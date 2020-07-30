@@ -2,23 +2,21 @@ import {html, render} from 'lit-html/lit-html';
 import '@vaadin/vaadin-form-layout';
 import '@vaadin/vaadin-text-field/vaadin-text-area';
 import '@vaadin/vaadin-text-field/vaadin-text-field';
+import '@vaadin/vaadin-text-field/vaadin-integer-field';
+import '@vaadin/vaadin-text-field/vaadin-number-field';
 import '@vaadin/vaadin-button';
 import '@vaadin/vaadin-date-picker';
 import Service from '../util/services';
 import DataFormat from '../util/data';
-import '../beans/produtos';
-import Produtos from '../beans/produtos';
+import Venda from '../beans/venda';
 
 export default class VappVendas extends HTMLElement{
-    
-
     constructor(){
         super();    
         this.service = new Service();       
     }
     connectedCallback(){
         this.callServer();
-        this.loadingGrid();
         this.attachDate();
         this.attachComboBox();
     }
@@ -26,9 +24,10 @@ export default class VappVendas extends HTMLElement{
         const templete = html `
         <vaadin-form-layout>
             <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
-            <vaadin-text-field label="Quantidade" id="quantidade"></vaadin-text-field>
+            <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
             <vaadin-date-picker label="Data da Compra" id="dataCompra"></vaadin-date-picker>
             <vaadin-date-picker label="Data Pagamento" id="dataPagamento"></vaadin-date-picker>
+            <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
             <vaadin-combo-box label="Cliente" item-label-path="nome" item-value-path="id" id="clientes"></vaadin-combo-box>
             <vaadin-form-item>
                 <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição do Produto" id="findDescricao" clear-button-visible></vaadin-text-field>
@@ -43,36 +42,30 @@ export default class VappVendas extends HTMLElement{
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
-            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
-            <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
-            <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
-            <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
-            <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
-            <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.descricao" header="Descrição"></vaadin-grid-column>
+            <vaadin-grid-column path= "produto.categoria.descricao" header="Categoria"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.codigoBarra" header="Referência"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.preco" header="Preço"></vaadin-grid-column>
         </vaadin-grid>
         </vaadin-form-layout>`
         render(templete, this);
     }
     salvar(){
-        let descricaoTextfield = this.querySelector('#descricao');    
-        if(descricaoTextfield.validate()){
-            this.service.postServices("http://localhost:8080/resources/venda", this.getJson())
-            .then(response =>{ 
-                if(response.ok){
-                    this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        response.json().then(
-                            json => callback(json, json.length)
-                        );
-                    }
-                    this.showDialog("Venda salva com sucesso!");
-                    this.editionField(true);
-                    this.disabledInsercao(true);
-                 }              
-            }).catch(erro =>{
-                 this.showDialog("Erro na conexão como Servidor!");
-                console.log(erro.message);
-            });
-        }     
+        this.service.postServices("http://localhost:8080/resources/venda", this.getJson())
+        .then(response =>{ 
+            if(response.ok){
+                this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                    response.json().then(json => callback(json, json.length));
+                }
+                this.showDialog("Venda salva com sucesso!");
+                this.editionField(true);
+                this.disabledInsercao(true);
+            }              
+        }).catch(erro =>{
+            this.showDialog("Erro na conexão como Servidor!");
+            console.log(erro.message);
+        });  
     }
     deletar(){
 
@@ -107,19 +100,19 @@ export default class VappVendas extends HTMLElement{
     attachComboBox(){
         customElements.whenDefined('vaadin-combo-box').then(_ =>{
             this.querySelector('#clientes').dataProvider = (params, callback) =>{
-                this.service.getServicesJson("http://localhost:8080/resources/clientes").then(
-                    json => callback(json, json.length)
-                );
+                this.service.getServicesJson("http://localhost:8080/resources/clientes")
+                .then(json => console.log(callback(json, json.length)));
             } 
         });
     }
-    loadingGrid(){        
-        const grid = this.querySelector('vaadin-grid');
-        grid.dataProvider =(params, callback) =>{
-            this.service.getServices("http://localhost:8080/resources/vendas").then(
-                json => callback(json, json.length));
-        }                
-    }    
+    getJson(){
+        console.log(this.querySelector('#produtos').value);
+        const venda = new Venda(this.querySelector('#id').value, this.querySelector('#dataCompra').value, 
+            this.querySelector('#dataPagamento').value,0,this.querySelector('#valorPago').value, this.querySelector('#quantidade').value,
+            this.querySelector('#clientes').value, this.querySelector('#produtos').value);
+        console.log('json', venda.json);
+        return venda.json;
+    }
 }
 customElements.define('vapp-vendas-view',VappVendas);
 

@@ -29440,9 +29440,523 @@
 
   customElements.define(TextAreaElement.is, TextAreaElement);
 
-  const $_documentContainer$j = document.createElement('template');
+  const $_documentContainer$j = html`<dom-module id="lumo-number-field" theme-for="vaadin-number-field">
+  <template>
+    <style include="lumo-field-button">
+      :host {
+        width: 8em;
+      }
 
-  $_documentContainer$j.innerHTML = `<dom-module id="lumo-overlay">
+      :host([has-controls]:not([theme~="align-right"])) [part="value"] {
+        text-align: center;
+      }
+
+      [part="decrease-button"][disabled],
+      [part="increase-button"][disabled] {
+        opacity: 0.2;
+      }
+
+      :host([has-controls]) [part="input-field"] {
+        padding: 0;
+      }
+
+      [part="decrease-button"],
+      [part="increase-button"] {
+        cursor: pointer;
+        font-size: var(--lumo-icon-size-s);
+        width: 1.6em;
+        height: 1.6em;
+      }
+
+      [part="decrease-button"]::before,
+      [part="increase-button"]::before {
+        margin-top: 0.2em;
+      }
+
+      /* RTL specific styles */
+
+      :host([dir="rtl"]) [part="value"],
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input) {
+        --_lumo-text-field-overflow-mask-image: linear-gradient(to left, transparent, #000 1.25em);
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$j.content);
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const $_documentContainer$k = document.createElement('template');
+
+  $_documentContainer$k.innerHTML = `<dom-module id="vaadin-number-field-template">
+  <template>
+    <style>
+      :host([readonly]) [part\$="button"] {
+        pointer-events: none;
+      }
+
+      [part="decrease-button"]::before {
+        content: "−";
+      }
+
+      [part="increase-button"]::before {
+        content: "+";
+      }
+
+      [part="decrease-button"],
+      [part="increase-button"] {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+
+      /* Hide the native arrow icons */
+      [part="value"]::-webkit-outer-spin-button,
+      [part="value"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      [part="value"] {
+        /* Older Firefox versions (v47.0) requires !important */
+        -moz-appearance: textfield !important;
+      }
+
+      :host([dir="rtl"]) [part="input-field"] {
+        direction: ltr;
+      }
+
+      :host([dir="rtl"]) [part="value"]::placeholder {
+        direction: rtl;
+      }
+
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input)::placeholder {
+        direction: rtl;
+      }
+
+      :host([dir="rtl"]) [part="value"]:-ms-input-placeholder,
+      :host([dir="rtl"]) [part="input-field"] ::slotted(input):-ms-input-placeholder {
+        direction: rtl;
+      }
+
+      :host([dir="rtl"]:not([has-controls])) [part="value"]::placeholder {
+        text-align: left;
+      }
+
+      :host([dir="rtl"]:not([has-controls])) [part="input-field"] ::slotted(input)::placeholder {
+        text-align: left;
+      }
+
+      :host([dir="rtl"]:not([has-controls])) [part="value"]:-ms-input-placeholder,
+      :host([dir="rtl"]:not([has-controls])) [part="input-field"] ::slotted(input):-ms-input-placeholder {
+        text-align: left;
+      }
+    </style>
+
+    <div disabled\$="[[!_allowed(-1, value, min, max, step)]]" part="decrease-button" on-click="_decreaseValue" on-touchend="_decreaseButtonTouchend" hidden\$="[[!hasControls]]">
+    </div>
+
+    <div disabled\$="[[!_allowed(1, value, min, max, step)]]" part="increase-button" on-click="_increaseValue" on-touchend="_increaseButtonTouchend" hidden\$="[[!hasControls]]">
+    </div>
+  </template>
+
+  
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$k.content);
+  let memoizedTemplate;
+
+  /**
+  * `<vaadin-number-field>` is a Web Component for number field control in forms.
+  *
+  * ```html
+  * <vaadin-number-field label="Number">
+  * </vaadin-number-field>
+  * ```
+  *
+  * @extends PolymerElement
+  * @demo demo/index.html
+  */
+  class NumberFieldElement extends TextFieldElement {
+    static get is() {
+      return 'vaadin-number-field';
+    }
+
+    static get version() {
+      return '2.6.2';
+    }
+
+    static get properties() {
+      return {
+        /**
+        * Set to true to display value increase/decrease controls.
+        */
+        hasControls: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true
+        },
+
+        /**
+        * The minimum value of the field.
+        */
+        min: {
+          type: Number,
+          reflectToAttribute: true,
+          observer: '_minChanged'
+        },
+
+        /**
+         * The maximum value of the field.
+         */
+        max: {
+          type: Number,
+          reflectToAttribute: true,
+          observer: '_maxChanged'
+        },
+
+        /**
+         * Specifies the allowed number intervals of the field.
+         */
+        step: {
+          type: Number,
+          value: 1,
+          observer: '_stepChanged'
+        }
+
+      };
+    }
+
+    ready() {
+      super.ready();
+      this.__previousValidInput = this.value || '';
+      this.inputElement.type = 'number';
+      this.inputElement.addEventListener('change', this.__onInputChange.bind(this));
+    }
+
+    _decreaseButtonTouchend(e) {
+      // Cancel the following click and focus events
+      e.preventDefault();
+      this._decreaseValue();
+    }
+
+    _increaseButtonTouchend(e) {
+      // Cancel the following click and focus events
+      e.preventDefault();
+      this._increaseValue();
+    }
+
+    static get template() {
+      if (!memoizedTemplate) {
+        // Clone the superclass template
+        memoizedTemplate = super.template.cloneNode(true);
+
+        // Retrieve this element's dom-module template
+        const thisTemplate = DomModule.import(this.is + '-template', 'template');
+        const decreaseButton = thisTemplate.content.querySelector('[part="decrease-button"]');
+        const increaseButton = thisTemplate.content.querySelector('[part="increase-button"]');
+        const styles = thisTemplate.content.querySelector('style');
+
+        // Add the buttons and styles to the text-field template
+        const inputField = memoizedTemplate.content.querySelector('[part="input-field"]');
+        const prefixSlot = memoizedTemplate.content.querySelector('[name="prefix"]');
+        inputField.insertBefore(decreaseButton, prefixSlot);
+        inputField.appendChild(increaseButton);
+        memoizedTemplate.content.appendChild(styles);
+      }
+
+      return memoizedTemplate;
+    }
+
+    _createConstraintsObserver() {
+      // NOTE: do not call "super" but instead override the method to add extra arguments
+      this._createMethodObserver('_constraintsChanged(required, minlength, maxlength, pattern, min, max, step)');
+    }
+
+    _constraintsChanged(required, minlength, maxlength, pattern, min, max, step) {
+      if (!this.invalid) {
+        return;
+      }
+
+      const isNumUnset = n => (!n && n !== 0);
+
+      if (!isNumUnset(min) || !isNumUnset(max)) {
+        this.validate();
+      } else {
+        super._constraintsChanged(required, minlength, maxlength, pattern);
+      }
+    }
+
+    _decreaseValue() {
+      this._incrementValue(-1);
+    }
+
+    _increaseValue() {
+      this._incrementValue(1);
+    }
+
+    _incrementValue(incr) {
+      if (this.disabled || this.readonly) {
+        return;
+      }
+
+      let value = parseFloat(this.value);
+
+      if (!this.value) {
+        if (this.min == 0 && incr < 0 ||
+            this.max == 0 && incr > 0 ||
+            this.max == 0 && this.min == 0) {
+          incr = 0;
+          value = 0;
+        } else if ((this.max == null || this.max >= 0) &&
+                   (this.min == null || this.min <= 0)) {
+          value = 0;
+        } else if (this.min > 0) {
+          value = this.min;
+          if (this.max < 0 && incr < 0) {
+            value = this.max;
+          }
+          incr = 0;
+        } else if (this.max < 0) {
+          value = this.max;
+          if (incr < 0) {
+            incr = 0;
+          } else {
+            // FIXME(yuriy): find a proper solution to make correct step back
+            if (this._getIncrement(1, value - this.step) > this.max) {
+              value -= 2 * this.step;
+            } else {
+              value -= this.step;
+            }
+          }
+        }
+      } else if (value < this.min) {
+        incr = 0;
+        value = this.min;
+      } else if (value > this.max) {
+        incr = 0;
+        value = this.max;
+      }
+
+      const newValue = this._getIncrement(incr, value);
+      if (!this.value || incr == 0 || this._incrementIsInsideTheLimits(incr, value)) {
+        this._setValue(newValue);
+      }
+    }
+
+    _setValue(value) {
+      this.value = this.inputElement.value = String(parseFloat(value));
+      this.dispatchEvent(new CustomEvent('change', {bubbles: true}));
+    }
+
+    _getIncrement(incr, currentValue) {
+      let step = this.step || 1,
+        min = this.min || 0;
+
+      // To avoid problems with decimal math, multiplying to operate with integers.
+      const multiplier = Math.max(this._getMultiplier(currentValue),
+        this._getMultiplier(step),
+        this._getMultiplier(min));
+
+      step *= multiplier;
+      currentValue = Math.round(currentValue * multiplier);
+      min *= multiplier;
+
+      const margin = (currentValue - min) % step;
+
+      if (incr > 0) {
+        return (currentValue - margin + step) / multiplier;
+      } else if (incr < 0) {
+        return (currentValue - (margin || step)) / multiplier;
+      } else {
+        return currentValue / multiplier;
+      }
+    }
+
+    _getDecimalCount(number) {
+      const s = String(number);
+      const i = s.indexOf('.');
+      return i === -1 ? 1 : s.length - i - 1;
+    }
+
+    _getMultiplier(number) {
+      if (!isNaN(number)) {
+        return Math.pow(10, this._getDecimalCount(number));
+      }
+    }
+
+    _incrementIsInsideTheLimits(incr, value) {
+      if (incr < 0) {
+        return this.min == null || this._getIncrement(incr, value) >= this.min;
+      } else if (incr > 0) {
+        return this.max == null || this._getIncrement(incr, value) <= this.max;
+      } else {
+        return this._getIncrement(incr, value) <= this.max && this._getIncrement(incr, value) >= this.min;
+      }
+    }
+
+    _allowed(sign) {
+      const incr = sign * (this.step || 1);
+      const value = parseFloat(this.value);
+      return !this.value || (!this.disabled && this._incrementIsInsideTheLimits(incr, value));
+    }
+
+    _stepChanged(step) {
+      // Avoid using initial value in validation
+      this.__validateByStep = this.__stepChangedCalled || this.getAttribute('step') !== null;
+      this.inputElement.step = this.__validateByStep ? step : 'any';
+
+      this.__stepChangedCalled = true;
+      this.setAttribute('step', step);
+    }
+
+    _minChanged(min) {
+      this.inputElement.min = min;
+    }
+
+    _maxChanged(max) {
+      this.inputElement.max = max;
+    }
+
+    _valueChanged(newVal, oldVal) {
+      // Validate value to be numeric
+      if (newVal && isNaN(parseFloat(newVal))) {
+        this.value = '';
+      } else if (typeof this.value !== 'string') {
+        this.value = String(this.value);
+      }
+
+      super._valueChanged(this.value, oldVal);
+    }
+
+    _onKeyDown(e) {
+      if (e.keyCode == 38) {
+        e.preventDefault();
+        this._increaseValue();
+      } else if (e.keyCode == 40) {
+        e.preventDefault();
+        this._decreaseValue();
+      }
+      super._onKeyDown(e);
+    }
+
+    __onInputChange() {
+      this.validate();
+    }
+
+    checkValidity() {
+      // text-field mixin does not check against `min`, `max` and `step`
+      if (this.min !== undefined || this.max !== undefined || this.__validateByStep) {
+        return this.inputElement.checkValidity();
+      }
+
+      return super.checkValidity();
+    }
+  }
+
+  window.customElements.define(NumberFieldElement.is, NumberFieldElement);
+
+  /**
+  @license
+  Copyright (c) 2019 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const $_documentContainer$l = document.createElement('template');
+
+  $_documentContainer$l.innerHTML = `<dom-module id="vaadin-integer-field-template">
+
+  
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$l.content);
+
+  /**
+  * `<vaadin-integer-field>` is a Web Component for integer field control in forms.
+  *
+  * ```html
+  * <vaadin-integer-field label="Number">
+  * </vaadin-integer-field>
+  * ```
+  *
+  * @extends PolymerElement
+  * @demo demo/index.html
+  */
+  class IntegerFieldElement extends NumberFieldElement {
+    static get is() {
+      return 'vaadin-integer-field';
+    }
+
+    static get version() {
+      return '2.6.2';
+    }
+
+    static get properties() {
+      // Hide inherited props that don't work with <input type="number"> from JSDoc.
+      return {
+        /**
+         * @private
+         */
+        pattern: String,
+        /**
+         * @private
+         */
+        preventInvalidInput: Boolean,
+        /**
+         * @private
+         */
+        minlength: Number,
+        /**
+         * @private
+         */
+        maxlength: Number
+      };
+    }
+
+    ready() {
+      super.ready();
+      this._enabledCharPattern = '[-+\\d]';
+    }
+
+    _valueChanged(newVal, oldVal) {
+      if (newVal !== '' && !this.__isInteger(newVal)) {
+        console.warn(`Trying to set non-integer value "${newVal}" to <vaadin-integer-field>.`
+          + ` Clearing the value.`);
+        this.value = '';
+        return;
+      }
+      super._valueChanged(newVal, oldVal);
+    }
+
+    _stepChanged(newVal, oldVal) {
+      if (!this.__hasOnlyDigits(newVal)) {
+        console.warn(`Trying to set invalid step size "${newVal}",`
+          + ` which is not a positive integer, to <vaadin-integer-field>.`
+          + ` Resetting the default value 1.`);
+        this.step = 1;
+        return;
+      }
+      super._stepChanged(newVal, oldVal);
+    }
+
+    __isInteger(value) {
+      return /^(-\d)?\d*$/.test(String(value));
+    }
+
+    __hasOnlyDigits(value) {
+      return /^\d*$/.test(String(value));
+    }
+  }
+
+  window.customElements.define(IntegerFieldElement.is, IntegerFieldElement);
+
+  const $_documentContainer$m = document.createElement('template');
+
+  $_documentContainer$m.innerHTML = `<dom-module id="lumo-overlay">
   <template>
     <style>
       :host {
@@ -29506,11 +30020,11 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$j.content);
+  document.head.appendChild($_documentContainer$m.content);
 
-  const $_documentContainer$k = document.createElement('template');
+  const $_documentContainer$n = document.createElement('template');
 
-  $_documentContainer$k.innerHTML = `<dom-module id="lumo-menu-overlay-core">
+  $_documentContainer$n.innerHTML = `<dom-module id="lumo-menu-overlay-core">
   <template>
     <style>
       :host([opening]),
@@ -29612,9 +30126,9 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$k.content);
+  document.head.appendChild($_documentContainer$n.content);
 
-  const $_documentContainer$l = html`<dom-module id="lumo-date-picker-overlay" theme-for="vaadin-date-picker-overlay">
+  const $_documentContainer$o = html`<dom-module id="lumo-date-picker-overlay" theme-for="vaadin-date-picker-overlay">
   <template>
     <style include="lumo-menu-overlay">
       [part="overlay"] {
@@ -29659,9 +30173,9 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$l.content);
+  document.head.appendChild($_documentContainer$o.content);
 
-  const $_documentContainer$m = html`<dom-module id="lumo-date-picker-overlay-content" theme-for="vaadin-date-picker-overlay-content">
+  const $_documentContainer$p = html`<dom-module id="lumo-date-picker-overlay-content" theme-for="vaadin-date-picker-overlay-content">
   <template>
     <style>
       :host {
@@ -29872,9 +30386,9 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$m.content);
+  document.head.appendChild($_documentContainer$p.content);
 
-  const $_documentContainer$n = html`<dom-module id="lumo-month-calendar" theme-for="vaadin-month-calendar">
+  const $_documentContainer$q = html`<dom-module id="lumo-month-calendar" theme-for="vaadin-month-calendar">
   <template>
     <style>
       :host {
@@ -30022,9 +30536,9 @@
   </style>
 </custom-style>`;
 
-  document.head.appendChild($_documentContainer$n.content);
+  document.head.appendChild($_documentContainer$q.content);
 
-  const $_documentContainer$o = html`<dom-module id="lumo-date-picker" theme-for="vaadin-date-picker">
+  const $_documentContainer$r = html`<dom-module id="lumo-date-picker" theme-for="vaadin-date-picker">
   <template>
     <style include="lumo-field-button">
       :host {
@@ -30048,9 +30562,9 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$o.content);
+  document.head.appendChild($_documentContainer$r.content);
 
-  const $_documentContainer$p = html`<dom-module id="lumo-date-picker-text-field" theme-for="vaadin-date-picker-text-field">
+  const $_documentContainer$s = html`<dom-module id="lumo-date-picker-text-field" theme-for="vaadin-date-picker-text-field">
   <template>
     <style>
       :not(*):placeholder-shown, /* to prevent broken styles on IE */
@@ -30067,7 +30581,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$p.content);
+  document.head.appendChild($_documentContainer$s.content);
 
   /**
   @license
@@ -30075,9 +30589,9 @@
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
 
-  const $_documentContainer$q = document.createElement('template');
+  const $_documentContainer$t = document.createElement('template');
 
-  $_documentContainer$q.innerHTML = `<dom-module id="vaadin-date-picker-text-field-styles" theme-for="vaadin-date-picker-text-field">
+  $_documentContainer$t.innerHTML = `<dom-module id="vaadin-date-picker-text-field-styles" theme-for="vaadin-date-picker-text-field">
   <template>
     <style>
       :host([dir="rtl"]) [part="input-field"] {
@@ -30103,7 +30617,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$q.content);
+  document.head.appendChild($_documentContainer$t.content);
   /**
     * The text-field element for date input.
     *
@@ -32959,9 +33473,9 @@
 
   customElements.define(InfiniteScrollerElement.is, InfiniteScrollerElement);
 
-  const $_documentContainer$r = document.createElement('template');
+  const $_documentContainer$u = document.createElement('template');
 
-  $_documentContainer$r.innerHTML = `<dom-module id="vaadin-date-picker-overlay-styles" theme-for="vaadin-date-picker-overlay">
+  $_documentContainer$u.innerHTML = `<dom-module id="vaadin-date-picker-overlay-styles" theme-for="vaadin-date-picker-overlay">
   <template>
     <style>
       :host {
@@ -32997,7 +33511,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$r.content);
+  document.head.appendChild($_documentContainer$u.content);
 
   /**
   @license
@@ -35206,29 +35720,45 @@
       }
   }
 
-  class Produtos{
-      constructor(){
-          this.elements = {};
+  class Vendas{
+      constructor(id, dataCompra, dataRecebimento, tipoPagamento, valorPago, quantidade, idCliente,
+          idProduto){
+          this.id = id;
+          this.dataCompra = dataCompra;
+          this.dataRecebimento = dataRecebimento;
+          this.tipoPagamento = tipoPagamento;
+          this.valorPago = valorPago;
+          this.quantidade = quantidade;
+          this.idCliente = idCliente;
+          this.idProduto = idProduto;
       }
-      elements(elements){
-          this.elements = element;
-         console.log(this.elements);
-      }
-      elements(){
-          //return this.elements;
+      get json(){
+          return JSON.stringify({
+              id: this.id,
+              dataCompra: this.dataCompra,
+              dataRecebimento: this.dataRecebimento,
+              tipoPagamento: this.tipoPagamento,
+              valorPago: this.valorPago,
+              clientes:{
+                  id: this.idCliente
+              },
+              produtosVendidos:[{                
+                  quantidade: this.quantidade,
+                  produto:{
+                      id: this.idProduto
+                  }
+              }]
+          })
       }
   }
 
   class VappVendas extends HTMLElement{
-      
-
       constructor(){
           super();    
           this.service = new Services();       
       }
       connectedCallback(){
           this.callServer();
-          this.loadingGrid();
           this.attachDate();
           this.attachComboBox();
       }
@@ -35236,15 +35766,16 @@
           const templete = html$1 `
         <vaadin-form-layout>
             <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
-            <vaadin-text-field label="Quantidade" id="quantidade"></vaadin-text-field>
+            <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
             <vaadin-date-picker label="Data da Compra" id="dataCompra"></vaadin-date-picker>
             <vaadin-date-picker label="Data Pagamento" id="dataPagamento"></vaadin-date-picker>
+            <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
             <vaadin-combo-box label="Cliente" item-label-path="nome" item-value-path="id" id="clientes"></vaadin-combo-box>
             <vaadin-form-item>
                 <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição do Produto" id="findDescricao" clear-button-visible></vaadin-text-field>
                 <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
-                <vaadin-combo-box label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
             </vaadin-form-item>
+            <vaadin-combo-box label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
             <vaadin-form-item>
                 <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Iniciar Venda</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Contiunar Vendendo</vaadin-button>
@@ -35253,22 +35784,30 @@
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
-            <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
-            <vaadin-grid-column path="descricao" header="Descrição"></vaadin-grid-column>
-            <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
-            <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
-            <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
-            <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.id" header="Código" width="15%"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.descricao" header="Descrição"></vaadin-grid-column>
+            <vaadin-grid-column path= "produto.categoria.descricao" header="Categoria"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.codigoBarra" header="Referência"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.preco" header="Preço"></vaadin-grid-column>
         </vaadin-grid>
         </vaadin-form-layout>`;
           render(templete, this);
       }
       salvar(){
-          const elements = new Produtos();
-          this.elementsProdutos = JSON.stringify(this.service.getServices("http://localhost:8080/resources/produtos").then((json) =>{
-              elements.elements.json;
-          }));
-          console.log('Elementos',elements.elements);
+          this.service.postServices("http://localhost:8080/resources/venda", this.getJson())
+          .then(response =>{ 
+              if(response.ok){
+                  this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                      response.json().then(json => callback(json, json.length));
+                  };
+                  this.showDialog("Venda salva com sucesso!");
+                  this.editionField(true);
+                  this.disabledInsercao(true);
+              }              
+          }).catch(erro =>{
+              this.showDialog("Erro na conexão como Servidor!");
+              console.log(erro.message);
+          });  
       }
       deletar(){
 
@@ -35303,23 +35842,23 @@
       attachComboBox(){
           customElements.whenDefined('vaadin-combo-box').then(_ =>{
               this.querySelector('#clientes').dataProvider = (params, callback) =>{
-                  this.service.getServicesJson("http://localhost:8080/resources/clientes").then(
-                      json => callback(json, json.length)
-                  );
+                  this.service.getServicesJson("http://localhost:8080/resources/clientes")
+                  .then(json => console.log(callback(json, json.length)));
               }; 
           });
       }
-      loadingGrid(){        
-          const grid = this.querySelector('vaadin-grid');
-          grid.dataProvider =(params, callback) =>{
-              this.service.getServices("http://localhost:8080/resources/vendas").then(
-                  json => callback(json, json.length));
-          };                
-      }    
+      getJson(){
+          console.log(this.querySelector('#produtos').value);
+          const venda = new Vendas(this.querySelector('#id').value, this.querySelector('#dataCompra').value, 
+              this.querySelector('#dataPagamento').value,0,this.querySelector('#valorPago').value, this.querySelector('#quantidade').value,
+              this.querySelector('#clientes').value, this.querySelector('#produtos').value);
+          console.log('json', venda.json);
+          return venda.json;
+      }
   }
   customElements.define('vapp-vendas-view',VappVendas);
 
-  const $_documentContainer$s = html`<dom-module id="lumo-custom-field" theme-for="vaadin-custom-field">
+  const $_documentContainer$v = html`<dom-module id="lumo-custom-field" theme-for="vaadin-custom-field">
   <template>
     <style include="lumo-required-field">
       :host {
@@ -35398,7 +35937,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$s.content);
+  document.head.appendChild($_documentContainer$v.content);
 
   /**
    * @polymerMixin
@@ -35833,7 +36372,7 @@
 
   customElements.define(CustomFieldElement.is, CustomFieldElement);
 
-  const $_documentContainer$t = html`<dom-module id="lumo-email-field" theme-for="vaadin-email-field">
+  const $_documentContainer$w = html`<dom-module id="lumo-email-field" theme-for="vaadin-email-field">
   <template>
     <style>
       :not(*):placeholder-shown, /* to prevent broken styles on IE */
@@ -35850,16 +36389,16 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$t.content);
+  document.head.appendChild($_documentContainer$w.content);
 
   /**
   @license
   Copyright (c) 2018 Vaadin Ltd.
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
-  const $_documentContainer$u = document.createElement('template');
+  const $_documentContainer$x = document.createElement('template');
 
-  $_documentContainer$u.innerHTML = `<dom-module id="vaadin-email-field-template">
+  $_documentContainer$x.innerHTML = `<dom-module id="vaadin-email-field-template">
   <template>
     <style>
       :host([dir="rtl"]) [part="input-field"] {
@@ -35886,8 +36425,8 @@
   
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$u.content);
-  let memoizedTemplate;
+  document.head.appendChild($_documentContainer$x.content);
+  let memoizedTemplate$1;
 
   /**
    * `<vaadin-email-field>` is a Web Component for email field control in forms.
@@ -35916,19 +36455,19 @@
     }
 
     static get template() {
-      if (!memoizedTemplate) {
+      if (!memoizedTemplate$1) {
         // Clone the superclass template
-        memoizedTemplate = super.template.cloneNode(true);
+        memoizedTemplate$1 = super.template.cloneNode(true);
 
         // Retrieve this element's dom-module template
         const thisTemplate = DomModule.import(this.is + '-template', 'template');
         const styles = thisTemplate.content.querySelector('style');
 
         // Add the and styles to the text-field template
-        memoizedTemplate.content.appendChild(styles);
+        memoizedTemplate$1.content.appendChild(styles);
       }
 
-      return memoizedTemplate;
+      return memoizedTemplate$1;
     }
 
     ready() {
@@ -35947,7 +36486,7 @@
 
   customElements.define(EmailFieldElement.is, EmailFieldElement);
 
-  const $_documentContainer$v = html`<dom-module id="lumo-dialog" theme-for="vaadin-dialog-overlay">
+  const $_documentContainer$y = html`<dom-module id="lumo-dialog" theme-for="vaadin-dialog-overlay">
   <template>
     <style include="lumo-overlay">
       /* Optical centering */
@@ -36009,7 +36548,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$v.content);
+  document.head.appendChild($_documentContainer$y.content);
 
   const TOUCH_DEVICE = (() => {
     try {
@@ -36090,9 +36629,9 @@
       }
     };
 
-  const $_documentContainer$w = document.createElement('template');
+  const $_documentContainer$z = document.createElement('template');
 
-  $_documentContainer$w.innerHTML = `<dom-module id="vaadin-dialog-resizable-overlay-styles" theme-for="vaadin-dialog-overlay">
+  $_documentContainer$z.innerHTML = `<dom-module id="vaadin-dialog-resizable-overlay-styles" theme-for="vaadin-dialog-overlay">
   <template>
     <style>
       [part='overlay'] {
@@ -36193,7 +36732,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$w.content);
+  document.head.appendChild($_documentContainer$z.content);
 
   /**
    * @polymerMixin
@@ -36312,9 +36851,9 @@
   Copyright (c) 2017 Vaadin Ltd.
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
-  const $_documentContainer$x = document.createElement('template');
+  const $_documentContainer$A = document.createElement('template');
 
-  $_documentContainer$x.innerHTML = `<dom-module id="vaadin-dialog-overlay-styles" theme-for="vaadin-dialog-overlay">
+  $_documentContainer$A.innerHTML = `<dom-module id="vaadin-dialog-overlay-styles" theme-for="vaadin-dialog-overlay">
   <template>
     <style>
       /*
@@ -36328,8 +36867,8 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$x.content);
-  let memoizedTemplate$1;
+  document.head.appendChild($_documentContainer$A.content);
+  let memoizedTemplate$2;
 
   /**
    * The overlay element.
@@ -36348,17 +36887,17 @@
     }
 
     static get template() {
-      if (!memoizedTemplate$1) {
-        memoizedTemplate$1 = super.template.cloneNode(true);
-        const contentPart = memoizedTemplate$1.content.querySelector('[part="content"]');
-        const overlayPart = memoizedTemplate$1.content.querySelector('[part="overlay"]');
+      if (!memoizedTemplate$2) {
+        memoizedTemplate$2 = super.template.cloneNode(true);
+        const contentPart = memoizedTemplate$2.content.querySelector('[part="content"]');
+        const overlayPart = memoizedTemplate$2.content.querySelector('[part="overlay"]');
         const resizerContainer = document.createElement('div');
         resizerContainer.id = 'resizerContainer';
         resizerContainer.classList.add('resizer-container');
         resizerContainer.appendChild(contentPart);
         overlayPart.appendChild(resizerContainer);
       }
-      return memoizedTemplate$1;
+      return memoizedTemplate$2;
     }
 
     static get properties() {
@@ -36690,7 +37229,7 @@
 
   customElements.define(DialogElement.is, DialogElement);
 
-  const $_documentContainer$y = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
+  const $_documentContainer$B = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
   <template>
     <style include="lumo-checkbox-style lumo-checkbox-effects">
       /* IE11 only */
@@ -36867,7 +37406,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$y.content);
+  document.head.appendChild($_documentContainer$B.content);
 
   /**
   @license
@@ -37178,7 +37717,7 @@
 
   customElements.define(CheckboxElement.is, CheckboxElement);
 
-  const $_documentContainer$z = html`<dom-module id="lumo-grid" theme-for="vaadin-grid">
+  const $_documentContainer$C = html`<dom-module id="lumo-grid" theme-for="vaadin-grid">
   <template>
     <style>
       :host {
@@ -37541,7 +38080,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$z.content);
+  document.head.appendChild($_documentContainer$C.content);
 
   /**
   @license
@@ -44620,428 +45159,7 @@
   }
   customElements.define('vapp-cliente-view',ClienteView);
 
-  const $_documentContainer$A = html`<dom-module id="lumo-number-field" theme-for="vaadin-number-field">
-  <template>
-    <style include="lumo-field-button">
-      :host {
-        width: 8em;
-      }
-
-      :host([has-controls]:not([theme~="align-right"])) [part="value"] {
-        text-align: center;
-      }
-
-      [part="decrease-button"][disabled],
-      [part="increase-button"][disabled] {
-        opacity: 0.2;
-      }
-
-      :host([has-controls]) [part="input-field"] {
-        padding: 0;
-      }
-
-      [part="decrease-button"],
-      [part="increase-button"] {
-        cursor: pointer;
-        font-size: var(--lumo-icon-size-s);
-        width: 1.6em;
-        height: 1.6em;
-      }
-
-      [part="decrease-button"]::before,
-      [part="increase-button"]::before {
-        margin-top: 0.2em;
-      }
-
-      /* RTL specific styles */
-
-      :host([dir="rtl"]) [part="value"],
-      :host([dir="rtl"]) [part="input-field"] ::slotted(input) {
-        --_lumo-text-field-overflow-mask-image: linear-gradient(to left, transparent, #000 1.25em);
-      }
-    </style>
-  </template>
-</dom-module>`;
-
-  document.head.appendChild($_documentContainer$A.content);
-
-  /**
-  @license
-  Copyright (c) 2017 Vaadin Ltd.
-  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
-  */
-  const $_documentContainer$B = document.createElement('template');
-
-  $_documentContainer$B.innerHTML = `<dom-module id="vaadin-number-field-template">
-  <template>
-    <style>
-      :host([readonly]) [part\$="button"] {
-        pointer-events: none;
-      }
-
-      [part="decrease-button"]::before {
-        content: "−";
-      }
-
-      [part="increase-button"]::before {
-        content: "+";
-      }
-
-      [part="decrease-button"],
-      [part="increase-button"] {
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-      }
-
-      /* Hide the native arrow icons */
-      [part="value"]::-webkit-outer-spin-button,
-      [part="value"]::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-      }
-
-      [part="value"] {
-        /* Older Firefox versions (v47.0) requires !important */
-        -moz-appearance: textfield !important;
-      }
-
-      :host([dir="rtl"]) [part="input-field"] {
-        direction: ltr;
-      }
-
-      :host([dir="rtl"]) [part="value"]::placeholder {
-        direction: rtl;
-      }
-
-      :host([dir="rtl"]) [part="input-field"] ::slotted(input)::placeholder {
-        direction: rtl;
-      }
-
-      :host([dir="rtl"]) [part="value"]:-ms-input-placeholder,
-      :host([dir="rtl"]) [part="input-field"] ::slotted(input):-ms-input-placeholder {
-        direction: rtl;
-      }
-
-      :host([dir="rtl"]:not([has-controls])) [part="value"]::placeholder {
-        text-align: left;
-      }
-
-      :host([dir="rtl"]:not([has-controls])) [part="input-field"] ::slotted(input)::placeholder {
-        text-align: left;
-      }
-
-      :host([dir="rtl"]:not([has-controls])) [part="value"]:-ms-input-placeholder,
-      :host([dir="rtl"]:not([has-controls])) [part="input-field"] ::slotted(input):-ms-input-placeholder {
-        text-align: left;
-      }
-    </style>
-
-    <div disabled\$="[[!_allowed(-1, value, min, max, step)]]" part="decrease-button" on-click="_decreaseValue" on-touchend="_decreaseButtonTouchend" hidden\$="[[!hasControls]]">
-    </div>
-
-    <div disabled\$="[[!_allowed(1, value, min, max, step)]]" part="increase-button" on-click="_increaseValue" on-touchend="_increaseButtonTouchend" hidden\$="[[!hasControls]]">
-    </div>
-  </template>
-
-  
-</dom-module>`;
-
-  document.head.appendChild($_documentContainer$B.content);
-  let memoizedTemplate$2;
-
-  /**
-  * `<vaadin-number-field>` is a Web Component for number field control in forms.
-  *
-  * ```html
-  * <vaadin-number-field label="Number">
-  * </vaadin-number-field>
-  * ```
-  *
-  * @extends PolymerElement
-  * @demo demo/index.html
-  */
-  class NumberFieldElement extends TextFieldElement {
-    static get is() {
-      return 'vaadin-number-field';
-    }
-
-    static get version() {
-      return '2.6.2';
-    }
-
-    static get properties() {
-      return {
-        /**
-        * Set to true to display value increase/decrease controls.
-        */
-        hasControls: {
-          type: Boolean,
-          value: false,
-          reflectToAttribute: true
-        },
-
-        /**
-        * The minimum value of the field.
-        */
-        min: {
-          type: Number,
-          reflectToAttribute: true,
-          observer: '_minChanged'
-        },
-
-        /**
-         * The maximum value of the field.
-         */
-        max: {
-          type: Number,
-          reflectToAttribute: true,
-          observer: '_maxChanged'
-        },
-
-        /**
-         * Specifies the allowed number intervals of the field.
-         */
-        step: {
-          type: Number,
-          value: 1,
-          observer: '_stepChanged'
-        }
-
-      };
-    }
-
-    ready() {
-      super.ready();
-      this.__previousValidInput = this.value || '';
-      this.inputElement.type = 'number';
-      this.inputElement.addEventListener('change', this.__onInputChange.bind(this));
-    }
-
-    _decreaseButtonTouchend(e) {
-      // Cancel the following click and focus events
-      e.preventDefault();
-      this._decreaseValue();
-    }
-
-    _increaseButtonTouchend(e) {
-      // Cancel the following click and focus events
-      e.preventDefault();
-      this._increaseValue();
-    }
-
-    static get template() {
-      if (!memoizedTemplate$2) {
-        // Clone the superclass template
-        memoizedTemplate$2 = super.template.cloneNode(true);
-
-        // Retrieve this element's dom-module template
-        const thisTemplate = DomModule.import(this.is + '-template', 'template');
-        const decreaseButton = thisTemplate.content.querySelector('[part="decrease-button"]');
-        const increaseButton = thisTemplate.content.querySelector('[part="increase-button"]');
-        const styles = thisTemplate.content.querySelector('style');
-
-        // Add the buttons and styles to the text-field template
-        const inputField = memoizedTemplate$2.content.querySelector('[part="input-field"]');
-        const prefixSlot = memoizedTemplate$2.content.querySelector('[name="prefix"]');
-        inputField.insertBefore(decreaseButton, prefixSlot);
-        inputField.appendChild(increaseButton);
-        memoizedTemplate$2.content.appendChild(styles);
-      }
-
-      return memoizedTemplate$2;
-    }
-
-    _createConstraintsObserver() {
-      // NOTE: do not call "super" but instead override the method to add extra arguments
-      this._createMethodObserver('_constraintsChanged(required, minlength, maxlength, pattern, min, max, step)');
-    }
-
-    _constraintsChanged(required, minlength, maxlength, pattern, min, max, step) {
-      if (!this.invalid) {
-        return;
-      }
-
-      const isNumUnset = n => (!n && n !== 0);
-
-      if (!isNumUnset(min) || !isNumUnset(max)) {
-        this.validate();
-      } else {
-        super._constraintsChanged(required, minlength, maxlength, pattern);
-      }
-    }
-
-    _decreaseValue() {
-      this._incrementValue(-1);
-    }
-
-    _increaseValue() {
-      this._incrementValue(1);
-    }
-
-    _incrementValue(incr) {
-      if (this.disabled || this.readonly) {
-        return;
-      }
-
-      let value = parseFloat(this.value);
-
-      if (!this.value) {
-        if (this.min == 0 && incr < 0 ||
-            this.max == 0 && incr > 0 ||
-            this.max == 0 && this.min == 0) {
-          incr = 0;
-          value = 0;
-        } else if ((this.max == null || this.max >= 0) &&
-                   (this.min == null || this.min <= 0)) {
-          value = 0;
-        } else if (this.min > 0) {
-          value = this.min;
-          if (this.max < 0 && incr < 0) {
-            value = this.max;
-          }
-          incr = 0;
-        } else if (this.max < 0) {
-          value = this.max;
-          if (incr < 0) {
-            incr = 0;
-          } else {
-            // FIXME(yuriy): find a proper solution to make correct step back
-            if (this._getIncrement(1, value - this.step) > this.max) {
-              value -= 2 * this.step;
-            } else {
-              value -= this.step;
-            }
-          }
-        }
-      } else if (value < this.min) {
-        incr = 0;
-        value = this.min;
-      } else if (value > this.max) {
-        incr = 0;
-        value = this.max;
-      }
-
-      const newValue = this._getIncrement(incr, value);
-      if (!this.value || incr == 0 || this._incrementIsInsideTheLimits(incr, value)) {
-        this._setValue(newValue);
-      }
-    }
-
-    _setValue(value) {
-      this.value = this.inputElement.value = String(parseFloat(value));
-      this.dispatchEvent(new CustomEvent('change', {bubbles: true}));
-    }
-
-    _getIncrement(incr, currentValue) {
-      let step = this.step || 1,
-        min = this.min || 0;
-
-      // To avoid problems with decimal math, multiplying to operate with integers.
-      const multiplier = Math.max(this._getMultiplier(currentValue),
-        this._getMultiplier(step),
-        this._getMultiplier(min));
-
-      step *= multiplier;
-      currentValue = Math.round(currentValue * multiplier);
-      min *= multiplier;
-
-      const margin = (currentValue - min) % step;
-
-      if (incr > 0) {
-        return (currentValue - margin + step) / multiplier;
-      } else if (incr < 0) {
-        return (currentValue - (margin || step)) / multiplier;
-      } else {
-        return currentValue / multiplier;
-      }
-    }
-
-    _getDecimalCount(number) {
-      const s = String(number);
-      const i = s.indexOf('.');
-      return i === -1 ? 1 : s.length - i - 1;
-    }
-
-    _getMultiplier(number) {
-      if (!isNaN(number)) {
-        return Math.pow(10, this._getDecimalCount(number));
-      }
-    }
-
-    _incrementIsInsideTheLimits(incr, value) {
-      if (incr < 0) {
-        return this.min == null || this._getIncrement(incr, value) >= this.min;
-      } else if (incr > 0) {
-        return this.max == null || this._getIncrement(incr, value) <= this.max;
-      } else {
-        return this._getIncrement(incr, value) <= this.max && this._getIncrement(incr, value) >= this.min;
-      }
-    }
-
-    _allowed(sign) {
-      const incr = sign * (this.step || 1);
-      const value = parseFloat(this.value);
-      return !this.value || (!this.disabled && this._incrementIsInsideTheLimits(incr, value));
-    }
-
-    _stepChanged(step) {
-      // Avoid using initial value in validation
-      this.__validateByStep = this.__stepChangedCalled || this.getAttribute('step') !== null;
-      this.inputElement.step = this.__validateByStep ? step : 'any';
-
-      this.__stepChangedCalled = true;
-      this.setAttribute('step', step);
-    }
-
-    _minChanged(min) {
-      this.inputElement.min = min;
-    }
-
-    _maxChanged(max) {
-      this.inputElement.max = max;
-    }
-
-    _valueChanged(newVal, oldVal) {
-      // Validate value to be numeric
-      if (newVal && isNaN(parseFloat(newVal))) {
-        this.value = '';
-      } else if (typeof this.value !== 'string') {
-        this.value = String(this.value);
-      }
-
-      super._valueChanged(this.value, oldVal);
-    }
-
-    _onKeyDown(e) {
-      if (e.keyCode == 38) {
-        e.preventDefault();
-        this._increaseValue();
-      } else if (e.keyCode == 40) {
-        e.preventDefault();
-        this._decreaseValue();
-      }
-      super._onKeyDown(e);
-    }
-
-    __onInputChange() {
-      this.validate();
-    }
-
-    checkValidity() {
-      // text-field mixin does not check against `min`, `max` and `step`
-      if (this.min !== undefined || this.max !== undefined || this.__validateByStep) {
-        return this.inputElement.checkValidity();
-      }
-
-      return super.checkValidity();
-    }
-  }
-
-  window.customElements.define(NumberFieldElement.is, NumberFieldElement);
-
-  const $_documentContainer$C = html`<dom-module id="lumo-vaadin-overlay" theme-for="vaadin-overlay">
+  const $_documentContainer$D = html`<dom-module id="lumo-vaadin-overlay" theme-for="vaadin-overlay">
   <template>
     <style include="lumo-overlay">
       /* stylelint-disable no-empty-source */
@@ -45049,9 +45167,9 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$C.content);
+  document.head.appendChild($_documentContainer$D.content);
 
-  const $_documentContainer$D = html`<dom-module id="lumo-combo-box-overlay" theme-for="vaadin-combo-box-overlay">
+  const $_documentContainer$E = html`<dom-module id="lumo-combo-box-overlay" theme-for="vaadin-combo-box-overlay">
   <template>
     <style include="lumo-overlay lumo-menu-overlay-core">
       [part="content"] {
@@ -45144,9 +45262,9 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$D.content);
+  document.head.appendChild($_documentContainer$E.content);
 
-  const $_documentContainer$E = html`<dom-module id="lumo-item" theme-for="vaadin-item">
+  const $_documentContainer$F = html`<dom-module id="lumo-item" theme-for="vaadin-item">
   <template>
     <style>
       :host {
@@ -45212,7 +45330,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$E.content);
+  document.head.appendChild($_documentContainer$F.content);
 
   /**
   @license
@@ -45297,7 +45415,7 @@
 
   customElements.define(ItemElement.is, ItemElement);
 
-  const $_documentContainer$F = html`<dom-module id="lumo-combo-box-item" theme-for="vaadin-combo-box-item">
+  const $_documentContainer$G = html`<dom-module id="lumo-combo-box-item" theme-for="vaadin-combo-box-item">
   <template>
     <style include="lumo-item">
       /* TODO partly duplicated from vaadin-list-box styles. Should find a way to make it DRY */
@@ -45345,9 +45463,9 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$F.content);
+  document.head.appendChild($_documentContainer$G.content);
 
-  const $_documentContainer$G = html`<dom-module id="lumo-combo-box" theme-for="vaadin-combo-box">
+  const $_documentContainer$H = html`<dom-module id="lumo-combo-box" theme-for="vaadin-combo-box">
   <template>
     <style include="lumo-field-button">
       :host {
@@ -45361,7 +45479,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$G.content);
+  document.head.appendChild($_documentContainer$H.content);
 
   /**
   @license
@@ -48585,9 +48703,9 @@
   Copyright (c) 2017 Vaadin Ltd.
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
-  const $_documentContainer$H = document.createElement('template');
+  const $_documentContainer$I = document.createElement('template');
 
-  $_documentContainer$H.innerHTML = `<dom-module id="vaadin-combo-box-overlay-styles" theme-for="vaadin-combo-box-overlay">
+  $_documentContainer$I.innerHTML = `<dom-module id="vaadin-combo-box-overlay-styles" theme-for="vaadin-combo-box-overlay">
   <template>
     <style>
       :host {
@@ -48597,7 +48715,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$H.content);
+  document.head.appendChild($_documentContainer$I.content);
   /**
    * The overlay element.
    *
@@ -50281,8 +50399,7 @@
               btnExcluir.disabled=false; 
               btnEditar.disabled=false;
               btnSalvar.disabled=true;
-          });           
-          
+          });          
       }
       disabledInsercao(option){
           let buttonSalvar = this.querySelector('#btnSalvar');
@@ -50397,99 +50514,6 @@
       }
   }
   customElements.define('vapp-categoria-view', CategoriaView);
-
-  /**
-  @license
-  Copyright (c) 2019 Vaadin Ltd.
-  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
-  */
-  const $_documentContainer$I = document.createElement('template');
-
-  $_documentContainer$I.innerHTML = `<dom-module id="vaadin-integer-field-template">
-
-  
-</dom-module>`;
-
-  document.head.appendChild($_documentContainer$I.content);
-
-  /**
-  * `<vaadin-integer-field>` is a Web Component for integer field control in forms.
-  *
-  * ```html
-  * <vaadin-integer-field label="Number">
-  * </vaadin-integer-field>
-  * ```
-  *
-  * @extends PolymerElement
-  * @demo demo/index.html
-  */
-  class IntegerFieldElement extends NumberFieldElement {
-    static get is() {
-      return 'vaadin-integer-field';
-    }
-
-    static get version() {
-      return '2.6.2';
-    }
-
-    static get properties() {
-      // Hide inherited props that don't work with <input type="number"> from JSDoc.
-      return {
-        /**
-         * @private
-         */
-        pattern: String,
-        /**
-         * @private
-         */
-        preventInvalidInput: Boolean,
-        /**
-         * @private
-         */
-        minlength: Number,
-        /**
-         * @private
-         */
-        maxlength: Number
-      };
-    }
-
-    ready() {
-      super.ready();
-      this._enabledCharPattern = '[-+\\d]';
-    }
-
-    _valueChanged(newVal, oldVal) {
-      if (newVal !== '' && !this.__isInteger(newVal)) {
-        console.warn(`Trying to set non-integer value "${newVal}" to <vaadin-integer-field>.`
-          + ` Clearing the value.`);
-        this.value = '';
-        return;
-      }
-      super._valueChanged(newVal, oldVal);
-    }
-
-    _stepChanged(newVal, oldVal) {
-      if (!this.__hasOnlyDigits(newVal)) {
-        console.warn(`Trying to set invalid step size "${newVal}",`
-          + ` which is not a positive integer, to <vaadin-integer-field>.`
-          + ` Resetting the default value 1.`);
-        this.step = 1;
-        return;
-      }
-      super._stepChanged(newVal, oldVal);
-    }
-
-    __isInteger(value) {
-      return /^(-\d)?\d*$/.test(String(value));
-    }
-
-    __hasOnlyDigits(value) {
-      return /^\d*$/.test(String(value));
-    }
-  }
-
-  window.customElements.define(IntegerFieldElement.is, IntegerFieldElement);
 
   class Estoque{
       constructor(id, quantidade, idProduto){
