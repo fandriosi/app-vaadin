@@ -48,7 +48,7 @@ export default class VappMain extends PolymerElement{
             <vaadin-tab>
               <a href="Produtos">
                 <iron-icon icon="vaadin:shop"></iron-icon>
-                Produtos
+                <span>Produtos</span>
               </a>
             </vaadin-tab>
             <vaadin-tab>
@@ -63,6 +63,7 @@ export default class VappMain extends PolymerElement{
                 Estoque
               </a>
             </vaadin-tab>
+          </vaadin-tab>
           </vaadin-tabs>
             <div id="outlet"></div>      
         </vaadin-app-layout>`

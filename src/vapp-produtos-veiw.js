@@ -6,6 +6,7 @@ import '@vaadin/vaadin-text-field/vaadin-number-field';
 import '@vaadin/vaadin-combo-box';
 import '@vaadin/vaadin-dialog';
 import '@vaadin/vaadin-button';
+import '@vaadin/vaadin-icons';
 import '@vaadin/vaadin-grid';
 
 import Service from '../util/services';
@@ -33,7 +34,12 @@ export default class ProdutosView extends HTMLElement{
             <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
             <vaadin-text-field required style="width: 100%;" placeholder="Descrição" id="descricao" label="Descrição" error-message="A descrição do produto não pode ser nulo!" clear-button-visible></vaadin-text-field>
             <vaadin-text-field label="Referência" style="width: 100%;" placeholder="Referência" id="referencia"  clear-button-visible></vaadin-text-field>    
+            <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
             <vaadin-combo-box label="Categoria" item-label-path="descricao" item-value-path="id"></vaadin-combo-box>
+            <vaadin-form-item>
+                <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição" id="findDescricao" clear-button-visible></vaadin-text-field>
+                <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}>Buscar por Descricao <iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
+            </vaadin-form-item>            
             <vaadin-custom-field label="Preço">
                 <vaadin-number-field  maxlength="5" placeholder="Custo" id="custo"><div slot="prefix">R$</div></vaadin-number-field>
                 <vaadin-number-field  maxlength="5" placeholder="Venda" id="venda"><div slot="prefix">R$</div></vaadin-number-field>
@@ -52,6 +58,7 @@ export default class ProdutosView extends HTMLElement{
             <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
             <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
             <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
+            <vaadin-grid-column path="quantidade" header="Quantidade"></vaadin-grid-column>
         </vaadin-grid>`;  
         render(template, this);   
     }
@@ -69,6 +76,7 @@ export default class ProdutosView extends HTMLElement{
         let referenciaTextfiel = this.querySelector('#referencia');
         let custoTextfield = this.querySelector('#custo');
         let precoTextfield = this.querySelector('#venda');  
+        let quantidadeTextfield= this.querySelector('#quantidade')
         let categoriaComob = this.querySelector('vaadin-combo-box'); 
         let btnExcluir = this.querySelector('#btnExcluir');      
         let btnEditar = this.querySelector('#btnEditar');
@@ -81,6 +89,7 @@ export default class ProdutosView extends HTMLElement{
             referenciaTextfiel.value=item.codigoBarra;
             custoTextfield.value=item.precoCusto;
             precoTextfield.value=item.preco;
+            quantidadeTextfield.value=item.quantidade;
             categoriaComob.value = item.categoria.id;
             descricaoTextfield.readonly= true;
             referenciaTextfiel.disabled=true;
@@ -89,6 +98,7 @@ export default class ProdutosView extends HTMLElement{
             btnExcluir.disabled=false; 
             btnEditar.disabled=false;
             btnSalvar.disabled=true;
+            console.log(btnSalvar.disabled);
         });           
         
     }
@@ -171,6 +181,22 @@ export default class ProdutosView extends HTMLElement{
         this.editionField(true);
         this.disabledInsercao(true);
     }
+    findByDescricao(){
+        let descricaoTextfield = this.querySelector('#findDescricao');    
+        let data = JSON.stringify({descricao: descricaoTextfield.value});
+        this.service.postServices("http://localhost:8080/resources/produtosFindByDescricao", data)
+        .then(response =>{ 
+            if(response.ok){
+                this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                    response.json().then( json => callback(json, json.length));
+                }
+                descricaoTextfield.value="";
+            }              
+        }).catch(erro =>{
+            this.showDialog("Erro na conexão como Servidor!");
+            console.log(erro.message);
+        });  
+    }
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
         grid.dataProvider =(params, callback) =>{
@@ -193,12 +219,14 @@ export default class ProdutosView extends HTMLElement{
         let referenciaField = this.querySelector('#referencia');
         let custoField = this.querySelector('#custo');
         let vendaField = this.querySelector('#venda');
+        let quantidadeField = this.querySelector('#quantidade');
         if(option){
             idField.value = "";
             descricaoField.value = "";
             referenciaField.value= "";
             custoField.value= "";
             vendaField.value= "";
+            quantidadeField.value=1;
         }else{
             descricaoField.readonly = false;
             referenciaField.disabled= false;
@@ -208,9 +236,9 @@ export default class ProdutosView extends HTMLElement{
         
     }
     getJson(){
-        const produto = new Produto(this.querySelector('#id').value, this.querySelector('#descricao').value,
+        const produto = new Produto(this.querySelector('#id').value, this.querySelector('#descricao').value.trim(),
             this.querySelector('#referencia').value, this.querySelector('#custo').value, this.querySelector('#venda').value,
-            this.querySelector('vaadin-combo-box').value);   
+            this.querySelector('#quantidade').value,this.querySelector('vaadin-combo-box').value);   
         return produto.json;
     }
     attachComboBox(){

@@ -27,6 +27,10 @@ export default class VappEstoque extends HTMLElement{
             <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
             <vaadin-combo-box required label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
             <vaadin-form-item>
+                <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição" id="findDescricao" clear-button-visible></vaadin-text-field>
+                <vaadin-button theme="primary" id="btnSalvar" @click=${_ => this.findByDescricao()}>Buscar por Descricao <iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
+            </vaadin-form-item> 
+            <vaadin-form-item>
                 <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
@@ -85,10 +89,8 @@ export default class VappEstoque extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
-                            json => callback(json, json.length)
-                        ));
-                    }
+                       response.json().then(json => callback(json, json.length));
+                    }                    
                     this.showDialog("Estoque salvo com sucesso!");
                     this.editionField(true);
                     this.disabledInsercao(true);
@@ -105,9 +107,7 @@ export default class VappEstoque extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
-                            json => callback(json, json.length)
-                        ));
+                        response.json().then(json => callback(json, json.length));
                     }
                     this.showDialog("Estoque alterado com sucesso!");
                     this.editionField(true);
@@ -124,9 +124,7 @@ export default class VappEstoque extends HTMLElement{
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
-                            json => callback(json, json.length)
-                        ));
+                        response.json().then(json => callback(json, json.length));
                     }      
                     this.showDialog("Estoque delatado com sucesso!");
                     this.editionField(true);
@@ -140,6 +138,21 @@ export default class VappEstoque extends HTMLElement{
     cancelar(){
         this.editionField(true);
         this.disabledInsercao(true);
+    }
+    findByDescricao(){
+        let descricaoTextfield = this.querySelector('#findDescricao');    
+        let data = JSON.stringify({descricao: descricaoTextfield.value});
+        this.service.postServices("http://localhost:8080/resources/produtosFindByDescricao", data)
+        .then(response =>{ 
+            if(response.ok){
+                this.querySelector('#produtos').dataProvider = (params, callback) =>{
+                    response.json().then( json => callback(json, json.length));
+                }
+            }              
+        }).catch(erro =>{
+            this.showDialog("Erro na conexão como Servidor!");
+            console.log(erro.message);
+        });
     }
     showDialog(message){
         customElements.whenDefined('vaadin-dialog').then(_ =>{
@@ -169,6 +182,7 @@ export default class VappEstoque extends HTMLElement{
                 );
             }
         });
+        console.log(this.querySelector("#produtos").items)
     }
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
@@ -180,7 +194,6 @@ export default class VappEstoque extends HTMLElement{
     getJson(){
         const estoque= new Estoque(this.querySelector('#id').value, this.querySelector('#quantidade').value,
         this.querySelector("#produtos").value);
-        console.log(estoque.json);
         return estoque.json;
     }
     
