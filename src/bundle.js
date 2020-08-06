@@ -35611,6 +35611,749 @@
 
   customElements.define(DatePickerElement.is, DatePickerElement);
 
+  const $_documentContainer$v = html`<dom-module id="lumo-dialog" theme-for="vaadin-dialog-overlay">
+  <template>
+    <style include="lumo-overlay">
+      /* Optical centering */
+      :host::before,
+      :host::after {
+        content: "";
+        flex-basis: 0;
+        flex-grow: 1;
+      }
+
+      :host::after {
+        flex-grow: 1.1;
+      }
+
+      [part="overlay"] {
+        box-shadow: 0 0 0 1px var(--lumo-shade-5pct), var(--lumo-box-shadow-xl);
+        background-image: none;
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      [part="content"] {
+        padding: var(--lumo-space-l);
+      }
+
+      /* Animations */
+
+      :host([opening]),
+      :host([closing]) {
+        animation: 0.25s lumo-overlay-dummy-animation;
+      }
+
+      :host([opening]) [part="overlay"] {
+        animation: 0.12s 0.05s vaadin-dialog-enter cubic-bezier(.215, .61, .355, 1) both;
+      }
+
+      @keyframes vaadin-dialog-enter {
+        0% {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+      }
+
+      :host([closing]) [part="overlay"] {
+        animation: 0.1s 0.03s vaadin-dialog-exit cubic-bezier(.55, .055, .675, .19) both;
+      }
+
+      :host([closing]) [part="backdrop"] {
+        animation-delay: 0.05s;
+      }
+
+      @keyframes vaadin-dialog-exit {
+        100% {
+          opacity: 0;
+          transform: scale(1.02);
+        }
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$v.content);
+
+  const TOUCH_DEVICE = (() => {
+    try {
+      document.createEvent('TouchEvent');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  /**
+   * @polymerMixin
+   */
+  const DialogDraggableMixin = (superClass) =>
+    class VaadinDialogDraggableMixin extends superClass {
+      static get properties() {
+        return {
+          _touchDevice: {
+            type: Boolean,
+            value: TOUCH_DEVICE
+          }
+        };
+      }
+
+      ready() {
+        super.ready();
+        this._originalBounds = {};
+        this._originalMouseCoords = {};
+        this._startDrag = this._startDrag.bind(this);
+        this._drag = this._drag.bind(this);
+        this._stopDrag = this._stopDrag.bind(this);
+        this.$.overlay.$.overlay.addEventListener('mousedown', this._startDrag);
+        this.$.overlay.$.overlay.addEventListener('touchstart', this._startDrag);
+      }
+
+      _startDrag(e) {
+        // Don't initiate when there's more than 1 touch (pinch zoom)
+        if (e.type === 'touchstart' && e.touches.length > 1) {
+          return;
+        }
+
+        if (this.draggable && (e.button === 0 || e.touches)) {
+          const resizerContainer = this.$.overlay.$.resizerContainer;
+          const isResizerContainer = e.target === resizerContainer;
+          const isResizerContainerScrollbar = e.offsetX > resizerContainer.clientWidth || e.offsetY > resizerContainer.clientHeight;
+          const isContentPart = e.target === this.$.overlay.$.content;
+          const isDraggable = e.target.classList.contains('draggable');
+          if ((isResizerContainer && !isResizerContainerScrollbar) || isContentPart || isDraggable) {
+            !isDraggable && e.preventDefault();
+            this._originalBounds = this._getOverlayBounds();
+            const event = this.__getMouseOrFirstTouchEvent(e);
+            this._originalMouseCoords = {top: event.pageY, left: event.pageX};
+            window.addEventListener('mouseup', this._stopDrag);
+            window.addEventListener('touchend', this._stopDrag);
+            window.addEventListener('mousemove', this._drag);
+            window.addEventListener('touchmove', this._drag);
+            if (this.$.overlay.$.overlay.style.position !== 'absolute') {
+              this._setBounds(this._originalBounds);
+            }
+          }
+        }
+      }
+
+      _drag(e) {
+        const event = this.__getMouseOrFirstTouchEvent(e);
+        if (this._eventInWindow(event)) {
+          const top = this._originalBounds.top + (event.pageY - this._originalMouseCoords.top);
+          const left = this._originalBounds.left + (event.pageX - this._originalMouseCoords.left);
+          this._setBounds({top, left});
+        }
+      }
+
+      _stopDrag() {
+        window.removeEventListener('mouseup', this._stopDrag);
+        window.removeEventListener('touchend', this._stopDrag);
+        window.removeEventListener('mousemove', this._drag);
+        window.removeEventListener('touchmove', this._drag);
+      }
+    };
+
+  const $_documentContainer$w = document.createElement('template');
+
+  $_documentContainer$w.innerHTML = `<dom-module id="vaadin-dialog-resizable-overlay-styles" theme-for="vaadin-dialog-overlay">
+  <template>
+    <style>
+      [part='overlay'] {
+        position: relative;
+        overflow: visible;
+        max-height: 100%;
+        display: flex;
+      }
+
+      [part='content'] {
+        box-sizing: border-box;
+        height: 100%;
+      }
+
+      .resizer-container {
+        overflow: auto;
+        flex-grow: 1;
+      }
+
+      [part='overlay'][style] .resizer-container {
+        height: 100%;
+        width: 100%;
+      }
+
+      :host(:not([resizable])) .resizer {
+        display: none;
+      }
+
+      .resizer {
+        position: absolute;
+        height: 16px;
+        width: 16px;
+      }
+
+      .resizer.edge {
+        height: 8px;
+        width: 8px;
+        top: -4px;
+        right: -4px;
+        bottom: -4px;
+        left: -4px;
+      }
+
+      .resizer.edge.n {
+        width: auto;
+        bottom: auto;
+        cursor: ns-resize;
+      }
+
+      .resizer.ne {
+        top: -4px;
+        right: -4px;
+        cursor: nesw-resize;
+      }
+
+      .resizer.edge.e {
+        height: auto;
+        left: auto;
+        cursor: ew-resize;
+      }
+
+      .resizer.se {
+        bottom: -4px;
+        right: -4px;
+        cursor: nwse-resize;
+      }
+
+      .resizer.edge.s {
+        width: auto;
+        top: auto;
+        cursor: ns-resize;
+      }
+
+      .resizer.sw {
+        bottom: -4px;
+        left: -4px;
+        cursor: nesw-resize;
+      }
+
+      .resizer.edge.w {
+        height: auto;
+        right: auto;
+        cursor: ew-resize;
+      }
+
+      .resizer.nw {
+        top: -4px;
+        left: -4px;
+        cursor: nwse-resize;
+      }
+
+      /* IE11 -only CSS */
+      _:-ms-fullscreen,
+      [part='overlay'] {
+        max-height: none;
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$w.content);
+
+  /**
+   * @polymerMixin
+   */
+  const DialogResizableMixin = (superClass) =>
+    class VaadinDialogResizableMixin extends superClass {
+      ready() {
+        super.ready();
+        this._originalBounds = {};
+        this._originalMouseCoords = {};
+        this._resizeListeners = {start: {}, resize: {}, stop: {}};
+        this._addResizeListeners();
+      }
+
+      _addResizeListeners() {
+        // Note: edge controls added before corners
+        ['n', 'e', 's', 'w', 'nw', 'ne', 'se', 'sw'].forEach((direction) => {
+          const resizer = document.createElement('div');
+          this._resizeListeners.start[direction] = (e) => this._startResize(e, direction);
+          this._resizeListeners.resize[direction] = (e) => this._resize(e, direction);
+          this._resizeListeners.stop[direction] = () => this._stopResize(direction);
+          if (direction.length === 1) {
+            resizer.classList.add('edge');
+          }
+          resizer.classList.add('resizer');
+          resizer.classList.add(direction);
+          resizer.addEventListener('mousedown', this._resizeListeners.start[direction]);
+          resizer.addEventListener('touchstart', this._resizeListeners.start[direction]);
+          this.$.overlay.$.resizerContainer.appendChild(resizer);
+        });
+      }
+
+      _startResize(e, direction) {
+        // Don't initiate when there's more than 1 touch (pinch zoom)
+        if (e.type === 'touchstart' && e.touches.length > 1) {
+          return;
+        }
+
+        if (e.button === 0 || e.touches) {
+          e.preventDefault();
+          this._originalBounds = this._getOverlayBounds();
+          const event = this.__getMouseOrFirstTouchEvent(e);
+          this._originalMouseCoords = {top: event.pageY, left: event.pageX};
+          window.addEventListener('mousemove', this._resizeListeners.resize[direction]);
+          window.addEventListener('touchmove', this._resizeListeners.resize[direction]);
+          window.addEventListener('mouseup', this._resizeListeners.stop[direction]);
+          window.addEventListener('touchend', this._resizeListeners.stop[direction]);
+          if (this.$.overlay.$.overlay.style.position !== 'absolute') {
+            this._setBounds(this._originalBounds);
+          }
+        }
+      }
+
+      _resize(e, resizer) {
+        const event = this.__getMouseOrFirstTouchEvent(e);
+        if (this._eventInWindow(event)) {
+          const minimumSize = 40;
+          resizer.split('').forEach((direction) => {
+            switch (direction) {
+              case 'n': {
+                const height = this._originalBounds.height - (event.pageY - this._originalMouseCoords.top);
+                const top = this._originalBounds.top + (event.pageY - this._originalMouseCoords.top);
+                if (height > minimumSize) {
+                  this._setBounds({top, height});
+                }
+                break;
+              }
+              case 'e': {
+                const width = this._originalBounds.width + (event.pageX - this._originalMouseCoords.left);
+                if (width > minimumSize) {
+                  this._setBounds({width});
+                }
+                break;
+              }
+              case 's': {
+                const height = this._originalBounds.height + (event.pageY - this._originalMouseCoords.top);
+                if (height > minimumSize) {
+                  this._setBounds({height});
+                }
+                break;
+              }
+              case 'w': {
+                const width = this._originalBounds.width - (event.pageX - this._originalMouseCoords.left);
+                const left = this._originalBounds.left + (event.pageX - this._originalMouseCoords.left);
+                if (width > minimumSize) {
+                  this._setBounds({left, width});
+                }
+                break;
+              }
+            }
+          });
+          this.$.overlay.notifyResize();
+        }
+      }
+
+      _stopResize(direction) {
+        window.removeEventListener('mousemove', this._resizeListeners.resize[direction]);
+        window.removeEventListener('touchmove', this._resizeListeners.resize[direction]);
+        window.removeEventListener('mouseup', this._resizeListeners.stop[direction]);
+        window.removeEventListener('touchend', this._resizeListeners.stop[direction]);
+        this.dispatchEvent(new CustomEvent('resize', {detail: this._getResizeDimensions()}));
+      }
+
+      _getResizeDimensions() {
+        const {width, height} = getComputedStyle(this.$.overlay.$.overlay);
+        const content = this.$.overlay.$.content;
+        content.setAttribute('style', 'position: absolute; top: 0; right: 0; bottom: 0; left: 0; box-sizing: content-box; height: auto;');
+        const {width: contentWidth, height: contentHeight} = getComputedStyle(content);
+        content.removeAttribute('style');
+        return {width, height, contentWidth, contentHeight};
+      }
+    };
+
+  /**
+  @license
+  Copyright (c) 2017 Vaadin Ltd.
+  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
+  */
+  const $_documentContainer$x = document.createElement('template');
+
+  $_documentContainer$x.innerHTML = `<dom-module id="vaadin-dialog-overlay-styles" theme-for="vaadin-dialog-overlay">
+  <template>
+    <style>
+      /*
+        NOTE(platosha): Make some min-width to prevent collapsing of the content
+        taking the parent width, e. g., <vaadin-grid> and such.
+      */
+      [part="content"] {
+        min-width: 12em; /* matches the default <vaadin-text-field> width */
+      }
+    </style>
+  </template>
+</dom-module>`;
+
+  document.head.appendChild($_documentContainer$x.content);
+  let memoizedTemplate$1;
+
+  /**
+   * The overlay element.
+   *
+   * ### Styling
+   *
+   * See [`<vaadin-overlay>` documentation](https://github.com/vaadin/vaadin-overlay/blob/master/src/vaadin-overlay.html)
+   * for `<vaadin-dialog-overlay>` parts.
+   *
+   * @extends PolymerElement
+   * @private
+   */
+  class DialogOverlayElement extends mixinBehaviors(IronResizableBehavior, OverlayElement) {
+    static get is() {
+      return 'vaadin-dialog-overlay';
+    }
+
+    static get template() {
+      if (!memoizedTemplate$1) {
+        memoizedTemplate$1 = super.template.cloneNode(true);
+        const contentPart = memoizedTemplate$1.content.querySelector('[part="content"]');
+        const overlayPart = memoizedTemplate$1.content.querySelector('[part="overlay"]');
+        const resizerContainer = document.createElement('div');
+        resizerContainer.id = 'resizerContainer';
+        resizerContainer.classList.add('resizer-container');
+        resizerContainer.appendChild(contentPart);
+        overlayPart.appendChild(resizerContainer);
+      }
+      return memoizedTemplate$1;
+    }
+
+    static get properties() {
+      return {
+        modeless: Boolean,
+
+        withBackdrop: Boolean
+      };
+    }
+  }
+
+  customElements.define(DialogOverlayElement.is, DialogOverlayElement);
+
+
+  /**
+   *
+   * `<vaadin-dialog>` is a Web Component for creating customized modal dialogs. The content of the
+   * dialog can be populated in two ways: imperatively by using renderer callback function and
+   * declaratively by using Polymer's Templates.
+   *
+   * ### Rendering
+   *
+   * By default, the dialog uses the content provided by using the renderer callback function.
+   *
+   * The renderer function provides `root`, `dialog` arguments.
+   * Generate DOM content, append it to the `root` element and control the state
+   * of the host element by accessing `dialog`. Before generating new content,
+   * users are able to check if there is already content in `root` for reusing it.
+   *
+   * ```html
+   * <vaadin-dialog id="dialog"></vaadin-dialog>
+   * ```
+   * ```js
+   * const dialog = document.querySelector('#dialog');
+   * dialog.renderer = function(root, dialog) {
+   *   root.textContent = "Sample dialog";
+   * };
+   * ```
+   *
+   * Renderer is called on the opening of the dialog.
+   * DOM generated during the renderer call can be reused
+   * in the next renderer call and will be provided with the `root` argument.
+   * On first call it will be empty.
+   *
+   * ### Polymer Templates
+   *
+   * Alternatively, the content can be provided with Polymer's Template.
+   * Dialog finds the first child template and uses that in case renderer callback function
+   * is not provided. You can also set a custom template using the `template` property.
+   *
+   * ```html
+   * <vaadin-dialog opened>
+   *   <template>
+   *     Sample dialog
+   *   </template>
+   * </vaadin-dialog>
+   * ```
+   *
+   * ### Styling
+   *
+   * See [`<vaadin-overlay>` documentation](https://github.com/vaadin/vaadin-overlay/blob/master/src/vaadin-overlay.html)
+   * for `<vaadin-dialog-overlay>` parts.
+   *
+   * Note: the `theme` attribute value set on `<vaadin-dialog>` is
+   * propagated to the internal `<vaadin-dialog-overlay>` component.
+   *
+   * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
+   *
+   * @extends PolymerElement
+   * @mixes ElementMixin
+   * @mixes ThemePropertyMixin
+   * @demo demo/index.html
+   */
+  class DialogElement extends
+    ThemePropertyMixin(
+      ElementMixin$1(
+        DialogDraggableMixin(
+          DialogResizableMixin(
+            PolymerElement)))) {
+    static get template() {
+      return html`
+    <style>
+      :host {
+        display: none;
+      }
+    </style>
+
+    <vaadin-dialog-overlay id="overlay" on-opened-changed="_onOverlayOpened" on-mousedown="_bringOverlayToFront" on-touchstart="_bringOverlayToFront" theme\$="[[theme]]" modeless="[[modeless]]" with-backdrop="[[!modeless]]" resizable\$="[[resizable]]" focus-trap="">
+    </vaadin-dialog-overlay>
+`;
+    }
+
+    static get is() {
+      return 'vaadin-dialog';
+    }
+
+    static get version() {
+      return '2.4.2';
+    }
+
+    static get properties() {
+      return {
+        /**
+         * True if the overlay is currently displayed.
+         */
+        opened: {
+          type: Boolean,
+          value: false,
+          notify: true
+        },
+
+        /**
+         * Set to true to disable closing dialog on outside click
+         */
+        noCloseOnOutsideClick: {
+          type: Boolean,
+          value: false
+        },
+
+        /**
+         * Set to true to disable closing dialog on Escape press
+         */
+        noCloseOnEsc: {
+          type: Boolean,
+          value: false
+        },
+
+        /**
+         * Set the `aria-label` attribute for assistive technologies like
+         * screen readers. An `undefined` value for this property (the
+         * default) means that the `aria-label` attribute is not present at
+         * all.
+         */
+        ariaLabel: {
+          type: String
+        },
+
+        /**
+         * Theme to apply to the overlay element
+         */
+        theme: String,
+
+        _contentTemplate: Object,
+
+        /**
+         * Custom function for rendering the content of the dialog.
+         * Receives two arguments:
+         *
+         * - `root` The root container DOM element. Append your content to it.
+         * - `dialog` The reference to the `<vaadin-dialog>` element.
+         */
+        renderer: Function,
+
+        /**
+         * Set to true to remove backdrop and allow click events on background elements.
+         */
+        modeless: {
+          type: Boolean,
+          value: false
+        },
+
+        /**
+         * Set to true to enable repositioning the dialog by clicking and dragging.
+         *
+         * By default, only the overlay area can be used to drag the element. But,
+         * a child element can be marked as a draggable area by adding a
+         * "`draggable`" class to it.
+         */
+        draggable: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true
+        },
+
+        /**
+         * Set to true to enable resizing the dialog by dragging the corners and edges.
+         */
+        resizable: {
+          type: Boolean,
+          value: false,
+          reflectToAttribute: true
+        },
+
+        _oldTemplate: Object,
+
+        _oldRenderer: Object
+      };
+    }
+
+    static get observers() {
+      return [
+        '_openedChanged(opened)',
+        '_ariaLabelChanged(ariaLabel)',
+        '_templateOrRendererChanged(_contentTemplate, renderer)'
+      ];
+    }
+
+    ready() {
+      super.ready();
+      this.$.overlay.setAttribute('role', 'dialog');
+      this.$.overlay.addEventListener('vaadin-overlay-outside-click', this._handleOutsideClick.bind(this));
+      this.$.overlay.addEventListener('vaadin-overlay-escape-press', this._handleEscPress.bind(this));
+
+      this._observer = new FlattenedNodesObserver(this, info => {
+        this._setTemplateFromNodes(info.addedNodes);
+      });
+    }
+
+    _setTemplateFromNodes(nodes) {
+      this._contentTemplate = nodes.filter(node => node.localName && node.localName === 'template')[0] || this._contentTemplate;
+    }
+
+    _removeNewRendererOrTemplate(template, oldTemplate, renderer, oldRenderer) {
+      if (template !== oldTemplate) {
+        this._contentTemplate = undefined;
+      } else if (renderer !== oldRenderer) {
+        this.renderer = undefined;
+      }
+    }
+
+    /**
+     * Manually invoke existing renderer.
+     */
+    render() {
+      this.$.overlay.render();
+    }
+
+    _templateOrRendererChanged(template, renderer) {
+      if (template && renderer) {
+        this._removeNewRendererOrTemplate(template, this._oldTemplate, renderer, this._oldRenderer);
+        throw new Error('You should only use either a renderer or a template for dialog content');
+      }
+
+      this._oldTemplate = template;
+      this._oldRenderer = renderer;
+
+      if (renderer) {
+        this.$.overlay.setProperties({owner: this, renderer: renderer});
+      }
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.opened = false;
+    }
+
+    _openedChanged(opened) {
+      if (opened) {
+        this.$.overlay.template = this.querySelector('template');
+      }
+      this.$.overlay.opened = opened;
+    }
+
+    _ariaLabelChanged(ariaLabel) {
+      if (ariaLabel !== undefined && ariaLabel !== null) {
+        this.$.overlay.setAttribute('aria-label', ariaLabel);
+      } else {
+        this.$.overlay.removeAttribute('aria-label');
+      }
+    }
+
+    _onOverlayOpened(e) {
+      if (e.detail.value === false) {
+        this.opened = false;
+      }
+    }
+
+    /**
+     * Close the dialog if `noCloseOnOutsideClick` isn't set to true
+     */
+    _handleOutsideClick(e) {
+      if (this.noCloseOnOutsideClick) {
+        e.preventDefault();
+      }
+    }
+
+    /**
+     * Close the dialog if `noCloseOnEsc` isn't set to true
+     */
+    _handleEscPress(e) {
+      if (this.noCloseOnEsc) {
+        e.preventDefault();
+      }
+    }
+
+    _setBounds(bounds) {
+      const overlay = this.$.overlay.$.overlay;
+      const parsedBounds = Object.assign({}, bounds);
+
+      if (overlay.style.position !== 'absolute') {
+        overlay.style.position = 'absolute';
+        overlay.style.maxWidth = 'none';
+      }
+
+      for (const arg in parsedBounds) {
+        if (typeof parsedBounds[arg] === 'number') {
+          parsedBounds[arg] = `${parsedBounds[arg]}px`;
+        }
+      }
+
+      Object.assign(overlay.style, parsedBounds);
+    }
+
+    _bringOverlayToFront() {
+      if (this.modeless) {
+        this.$.overlay.bringToFront();
+      }
+    }
+
+    _getOverlayBounds() {
+      const overlay = this.$.overlay.$.overlay;
+      const overlayBounds = overlay.getBoundingClientRect();
+      const containerBounds = this.$.overlay.getBoundingClientRect();
+      const top = overlayBounds.top - containerBounds.top;
+      const left = overlayBounds.left - containerBounds.left;
+      const width = overlayBounds.width;
+      const height = overlayBounds.height;
+      return {top, left, width, height};
+    }
+
+    _eventInWindow(e) {
+      return e.clientX >= 0 && e.clientX <= window.innerWidth && e.clientY >= 0 && e.clientY <= window.innerHeight;
+    }
+
+    __getMouseOrFirstTouchEvent(e) {
+      return e.touches ? e.touches[0] : e;
+    }
+  }
+
+  customElements.define(DialogElement.is, DialogElement);
+
   class Services{
       message(){
           return "Hello Campinas";    
@@ -35761,21 +36504,23 @@
           this.callServer();
           this.attachDate();
           this.attachComboBox();
+          this.athachComboxListener();
       }
       callServer(){
           const templete = html$1 `
+        <vaadin-dialog aria-label="simple"></vaadin-dialog>
         <vaadin-form-layout>
-            <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>
-            <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
-            <vaadin-date-picker label="Data da Compra" id="dataCompra"></vaadin-date-picker>
-            <vaadin-date-picker label="Data Pagamento" id="dataPagamento"></vaadin-date-picker>
+            <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>            
+            <vaadin-date-picker required label="Data da Compra" id="dataCompra" error-message="A data da Compra não pode ser nulo!"></vaadin-date-picker>
+            <vaadin-date-picker required label="Data Pagamento" id="dataPagamento" error-message="A data do Pagamento não pode ser nulo!"></vaadin-date-picker>
             <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
-            <vaadin-combo-box label="Cliente" item-label-path="nome" item-value-path="id" id="clientes"></vaadin-combo-box>
+            <vaadin-combo-box required label="Cliente" item-label-path="nome" item-value-path="id" id="clientes" error-message="O Cliente não pode ser nulo!"></vaadin-combo-box>
             <vaadin-form-item>
                 <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição do Produto" id="findDescricao" clear-button-visible></vaadin-text-field>
                 <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
             </vaadin-form-item>
-            <vaadin-combo-box label="Produto" item-label-path="descricao" item-value-path="id" id="produtos"></vaadin-combo-box>
+            <vaadin-combo-box required label="Produto" item-label-path="descricao" item-value-path="id" id="produtos" error-message="O produto não pode ser nulo!"></vaadin-combo-box>
+            <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
             <vaadin-form-item>
                 <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Iniciar Venda</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Contiunar Vendendo</vaadin-button>
@@ -35784,8 +36529,9 @@
             </vaadin-form-item>
         </vaadin-form-layout>
         <vaadin-grid>
-            <vaadin-grid-column path="produto.id" header="Código" width="15%"></vaadin-grid-column>
-            <vaadin-grid-column path="produto.descricao" header="Descrição"></vaadin-grid-column>
+            <vaadin-grid-column path="id" header="Código" width="10%" id="idCompra"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.id" header="Código Produto" width="10%"></vaadin-grid-column>
+            <vaadin-grid-column path="produto.descricao" header="Descrição" width="10%"></vaadin-grid-column>
             <vaadin-grid-column path= "produto.categoria.descricao" header="Categoria"></vaadin-grid-column>
             <vaadin-grid-column path="produto.codigoBarra" header="Referência"></vaadin-grid-column>
             <vaadin-grid-column path="produto.preco" header="Preço"></vaadin-grid-column>
@@ -35794,26 +36540,37 @@
           render(templete, this);
       }
       salvar(){
-          this.service.postServices("http://localhost:8080/resources/venda", this.getJson())
-          .then(response =>{ 
-              if(response.ok){
-                  this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                      response.json().then(json => callback(json, json.length));
-                  };
-                  this.showDialog("Venda salva com sucesso!");
-                  this.editionField(true);
-                  this.disabledInsercao(true);
-              }              
-          }).catch(erro =>{
-              this.showDialog("Erro na conexão como Servidor!");
-              console.log(erro.message);
-          });  
+          if(this.querySelector('#dataCompra').validate() && this.querySelector('#dataPagamento').validate() && 
+              this.querySelector('#produtos').validate() && this.querySelector('#clientes').validate()){
+                  this.service.postServices("http://localhost:8080/resources/venda", this.getJson())
+                  .then(response =>{ 
+                      if(response.ok){
+                          this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
+                              response.json().then(json => {callback(json, json.length);
+                                  let data = JSON.stringify(json);
+                                  this.querySelector('#id').value = data[0].id;
+                              });
+                          };
+                      this.showDialog("Venda salva com sucesso!");
+                      this.editionField(false);
+                      this.disabledInsercao(true);
+                      this.setIdCompra();
+                  }              
+              }).catch(erro =>{
+                  this.showDialog("Erro na conexão como Servidor!");
+                  console.log(erro.message);
+              }); 
+          }
       }
       deletar(){
 
       }
       editar(){
-
+          this.querySelector('#id').value = this.querySelector('#idCompra').value;
+          console.log(this.querySelector('#idCompra').selectedItems);
+      }
+      setIdCompra(){
+          this.querySelector('#id').value = this.querySelector('#idCompra').value;
       }
       cancelar(){
 
@@ -35835,6 +36592,39 @@
               console.log(erro.message);
           });  
       }
+      athachComboxListener(){
+          this.querySelector('#quantidade').addEventListener('click', _ =>{
+              console.log( this.querySelector('#produtos').value);
+              this.service.getServicesJson('http://localhost:8080/resources/produto/'+ this.querySelector('#produtos').value)
+              .then(json =>{
+                  if(this.querySelector('#quantidade').value > json.quantidade){
+                      this.showDialog('Quantidade excede o total dos produtos em Estoque');
+                      this.querySelector('#btnSalvar').disabled = true;
+                  }else {
+                      this.querySelector('#btnSalvar').disabled = false;
+                  }
+              });
+          });
+      }
+      editionField(option){
+          let dtCompraField = this.querySelector('#dataCompra');
+          let dtPagamentoField = this.querySelector('#dataPagamento');
+          let valorPagoField = this.querySelector('#valorPago');
+          let clientesField = this.querySelector('#clientes');
+          let quantidadeField = this.querySelector('#quantidade');
+          if(option){
+              idField.value = "";
+              dtCompraField.value = "";
+              dtPagamentoField.value= "";
+              valorPagoField.value= "";
+              quantidadeField.value=1;
+          }else {
+              dtCompraField.readonly = true;
+              dtPagamentoField.readonly = true;
+              clientesField.readonly= true;
+              custoField.disabled = false;
+          }
+      }
       attachDate(){
           this.querySelector('#dataCompra').i18n=DataFormat.data;
           this.querySelector('#dataPagamento').i18n=DataFormat.data;
@@ -35847,6 +36637,15 @@
               }; 
           });
       }
+      showDialog(message){
+          customElements.whenDefined('vaadin-dialog').then(_ =>{
+              const dialog = this.querySelector('vaadin-dialog');
+              dialog.renderer= function(root, dialog){
+                  root.textContent=message;
+              };
+              dialog.opened =true;
+          });          
+      }
       getJson(){
           console.log(this.querySelector('#produtos').value);
           const venda = new Vendas(this.querySelector('#id').value, this.querySelector('#dataCompra').value, 
@@ -35858,7 +36657,7 @@
   }
   customElements.define('vapp-vendas-view',VappVendas);
 
-  const $_documentContainer$v = html`<dom-module id="lumo-custom-field" theme-for="vaadin-custom-field">
+  const $_documentContainer$y = html`<dom-module id="lumo-custom-field" theme-for="vaadin-custom-field">
   <template>
     <style include="lumo-required-field">
       :host {
@@ -35937,7 +36736,7 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$v.content);
+  document.head.appendChild($_documentContainer$y.content);
 
   /**
    * @polymerMixin
@@ -36372,7 +37171,7 @@
 
   customElements.define(CustomFieldElement.is, CustomFieldElement);
 
-  const $_documentContainer$w = html`<dom-module id="lumo-email-field" theme-for="vaadin-email-field">
+  const $_documentContainer$z = html`<dom-module id="lumo-email-field" theme-for="vaadin-email-field">
   <template>
     <style>
       :not(*):placeholder-shown, /* to prevent broken styles on IE */
@@ -36389,16 +37188,16 @@
   </template>
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$w.content);
+  document.head.appendChild($_documentContainer$z.content);
 
   /**
   @license
   Copyright (c) 2018 Vaadin Ltd.
   This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
   */
-  const $_documentContainer$x = document.createElement('template');
+  const $_documentContainer$A = document.createElement('template');
 
-  $_documentContainer$x.innerHTML = `<dom-module id="vaadin-email-field-template">
+  $_documentContainer$A.innerHTML = `<dom-module id="vaadin-email-field-template">
   <template>
     <style>
       :host([dir="rtl"]) [part="input-field"] {
@@ -36425,8 +37224,8 @@
   
 </dom-module>`;
 
-  document.head.appendChild($_documentContainer$x.content);
-  let memoizedTemplate$1;
+  document.head.appendChild($_documentContainer$A.content);
+  let memoizedTemplate$2;
 
   /**
    * `<vaadin-email-field>` is a Web Component for email field control in forms.
@@ -36455,19 +37254,19 @@
     }
 
     static get template() {
-      if (!memoizedTemplate$1) {
+      if (!memoizedTemplate$2) {
         // Clone the superclass template
-        memoizedTemplate$1 = super.template.cloneNode(true);
+        memoizedTemplate$2 = super.template.cloneNode(true);
 
         // Retrieve this element's dom-module template
         const thisTemplate = DomModule.import(this.is + '-template', 'template');
         const styles = thisTemplate.content.querySelector('style');
 
         // Add the and styles to the text-field template
-        memoizedTemplate$1.content.appendChild(styles);
+        memoizedTemplate$2.content.appendChild(styles);
       }
 
-      return memoizedTemplate$1;
+      return memoizedTemplate$2;
     }
 
     ready() {
@@ -36485,749 +37284,6 @@
   }
 
   customElements.define(EmailFieldElement.is, EmailFieldElement);
-
-  const $_documentContainer$y = html`<dom-module id="lumo-dialog" theme-for="vaadin-dialog-overlay">
-  <template>
-    <style include="lumo-overlay">
-      /* Optical centering */
-      :host::before,
-      :host::after {
-        content: "";
-        flex-basis: 0;
-        flex-grow: 1;
-      }
-
-      :host::after {
-        flex-grow: 1.1;
-      }
-
-      [part="overlay"] {
-        box-shadow: 0 0 0 1px var(--lumo-shade-5pct), var(--lumo-box-shadow-xl);
-        background-image: none;
-        outline: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-
-      [part="content"] {
-        padding: var(--lumo-space-l);
-      }
-
-      /* Animations */
-
-      :host([opening]),
-      :host([closing]) {
-        animation: 0.25s lumo-overlay-dummy-animation;
-      }
-
-      :host([opening]) [part="overlay"] {
-        animation: 0.12s 0.05s vaadin-dialog-enter cubic-bezier(.215, .61, .355, 1) both;
-      }
-
-      @keyframes vaadin-dialog-enter {
-        0% {
-          opacity: 0;
-          transform: scale(0.95);
-        }
-      }
-
-      :host([closing]) [part="overlay"] {
-        animation: 0.1s 0.03s vaadin-dialog-exit cubic-bezier(.55, .055, .675, .19) both;
-      }
-
-      :host([closing]) [part="backdrop"] {
-        animation-delay: 0.05s;
-      }
-
-      @keyframes vaadin-dialog-exit {
-        100% {
-          opacity: 0;
-          transform: scale(1.02);
-        }
-      }
-    </style>
-  </template>
-</dom-module>`;
-
-  document.head.appendChild($_documentContainer$y.content);
-
-  const TOUCH_DEVICE = (() => {
-    try {
-      document.createEvent('TouchEvent');
-      return true;
-    } catch (e) {
-      return false;
-    }
-  })();
-
-  /**
-   * @polymerMixin
-   */
-  const DialogDraggableMixin = (superClass) =>
-    class VaadinDialogDraggableMixin extends superClass {
-      static get properties() {
-        return {
-          _touchDevice: {
-            type: Boolean,
-            value: TOUCH_DEVICE
-          }
-        };
-      }
-
-      ready() {
-        super.ready();
-        this._originalBounds = {};
-        this._originalMouseCoords = {};
-        this._startDrag = this._startDrag.bind(this);
-        this._drag = this._drag.bind(this);
-        this._stopDrag = this._stopDrag.bind(this);
-        this.$.overlay.$.overlay.addEventListener('mousedown', this._startDrag);
-        this.$.overlay.$.overlay.addEventListener('touchstart', this._startDrag);
-      }
-
-      _startDrag(e) {
-        // Don't initiate when there's more than 1 touch (pinch zoom)
-        if (e.type === 'touchstart' && e.touches.length > 1) {
-          return;
-        }
-
-        if (this.draggable && (e.button === 0 || e.touches)) {
-          const resizerContainer = this.$.overlay.$.resizerContainer;
-          const isResizerContainer = e.target === resizerContainer;
-          const isResizerContainerScrollbar = e.offsetX > resizerContainer.clientWidth || e.offsetY > resizerContainer.clientHeight;
-          const isContentPart = e.target === this.$.overlay.$.content;
-          const isDraggable = e.target.classList.contains('draggable');
-          if ((isResizerContainer && !isResizerContainerScrollbar) || isContentPart || isDraggable) {
-            !isDraggable && e.preventDefault();
-            this._originalBounds = this._getOverlayBounds();
-            const event = this.__getMouseOrFirstTouchEvent(e);
-            this._originalMouseCoords = {top: event.pageY, left: event.pageX};
-            window.addEventListener('mouseup', this._stopDrag);
-            window.addEventListener('touchend', this._stopDrag);
-            window.addEventListener('mousemove', this._drag);
-            window.addEventListener('touchmove', this._drag);
-            if (this.$.overlay.$.overlay.style.position !== 'absolute') {
-              this._setBounds(this._originalBounds);
-            }
-          }
-        }
-      }
-
-      _drag(e) {
-        const event = this.__getMouseOrFirstTouchEvent(e);
-        if (this._eventInWindow(event)) {
-          const top = this._originalBounds.top + (event.pageY - this._originalMouseCoords.top);
-          const left = this._originalBounds.left + (event.pageX - this._originalMouseCoords.left);
-          this._setBounds({top, left});
-        }
-      }
-
-      _stopDrag() {
-        window.removeEventListener('mouseup', this._stopDrag);
-        window.removeEventListener('touchend', this._stopDrag);
-        window.removeEventListener('mousemove', this._drag);
-        window.removeEventListener('touchmove', this._drag);
-      }
-    };
-
-  const $_documentContainer$z = document.createElement('template');
-
-  $_documentContainer$z.innerHTML = `<dom-module id="vaadin-dialog-resizable-overlay-styles" theme-for="vaadin-dialog-overlay">
-  <template>
-    <style>
-      [part='overlay'] {
-        position: relative;
-        overflow: visible;
-        max-height: 100%;
-        display: flex;
-      }
-
-      [part='content'] {
-        box-sizing: border-box;
-        height: 100%;
-      }
-
-      .resizer-container {
-        overflow: auto;
-        flex-grow: 1;
-      }
-
-      [part='overlay'][style] .resizer-container {
-        height: 100%;
-        width: 100%;
-      }
-
-      :host(:not([resizable])) .resizer {
-        display: none;
-      }
-
-      .resizer {
-        position: absolute;
-        height: 16px;
-        width: 16px;
-      }
-
-      .resizer.edge {
-        height: 8px;
-        width: 8px;
-        top: -4px;
-        right: -4px;
-        bottom: -4px;
-        left: -4px;
-      }
-
-      .resizer.edge.n {
-        width: auto;
-        bottom: auto;
-        cursor: ns-resize;
-      }
-
-      .resizer.ne {
-        top: -4px;
-        right: -4px;
-        cursor: nesw-resize;
-      }
-
-      .resizer.edge.e {
-        height: auto;
-        left: auto;
-        cursor: ew-resize;
-      }
-
-      .resizer.se {
-        bottom: -4px;
-        right: -4px;
-        cursor: nwse-resize;
-      }
-
-      .resizer.edge.s {
-        width: auto;
-        top: auto;
-        cursor: ns-resize;
-      }
-
-      .resizer.sw {
-        bottom: -4px;
-        left: -4px;
-        cursor: nesw-resize;
-      }
-
-      .resizer.edge.w {
-        height: auto;
-        right: auto;
-        cursor: ew-resize;
-      }
-
-      .resizer.nw {
-        top: -4px;
-        left: -4px;
-        cursor: nwse-resize;
-      }
-
-      /* IE11 -only CSS */
-      _:-ms-fullscreen,
-      [part='overlay'] {
-        max-height: none;
-      }
-    </style>
-  </template>
-</dom-module>`;
-
-  document.head.appendChild($_documentContainer$z.content);
-
-  /**
-   * @polymerMixin
-   */
-  const DialogResizableMixin = (superClass) =>
-    class VaadinDialogResizableMixin extends superClass {
-      ready() {
-        super.ready();
-        this._originalBounds = {};
-        this._originalMouseCoords = {};
-        this._resizeListeners = {start: {}, resize: {}, stop: {}};
-        this._addResizeListeners();
-      }
-
-      _addResizeListeners() {
-        // Note: edge controls added before corners
-        ['n', 'e', 's', 'w', 'nw', 'ne', 'se', 'sw'].forEach((direction) => {
-          const resizer = document.createElement('div');
-          this._resizeListeners.start[direction] = (e) => this._startResize(e, direction);
-          this._resizeListeners.resize[direction] = (e) => this._resize(e, direction);
-          this._resizeListeners.stop[direction] = () => this._stopResize(direction);
-          if (direction.length === 1) {
-            resizer.classList.add('edge');
-          }
-          resizer.classList.add('resizer');
-          resizer.classList.add(direction);
-          resizer.addEventListener('mousedown', this._resizeListeners.start[direction]);
-          resizer.addEventListener('touchstart', this._resizeListeners.start[direction]);
-          this.$.overlay.$.resizerContainer.appendChild(resizer);
-        });
-      }
-
-      _startResize(e, direction) {
-        // Don't initiate when there's more than 1 touch (pinch zoom)
-        if (e.type === 'touchstart' && e.touches.length > 1) {
-          return;
-        }
-
-        if (e.button === 0 || e.touches) {
-          e.preventDefault();
-          this._originalBounds = this._getOverlayBounds();
-          const event = this.__getMouseOrFirstTouchEvent(e);
-          this._originalMouseCoords = {top: event.pageY, left: event.pageX};
-          window.addEventListener('mousemove', this._resizeListeners.resize[direction]);
-          window.addEventListener('touchmove', this._resizeListeners.resize[direction]);
-          window.addEventListener('mouseup', this._resizeListeners.stop[direction]);
-          window.addEventListener('touchend', this._resizeListeners.stop[direction]);
-          if (this.$.overlay.$.overlay.style.position !== 'absolute') {
-            this._setBounds(this._originalBounds);
-          }
-        }
-      }
-
-      _resize(e, resizer) {
-        const event = this.__getMouseOrFirstTouchEvent(e);
-        if (this._eventInWindow(event)) {
-          const minimumSize = 40;
-          resizer.split('').forEach((direction) => {
-            switch (direction) {
-              case 'n': {
-                const height = this._originalBounds.height - (event.pageY - this._originalMouseCoords.top);
-                const top = this._originalBounds.top + (event.pageY - this._originalMouseCoords.top);
-                if (height > minimumSize) {
-                  this._setBounds({top, height});
-                }
-                break;
-              }
-              case 'e': {
-                const width = this._originalBounds.width + (event.pageX - this._originalMouseCoords.left);
-                if (width > minimumSize) {
-                  this._setBounds({width});
-                }
-                break;
-              }
-              case 's': {
-                const height = this._originalBounds.height + (event.pageY - this._originalMouseCoords.top);
-                if (height > minimumSize) {
-                  this._setBounds({height});
-                }
-                break;
-              }
-              case 'w': {
-                const width = this._originalBounds.width - (event.pageX - this._originalMouseCoords.left);
-                const left = this._originalBounds.left + (event.pageX - this._originalMouseCoords.left);
-                if (width > minimumSize) {
-                  this._setBounds({left, width});
-                }
-                break;
-              }
-            }
-          });
-          this.$.overlay.notifyResize();
-        }
-      }
-
-      _stopResize(direction) {
-        window.removeEventListener('mousemove', this._resizeListeners.resize[direction]);
-        window.removeEventListener('touchmove', this._resizeListeners.resize[direction]);
-        window.removeEventListener('mouseup', this._resizeListeners.stop[direction]);
-        window.removeEventListener('touchend', this._resizeListeners.stop[direction]);
-        this.dispatchEvent(new CustomEvent('resize', {detail: this._getResizeDimensions()}));
-      }
-
-      _getResizeDimensions() {
-        const {width, height} = getComputedStyle(this.$.overlay.$.overlay);
-        const content = this.$.overlay.$.content;
-        content.setAttribute('style', 'position: absolute; top: 0; right: 0; bottom: 0; left: 0; box-sizing: content-box; height: auto;');
-        const {width: contentWidth, height: contentHeight} = getComputedStyle(content);
-        content.removeAttribute('style');
-        return {width, height, contentWidth, contentHeight};
-      }
-    };
-
-  /**
-  @license
-  Copyright (c) 2017 Vaadin Ltd.
-  This program is available under Apache License Version 2.0, available at https://vaadin.com/license/
-  */
-  const $_documentContainer$A = document.createElement('template');
-
-  $_documentContainer$A.innerHTML = `<dom-module id="vaadin-dialog-overlay-styles" theme-for="vaadin-dialog-overlay">
-  <template>
-    <style>
-      /*
-        NOTE(platosha): Make some min-width to prevent collapsing of the content
-        taking the parent width, e. g., <vaadin-grid> and such.
-      */
-      [part="content"] {
-        min-width: 12em; /* matches the default <vaadin-text-field> width */
-      }
-    </style>
-  </template>
-</dom-module>`;
-
-  document.head.appendChild($_documentContainer$A.content);
-  let memoizedTemplate$2;
-
-  /**
-   * The overlay element.
-   *
-   * ### Styling
-   *
-   * See [`<vaadin-overlay>` documentation](https://github.com/vaadin/vaadin-overlay/blob/master/src/vaadin-overlay.html)
-   * for `<vaadin-dialog-overlay>` parts.
-   *
-   * @extends PolymerElement
-   * @private
-   */
-  class DialogOverlayElement extends mixinBehaviors(IronResizableBehavior, OverlayElement) {
-    static get is() {
-      return 'vaadin-dialog-overlay';
-    }
-
-    static get template() {
-      if (!memoizedTemplate$2) {
-        memoizedTemplate$2 = super.template.cloneNode(true);
-        const contentPart = memoizedTemplate$2.content.querySelector('[part="content"]');
-        const overlayPart = memoizedTemplate$2.content.querySelector('[part="overlay"]');
-        const resizerContainer = document.createElement('div');
-        resizerContainer.id = 'resizerContainer';
-        resizerContainer.classList.add('resizer-container');
-        resizerContainer.appendChild(contentPart);
-        overlayPart.appendChild(resizerContainer);
-      }
-      return memoizedTemplate$2;
-    }
-
-    static get properties() {
-      return {
-        modeless: Boolean,
-
-        withBackdrop: Boolean
-      };
-    }
-  }
-
-  customElements.define(DialogOverlayElement.is, DialogOverlayElement);
-
-
-  /**
-   *
-   * `<vaadin-dialog>` is a Web Component for creating customized modal dialogs. The content of the
-   * dialog can be populated in two ways: imperatively by using renderer callback function and
-   * declaratively by using Polymer's Templates.
-   *
-   * ### Rendering
-   *
-   * By default, the dialog uses the content provided by using the renderer callback function.
-   *
-   * The renderer function provides `root`, `dialog` arguments.
-   * Generate DOM content, append it to the `root` element and control the state
-   * of the host element by accessing `dialog`. Before generating new content,
-   * users are able to check if there is already content in `root` for reusing it.
-   *
-   * ```html
-   * <vaadin-dialog id="dialog"></vaadin-dialog>
-   * ```
-   * ```js
-   * const dialog = document.querySelector('#dialog');
-   * dialog.renderer = function(root, dialog) {
-   *   root.textContent = "Sample dialog";
-   * };
-   * ```
-   *
-   * Renderer is called on the opening of the dialog.
-   * DOM generated during the renderer call can be reused
-   * in the next renderer call and will be provided with the `root` argument.
-   * On first call it will be empty.
-   *
-   * ### Polymer Templates
-   *
-   * Alternatively, the content can be provided with Polymer's Template.
-   * Dialog finds the first child template and uses that in case renderer callback function
-   * is not provided. You can also set a custom template using the `template` property.
-   *
-   * ```html
-   * <vaadin-dialog opened>
-   *   <template>
-   *     Sample dialog
-   *   </template>
-   * </vaadin-dialog>
-   * ```
-   *
-   * ### Styling
-   *
-   * See [`<vaadin-overlay>` documentation](https://github.com/vaadin/vaadin-overlay/blob/master/src/vaadin-overlay.html)
-   * for `<vaadin-dialog-overlay>` parts.
-   *
-   * Note: the `theme` attribute value set on `<vaadin-dialog>` is
-   * propagated to the internal `<vaadin-dialog-overlay>` component.
-   *
-   * See [ThemableMixin – how to apply styles for shadow parts](https://github.com/vaadin/vaadin-themable-mixin/wiki)
-   *
-   * @extends PolymerElement
-   * @mixes ElementMixin
-   * @mixes ThemePropertyMixin
-   * @demo demo/index.html
-   */
-  class DialogElement extends
-    ThemePropertyMixin(
-      ElementMixin$1(
-        DialogDraggableMixin(
-          DialogResizableMixin(
-            PolymerElement)))) {
-    static get template() {
-      return html`
-    <style>
-      :host {
-        display: none;
-      }
-    </style>
-
-    <vaadin-dialog-overlay id="overlay" on-opened-changed="_onOverlayOpened" on-mousedown="_bringOverlayToFront" on-touchstart="_bringOverlayToFront" theme\$="[[theme]]" modeless="[[modeless]]" with-backdrop="[[!modeless]]" resizable\$="[[resizable]]" focus-trap="">
-    </vaadin-dialog-overlay>
-`;
-    }
-
-    static get is() {
-      return 'vaadin-dialog';
-    }
-
-    static get version() {
-      return '2.4.2';
-    }
-
-    static get properties() {
-      return {
-        /**
-         * True if the overlay is currently displayed.
-         */
-        opened: {
-          type: Boolean,
-          value: false,
-          notify: true
-        },
-
-        /**
-         * Set to true to disable closing dialog on outside click
-         */
-        noCloseOnOutsideClick: {
-          type: Boolean,
-          value: false
-        },
-
-        /**
-         * Set to true to disable closing dialog on Escape press
-         */
-        noCloseOnEsc: {
-          type: Boolean,
-          value: false
-        },
-
-        /**
-         * Set the `aria-label` attribute for assistive technologies like
-         * screen readers. An `undefined` value for this property (the
-         * default) means that the `aria-label` attribute is not present at
-         * all.
-         */
-        ariaLabel: {
-          type: String
-        },
-
-        /**
-         * Theme to apply to the overlay element
-         */
-        theme: String,
-
-        _contentTemplate: Object,
-
-        /**
-         * Custom function for rendering the content of the dialog.
-         * Receives two arguments:
-         *
-         * - `root` The root container DOM element. Append your content to it.
-         * - `dialog` The reference to the `<vaadin-dialog>` element.
-         */
-        renderer: Function,
-
-        /**
-         * Set to true to remove backdrop and allow click events on background elements.
-         */
-        modeless: {
-          type: Boolean,
-          value: false
-        },
-
-        /**
-         * Set to true to enable repositioning the dialog by clicking and dragging.
-         *
-         * By default, only the overlay area can be used to drag the element. But,
-         * a child element can be marked as a draggable area by adding a
-         * "`draggable`" class to it.
-         */
-        draggable: {
-          type: Boolean,
-          value: false,
-          reflectToAttribute: true
-        },
-
-        /**
-         * Set to true to enable resizing the dialog by dragging the corners and edges.
-         */
-        resizable: {
-          type: Boolean,
-          value: false,
-          reflectToAttribute: true
-        },
-
-        _oldTemplate: Object,
-
-        _oldRenderer: Object
-      };
-    }
-
-    static get observers() {
-      return [
-        '_openedChanged(opened)',
-        '_ariaLabelChanged(ariaLabel)',
-        '_templateOrRendererChanged(_contentTemplate, renderer)'
-      ];
-    }
-
-    ready() {
-      super.ready();
-      this.$.overlay.setAttribute('role', 'dialog');
-      this.$.overlay.addEventListener('vaadin-overlay-outside-click', this._handleOutsideClick.bind(this));
-      this.$.overlay.addEventListener('vaadin-overlay-escape-press', this._handleEscPress.bind(this));
-
-      this._observer = new FlattenedNodesObserver(this, info => {
-        this._setTemplateFromNodes(info.addedNodes);
-      });
-    }
-
-    _setTemplateFromNodes(nodes) {
-      this._contentTemplate = nodes.filter(node => node.localName && node.localName === 'template')[0] || this._contentTemplate;
-    }
-
-    _removeNewRendererOrTemplate(template, oldTemplate, renderer, oldRenderer) {
-      if (template !== oldTemplate) {
-        this._contentTemplate = undefined;
-      } else if (renderer !== oldRenderer) {
-        this.renderer = undefined;
-      }
-    }
-
-    /**
-     * Manually invoke existing renderer.
-     */
-    render() {
-      this.$.overlay.render();
-    }
-
-    _templateOrRendererChanged(template, renderer) {
-      if (template && renderer) {
-        this._removeNewRendererOrTemplate(template, this._oldTemplate, renderer, this._oldRenderer);
-        throw new Error('You should only use either a renderer or a template for dialog content');
-      }
-
-      this._oldTemplate = template;
-      this._oldRenderer = renderer;
-
-      if (renderer) {
-        this.$.overlay.setProperties({owner: this, renderer: renderer});
-      }
-    }
-
-    disconnectedCallback() {
-      super.disconnectedCallback();
-      this.opened = false;
-    }
-
-    _openedChanged(opened) {
-      if (opened) {
-        this.$.overlay.template = this.querySelector('template');
-      }
-      this.$.overlay.opened = opened;
-    }
-
-    _ariaLabelChanged(ariaLabel) {
-      if (ariaLabel !== undefined && ariaLabel !== null) {
-        this.$.overlay.setAttribute('aria-label', ariaLabel);
-      } else {
-        this.$.overlay.removeAttribute('aria-label');
-      }
-    }
-
-    _onOverlayOpened(e) {
-      if (e.detail.value === false) {
-        this.opened = false;
-      }
-    }
-
-    /**
-     * Close the dialog if `noCloseOnOutsideClick` isn't set to true
-     */
-    _handleOutsideClick(e) {
-      if (this.noCloseOnOutsideClick) {
-        e.preventDefault();
-      }
-    }
-
-    /**
-     * Close the dialog if `noCloseOnEsc` isn't set to true
-     */
-    _handleEscPress(e) {
-      if (this.noCloseOnEsc) {
-        e.preventDefault();
-      }
-    }
-
-    _setBounds(bounds) {
-      const overlay = this.$.overlay.$.overlay;
-      const parsedBounds = Object.assign({}, bounds);
-
-      if (overlay.style.position !== 'absolute') {
-        overlay.style.position = 'absolute';
-        overlay.style.maxWidth = 'none';
-      }
-
-      for (const arg in parsedBounds) {
-        if (typeof parsedBounds[arg] === 'number') {
-          parsedBounds[arg] = `${parsedBounds[arg]}px`;
-        }
-      }
-
-      Object.assign(overlay.style, parsedBounds);
-    }
-
-    _bringOverlayToFront() {
-      if (this.modeless) {
-        this.$.overlay.bringToFront();
-      }
-    }
-
-    _getOverlayBounds() {
-      const overlay = this.$.overlay.$.overlay;
-      const overlayBounds = overlay.getBoundingClientRect();
-      const containerBounds = this.$.overlay.getBoundingClientRect();
-      const top = overlayBounds.top - containerBounds.top;
-      const left = overlayBounds.left - containerBounds.left;
-      const width = overlayBounds.width;
-      const height = overlayBounds.height;
-      return {top, left, width, height};
-    }
-
-    _eventInWindow(e) {
-      return e.clientX >= 0 && e.clientX <= window.innerWidth && e.clientY >= 0 && e.clientY <= window.innerHeight;
-    }
-
-    __getMouseOrFirstTouchEvent(e) {
-      return e.touches ? e.touches[0] : e;
-    }
-  }
-
-  customElements.define(DialogElement.is, DialogElement);
 
   const $_documentContainer$B = html`<dom-module id="lumo-checkbox" theme-for="vaadin-checkbox">
   <template>
