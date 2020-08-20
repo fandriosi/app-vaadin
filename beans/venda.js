@@ -1,6 +1,6 @@
 export default class Vendas{
     constructor(id, dataCompra, dataRecebimento, tipoPagamento, valorPago, quantidade, idCliente,
-        idProduto){
+        produto){
         this.id = id;
         this.dataCompra = dataCompra;
         this.dataRecebimento = dataRecebimento;
@@ -8,7 +8,7 @@ export default class Vendas{
         this.valorPago = valorPago;
         this.quantidade = quantidade;
         this.idCliente = idCliente;
-        this.idProduto = idProduto;
+        this.produto = produto;
     }
     get json(){
         return JSON.stringify({
@@ -20,12 +20,7 @@ export default class Vendas{
             clientes:{
                 id: this.idCliente
             },
-            produtosVendidos:[{                
-                quantidade: this.quantidade,
-                produto:{
-                    id: this.idProduto
-                }
-            }]
+            produtosVendidos:this.produto
         })
     }
 }
