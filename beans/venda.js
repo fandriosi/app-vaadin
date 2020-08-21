@@ -1,5 +1,5 @@
 export default class Vendas{
-    constructor(id, dataCompra, dataRecebimento, tipoPagamento, valorPago, quantidade, idCliente,
+    constructor(id, dataCompra, dataRecebimento, tipoPagamento, valorPago, quantidade, valorTotal, idCliente,
         produto){
         this.id = id;
         this.dataCompra = dataCompra;
@@ -7,6 +7,7 @@ export default class Vendas{
         this.tipoPagamento = tipoPagamento;
         this.valorPago = valorPago;
         this.quantidade = quantidade;
+        this.valorTotal = valorTotal;
         this.idCliente = idCliente;
         this.produto = produto;
     }
@@ -17,6 +18,7 @@ export default class Vendas{
             dataRecebimento: this.dataRecebimento,
             tipoPagamento: this.tipoPagamento,
             valorPago: this.valorPago,
+            valorTotal: this.valorTotal,
             clientes:{
                 id: this.idCliente
             },

@@ -213,7 +213,7 @@ export default class VappVendas extends HTMLElement{
         console.log(this.querySelector('#produtos').value);
         const venda = new Venda(this.querySelector('#id').value, this.querySelector('#dataCompra').value, 
             this.querySelector('#dataPagamento').value,0,this.querySelector('#valorPago').value, this.querySelector('#quantidade').value,
-            this.querySelector('#clientes').value, this.produtosVendidos);         
+            this.querySelector('#total').value, this.querySelector('#clientes').value, this.produtosVendidos);         
         return venda.json;
     }
     disabledInsercao(option){

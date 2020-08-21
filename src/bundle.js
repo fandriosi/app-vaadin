@@ -36464,7 +36464,7 @@
   }
 
   class Vendas{
-      constructor(id, dataCompra, dataRecebimento, tipoPagamento, valorPago, quantidade, idCliente,
+      constructor(id, dataCompra, dataRecebimento, tipoPagamento, valorPago, quantidade, valorTotal, idCliente,
           produto){
           this.id = id;
           this.dataCompra = dataCompra;
@@ -36472,6 +36472,7 @@
           this.tipoPagamento = tipoPagamento;
           this.valorPago = valorPago;
           this.quantidade = quantidade;
+          this.valorTotal = valorTotal;
           this.idCliente = idCliente;
           this.produto = produto;
       }
@@ -36482,6 +36483,7 @@
               dataRecebimento: this.dataRecebimento,
               tipoPagamento: this.tipoPagamento,
               valorPago: this.valorPago,
+              valorTotal: this.valorTotal,
               clientes:{
                   id: this.idCliente
               },
@@ -36708,7 +36710,7 @@
           console.log(this.querySelector('#produtos').value);
           const venda = new Vendas(this.querySelector('#id').value, this.querySelector('#dataCompra').value, 
               this.querySelector('#dataPagamento').value,0,this.querySelector('#valorPago').value, this.querySelector('#quantidade').value,
-              this.querySelector('#clientes').value, this.produtosVendidos);         
+              this.querySelector('#total').value, this.querySelector('#clientes').value, this.produtosVendidos);         
           return venda.json;
       }
       disabledInsercao(option){
