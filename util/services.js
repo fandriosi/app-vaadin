@@ -12,6 +12,7 @@ export default class Services{
             headers: {
                 "Content-Type": "application/json",
                 // "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": `Basic ${btoa('Bemodaah:$#Bemodaah43')}`
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *client
@@ -28,6 +29,7 @@ export default class Services{
             headers: {
                 "Content-Type": "application/json",
                 // "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": `Basic ${btoa('Bemodaah:$#Bemodaah43')}`
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *client
@@ -44,6 +46,7 @@ export default class Services{
             headers: {
                 "Content-Type": "application/json",
                 // "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": `Basic ${btoa('Bemodaah:$#Bemodaah43')}`
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *client
@@ -51,7 +54,11 @@ export default class Services{
         }); // parses response to JSO    
     }   
     async getServices(url= ``){
-        const request = await fetch(url);
+        const request = await fetch(url, {headers:{
+            "Content-Type": "application/json",
+            // "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": `Basic ${btoa('Bemodaah:$#Bemodaah43')}`
+        }});
         const payload = await request.json();
         return payload;
     }   
@@ -65,6 +72,7 @@ export default class Services{
             headers: {
                 "Content-Type": "application/json",
                 // "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": `Basic ${btoa('Bemodaah:$#Bemodaah43')}`
             },
             redirect: "follow", // manual, *follow, error
             referrer: "no-referrer", // no-referrer, *clienTE          

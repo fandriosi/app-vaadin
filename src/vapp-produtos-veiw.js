@@ -16,15 +16,15 @@ export default class ProdutosView extends HTMLElement{
     constructor(){
         super();
         this.service = new Service();
+        this.URL = "resources/produtos";
+        //this.URL = "http://localhost:8080/resources/produtos";
     }
 
     connectedCallback(){
         this.getTemplate();
         this.loadingGrid();
         this.attachComboBox();
-        this.fiedEventListener();
         this.selectItemsEventListener();
-        this.disabledInsercao(true);
     }
 
     getTemplate(){
@@ -37,38 +37,31 @@ export default class ProdutosView extends HTMLElement{
             <vaadin-integer-field  min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
             <vaadin-combo-box label="Categoria" item-label-path="descricao" item-value-path="id"></vaadin-combo-box>
             <vaadin-form-item>
-                <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição" id="findDescricao" clear-button-visible></vaadin-text-field>
-                <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}>Buscar por Descricao <iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
+                <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição do Produto" id="findDescricao" clear-button-visible></vaadin-text-field>
+                <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
             </vaadin-form-item>            
             <vaadin-custom-field label="Preço">
                 <vaadin-number-field  maxlength="5" placeholder="Custo" id="custo"><div slot="prefix">R$</div></vaadin-number-field>
                 <vaadin-number-field  maxlength="5" placeholder="Venda" id="venda"><div slot="prefix">R$</div></vaadin-number-field>
             </vaadin-custom-field>       
             <vaadin-form-item>
-                <vaadin-button theme="primary" id="btnSalvar" @click=${_ => this.salvar()}>Salvar</vaadin-button>
-                <vaadin-button theme="primary" id="btnExcluir" @click=${_ => this.deletar()}>Excluir</vaadin-button>
-                <vaadin-button theme="primary" id="btnEditar" @click=${_ => this.editar()}>Editar</vaadin-button>
-                <vaadin-button theme="primary" id="btnCancelar" @click=${_ => this.cancelar()}>Cancelar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ => this.persist()} id="btnSalvar">Salvar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Novo</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
+        <h4>Lista de Produtos</h4>
         <vaadin-grid>
             <vaadin-grid-column width="7%" flex-grow="0" path="id" header="Código" width="4%"></vaadin-grid-column>
             <vaadin-grid-column width="30%" path="descricao" header="Descrição"></vaadin-grid-column>
             <vaadin-grid-column path= "categoria.descricao" header="Categoria"></vaadin-grid-column>
             <vaadin-grid-column path="codigoBarra" header="Referência"></vaadin-grid-column>
-            <vaadin-grid-column path="precoCusto" header="Preço de Custo"></vaadin-grid-column>
-            <vaadin-grid-column path="preco" header="Preço"></vaadin-grid-column>
+            <vaadin-grid-column path="strPrecoCusto" header="Preço de Custo"></vaadin-grid-column>
+            <vaadin-grid-column path="strPreco" header="Preço"></vaadin-grid-column>
             <vaadin-grid-column path="quantidade" header="Quantidade"></vaadin-grid-column>
         </vaadin-grid>`;  
         render(template, this);   
-    }
-    fiedEventListener(){
-        let nomeTextfield = this.querySelector('#descricao');
-        nomeTextfield.addEventListener('click',_ =>{      
-            this.disabledInsercao(true);
-            this.editionField(false);
-        }); 
-    }
+    }    
     selectItemsEventListener(){            
         const grid = this.querySelector('vaadin-grid');
         let idTextfield = this.querySelector('#id');
@@ -78,9 +71,6 @@ export default class ProdutosView extends HTMLElement{
         let precoTextfield = this.querySelector('#venda');  
         let quantidadeTextfield= this.querySelector('#quantidade')
         let categoriaComob = this.querySelector('vaadin-combo-box'); 
-        let btnExcluir = this.querySelector('#btnExcluir');      
-        let btnEditar = this.querySelector('#btnEditar');
-        let btnSalvar = this.querySelector('#btnSalvar');
         grid.addEventListener('active-item-changed', function(event){
             const item = event.detail.value;
             grid.selectedItems = item ? [item]:[];
@@ -90,37 +80,21 @@ export default class ProdutosView extends HTMLElement{
             custoTextfield.value=item.precoCusto;
             precoTextfield.value=item.preco;
             quantidadeTextfield.value=item.quantidade;
-            categoriaComob.value = item.categoria.id;
-            descricaoTextfield.readonly= true;
-            referenciaTextfiel.disabled=true;
-            custoTextfield.disabled=true;
-            precoTextfield.disabled=true;        
-            btnExcluir.disabled=false; 
-            btnEditar.disabled=false;
-            btnSalvar.disabled=true;
-            console.log(btnSalvar.disabled);
-        });           
+            categoriaComob.value = item.categoria.id; 
+        });         
         
     }
-    disabledInsercao(option){
-        let buttonSalvar = this.querySelector('#btnSalvar');
-        let buttonExcluir = this.querySelector('#btnExcluir');
-        let buttonEditar = this.querySelector('#btnEditar');
-        let idTextfield = this.querySelector('#id');
-        if(option && idTextfield.value == 0){
-            buttonExcluir.disabled=true;
-            buttonSalvar.disabled=false;
-            buttonEditar.disabled=true;
+    persist(){
+        if(this.querySelector('#id').value !== ''){
+            this.editar()
         }else{
-            buttonExcluir.disabled=false;
-            buttonSalvar.disabled=true;
-            buttonEditar.disabled=false;
+            this.salvar();
         }
     }
     salvar(){       
         let descricaoTextfield = this.querySelector('#descricao');    
         if(descricaoTextfield.validate()){
-            this.service.postServices("http://localhost:8080/resources/produto", this.getJson())
+            this.service.postServices(this.URL, this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
@@ -129,8 +103,7 @@ export default class ProdutosView extends HTMLElement{
                         );
                     }
                     this.showDialog("Produto salvo com sucesso!");
-                    this.editionField(true);
-                    this.disabledInsercao(true);
+                    this.cleanFields();
                  }              
             }).catch(erro =>{
                  this.showDialog("Erro na conexão como Servidor!");
@@ -141,7 +114,7 @@ export default class ProdutosView extends HTMLElement{
     editar(){
         let descricaoTextfield = this.querySelector('#descricao'); 
         if(descricaoTextfield.validate()){
-            this.service.putServices("http://localhost:8080/resources/produto", this.getJson())
+            this.service.putServices(this.URL, this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
@@ -150,8 +123,7 @@ export default class ProdutosView extends HTMLElement{
                         );
                     }
                     this.showDialog("Produto alterado com sucesso!");
-                    this.editionField(true);
-                    this.disabledInsercao(true);
+                    this.cleanFields();
                 }              
             }).catch(erro =>{
                 this.showDialog("Erro na conexão como Servidor!");
@@ -160,7 +132,8 @@ export default class ProdutosView extends HTMLElement{
         }       
     }
     deletar(){
-        this.service.deleteServices("http://localhost:8080/resources/produto", this.getJson())
+        if(this.querySelector('#id').value !== ''){
+            this.service.deleteServices(this.URL, this.getJson())
             .then(response =>{ 
                 if(response.ok){
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
@@ -169,38 +142,30 @@ export default class ProdutosView extends HTMLElement{
                          );
                     }     
                     this.showDialog("produto delatado com sucesso!");
-                    this.editionField(true);
-                        this.disabledInsercao(true);
+                    this.cleanFields();
                 }              
             }).catch(erro =>{
                 this.showDialog("Erro na conexão como Servidor!");
                 console.log(erro.message);
             });   
+        }        
     }
     cancelar(){
-        this.editionField(true);
-        this.disabledInsercao(true);
+        this.cleanFields();
     }
     findByDescricao(){
-        let descricaoTextfield = this.querySelector('#findDescricao');    
-        let data = JSON.stringify({descricao: descricaoTextfield.value});
-        this.service.postServices("http://localhost:8080/resources/produtosFindByDescricao", data)
-        .then(response =>{ 
-            if(response.ok){
-                this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                    response.json().then( json => callback(json, json.length));
-                }
-                descricaoTextfield.value="";
-            }              
-        }).catch(erro =>{
-            this.showDialog("Erro na conexão como Servidor!");
-            console.log(erro.message);
-        });  
+        this.querySelector('vaadin-grid').dataProvider = (params, callback)=>{
+            this.service.getServices(`resources/produtosFindByDescricao/${this.querySelector('#findDescricao').value}`).then(
+            (json) =>{ 
+                callback(json, json.length)
+                this.querySelector('#findDescricao').value='';
+            });
+        }
     }
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
         grid.dataProvider =(params, callback) =>{
-            this.service.getServices("http://localhost:8080/resources/produtos").then(
+            this.service.getServices(this.URL).then(
                 json => callback(json, json.length));
         }                
     }
@@ -213,27 +178,13 @@ export default class ProdutosView extends HTMLElement{
             dialog.opened =true
         });          
     }
-    editionField(option){
-        let idField = this.querySelector('#id');
-        let descricaoField = this.querySelector('#descricao');
-        let referenciaField = this.querySelector('#referencia');
-        let custoField = this.querySelector('#custo');
-        let vendaField = this.querySelector('#venda');
-        let quantidadeField = this.querySelector('#quantidade');
-        if(option){
-            idField.value = "";
-            descricaoField.value = "";
-            referenciaField.value= "";
-            custoField.value= "";
-            vendaField.value= "";
-            quantidadeField.value=1;
-        }else{
-            descricaoField.readonly = false;
-            referenciaField.disabled= false;
-            custoField.disabled = false;
-            vendaField.disabled= false;
-        }
-        
+    cleanFields(){
+        this.querySelector('#id').value='';
+        this.querySelector('#descricao').value='';
+        this.querySelector('#referencia').value='';
+        this.querySelector('#custo').value='';
+        this.querySelector('#venda').value='';
+        this.querySelector('#quantidade').value=1;       
     }
     getJson(){
         const produto = new Produto(this.querySelector('#id').value, this.querySelector('#descricao').value.trim(),
@@ -248,7 +199,7 @@ export default class ProdutosView extends HTMLElement{
         //    });
        // });
         this.querySelector('vaadin-combo-box').dataProvider = (params, callback)=>{
-            this.service.getServicesJson("http://localhost:8080/resources/categorias").then(
+            this.service.getServicesJson("resources/categorias").then(
                 json => callback(json, json.length));
         }
     }

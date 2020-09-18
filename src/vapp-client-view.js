@@ -15,13 +15,13 @@ export default class ClienteView extends HTMLElement{
         super();
         this.storage = new Storage('clientes');
         this.service = new Service();  
+        this.URL="resources/clientes"
+        //this.URL = "http://localhost:8080/resources/clientes";
     }
     connectedCallback(){
         this.createTemplate(); 
-        this.loadingGrid();
-        this.fiedEventListener();        
+        this.loadingGrid();    
         this.selectItemsEventListener();
-        this.disabledInsercao(true);
     }
     createTemplate(){
         const templete = html `
@@ -35,12 +35,12 @@ export default class ClienteView extends HTMLElement{
                 <vaadin-text-field prevent-invalid-input pattern="[0-9]*" maxlength="9" placeholder="Número" id="numero"></vaadin-text-field>
             </vaadin-custom-field>       
             <vaadin-form-item>
-                <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ => this.persist()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
-                <vaadin-button theme="primary" @click=${_ =>this.editar()} id="btnEditar">Editar</vaadin-button>
-                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Cancelar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ =>this.cancelar()} id="btnCancelar">Novo</vaadin-button>
             </vaadin-form-item>
         </vaadin-form-layout>
+        <h4>Lista de Clientes</h4>
         <vaadin-grid>
             <vaadin-grid-column path="id" header="Código" width="15%"></vaadin-grid-column>
             <vaadin-grid-column path="nome" header="Nome"></vaadin-grid-column>
@@ -49,23 +49,13 @@ export default class ClienteView extends HTMLElement{
         </vaadin-grid>`;
         render(templete, this);
     } 
-    fiedEventListener(){
-        let nomeTextfield = this.querySelector('#nome');
-        nomeTextfield.addEventListener('click',_ =>{      
-            this.disabledInsercao(true);
-            this.editionField(false);
-        }); 
-    }
     selectItemsEventListener(){            
         const grid = this.querySelector('vaadin-grid');
         let idTextfield = this.querySelector('#id');
         let nomeTextfield = this.querySelector('#nome');
         let emailTextfiel = this.querySelector('#email');
         let areaTextfield = this.querySelector('#area');
-        let numeroTextfield = this.querySelector('#numero');  
-        let btnExcluir = this.querySelector('#btnExcluir');      
-        let btnEditar = this.querySelector('#btnEditar');
-        let btnSalvar = this.querySelector('#btnSalvar');
+        let numeroTextfield = this.querySelector('#numero'); 
         grid.addEventListener('active-item-changed', function(event){
             const item = event.detail.value;
             grid.selectedItems = item ? [item]:[];
@@ -75,28 +65,13 @@ export default class ClienteView extends HTMLElement{
             emailTextfiel.value=item.email;
             areaTextfield.value=str.substr(0,3);
             numeroTextfield.value=str.substr(3,9); 
-            nomeTextfield.readonly= true;
-            emailTextfiel.disabled=true;
-            areaTextfield.disabled=true;
-            numeroTextfield.disabled=true;        
-            btnExcluir.disabled=false; 
-            btnEditar.disabled=false;
-            btnSalvar.disabled=true;
         });                   
     }
-    disabledInsercao(option){
-        let buttonSalvar = this.querySelector('#btnSalvar');
-        let buttonExcluir = this.querySelector('#btnExcluir');
-        let buttonEditar = this.querySelector('#btnEditar');
-        let idTextfield = this.querySelector('#id');
-        if(option && idTextfield.value == 0){
-            buttonExcluir.disabled=true;
-            buttonSalvar.disabled=false;
-            buttonEditar.disabled=true;
+    persist(){
+        if(this.querySelector('#id').value !== null){
+            this.editar()
         }else{
-            buttonExcluir.disabled=false;
-            buttonSalvar.disabled=true;
-            buttonEditar.disabled=false;
+            this.salvar();
         }
     }
     salvar(){       
@@ -104,24 +79,21 @@ export default class ClienteView extends HTMLElement{
         let emailTextfiel= this.querySelector('#email');        
         if(nomeTextfield.validate()){
             if( emailTextfiel.value !="" && emailTextfiel.validate()){
-                this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
+                this.service.postServices(this.URL, this.getJson())
                 .then(response =>{ 
                     if(response.ok){
                         this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                            console.log(response.json().then(
-                                json => callback(json, json.length)
-                             ));
+                            cresponse.json().then( json => callback(json, json.length));
                         }
                         this.showDialog("Cliente salvo com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
+                        this.editionField();
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
                     console.log(erro.message);
                 });
             }else{
-                this.service.postServices("http://localhost:8080/resources/cliente", this.getJson())
+                this.service.postServices(this.URL, this.getJson())
                 .then(response =>{ 
                     if(response.ok){
                         this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
@@ -130,8 +102,7 @@ export default class ClienteView extends HTMLElement{
                              ));
                         }
                         this.showDialog("Cliente salvo com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
+                        this.editionField();
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
@@ -145,34 +116,28 @@ export default class ClienteView extends HTMLElement{
         let emailTextfiel= this.querySelector('#email');   
         if(nomeTextfield.validate()){
             if( emailTextfiel.value !="" && emailTextfiel.validate()){
-                this.service.putServices("http://localhost:8080/resources/cliente", this.getJson())
+                this.service.putServices(this.URL, this.getJson())
                 .then(response =>{ 
                     if(response.ok){
                         this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                            console.log(response.json().then(
-                                json => callback(json, json.length)
-                             ));
+                            response.json().then(json => callback(json, json.length));
                         }
                         this.showDialog("Cliente alterado com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
+                        this.editionField();
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
                     console.log(erro.message);
                 });
             }else{
-                this.service.putServices("http://localhost:8080/clientes", this.getJson())
+                this.service.putServices(this.URL, this.getJson())
                 .then(response =>{ 
                     if(response.ok){
                         this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                            console.log(response.json().then(
-                                json => callback(json, json.length)
-                             ));
+                            response.json().then(json => callback(json, json.length));
                         }
                         this.showDialog("Cliente alterado com sucesso!");
-                        this.editionField(true);
-                        this.disabledInsercao(true);
+                        this.editionField();
                     }              
                 }).catch(erro =>{
                     this.showDialog("Erro na conexão como Servidor!");
@@ -182,18 +147,14 @@ export default class ClienteView extends HTMLElement{
         }        
     }
     deletar(){
-        this.service.deleteServices("http://localhost:8080/resources/cliente", this.getJson())
+        this.service.deleteServices(this.URL, this.getJson())
             .then(response =>{ 
                 if(response.ok){
-                    console.log('response',response);
                     this.querySelector('vaadin-grid').dataProvider = (params, callback) =>{
-                        console.log(response.json().then(
-                            json => callback(json, json.length)
-                         ));
+                        response.json().then(json => callback(json, json.length));
                     }       
                     this.showDialog("Cliente delatado com sucesso!");
-                    this.editionField(true);
-                        this.disabledInsercao(true);
+                    this.editionField();
                 }              
             }).catch(erro =>{
                 this.showDialog("Erro na conexão como Servidor!");
@@ -201,13 +162,12 @@ export default class ClienteView extends HTMLElement{
             });   
     }
     cancelar(){
-        this.editionField(true);
-        this.disabledInsercao(true);
+        this.editionField();
     }
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
         grid.dataProvider =(params, callback) =>{
-            this.service.getServices("http://localhost:8080/resources/clientes").then(
+            this.service.getServices(this.URL).then(
                 json => callback(json, json.length));
         }                
     }
@@ -220,24 +180,12 @@ export default class ClienteView extends HTMLElement{
             dialog.opened =true
         });          
     }
-    editionField(option){
-        let idField = this.querySelector('#id');
-        let nomeField = this.querySelector('#nome');
-        let emailField = this.querySelector('#email');
-        let areaField = this.querySelector('#area');
-        let numeroField = this.querySelector('#numero');
-        if(option){
-            idField.value = "";
-            nomeField.value = "";
-            emailField.value= "";
-            areaField.value= "";
-            numeroField.value= "";
-        }else{
-            nomeField.readonly = false;
-            emailField.disabled= false;
-            areaField.disabled = false;
-            numeroField.disabled= false;
-        }
+    editionField(){
+        this.querySelector('#id').value='';
+        this.querySelector('#nome').value='';
+        this.querySelector('#email').value='';
+        this.querySelector('#area').value='';
+        this.querySelector('#numero').value='';
         
     }
     getJson(){
