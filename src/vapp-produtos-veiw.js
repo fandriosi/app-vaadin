@@ -41,9 +41,13 @@ export default class ProdutosView extends HTMLElement{
                 <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
             </vaadin-form-item>            
             <vaadin-custom-field label="Preço">
-                <vaadin-number-field  maxlength="5" placeholder="Custo" id="custo"><div slot="prefix">R$</div></vaadin-number-field>
-                <vaadin-number-field  maxlength="5" placeholder="Venda" id="venda"><div slot="prefix">R$</div></vaadin-number-field>
-            </vaadin-custom-field>       
+                <vaadin-number-field  maxlength="12" placeholder="Custo" id="custo"><div slot="prefix">R$</div></vaadin-number-field>
+                <vaadin-number-field  maxlength="12" placeholder="Venda" id="venda"><div slot="prefix">R$</div></vaadin-number-field>
+            </vaadin-custom-field> 
+            <vaadin-form-item>
+                <vaadin-text-field label="Total Custo"  laceholder="Valor Total" id="precoCusto" readonly="true"><div slot="prefix">R$</div></vaadin-text-field> 
+                <vaadin-text-field label="Total Preço" placeholder="Valor Total" id="totalPreco" readonly="true"><div slot="prefix">R$</div></vaadin-text-field>
+            </vaadin-form-item>      
             <vaadin-form-item>
                 <vaadin-button theme="primary" @click=${_ => this.persist()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
@@ -59,6 +63,7 @@ export default class ProdutosView extends HTMLElement{
             <vaadin-grid-column path="strPrecoCusto" header="Preço de Custo"></vaadin-grid-column>
             <vaadin-grid-column path="strPreco" header="Preço"></vaadin-grid-column>
             <vaadin-grid-column path="quantidade" header="Quantidade"></vaadin-grid-column>
+            <vaadin-grid-column path="estoque" header="Total Estoque"></vaadin-grid-column>
         </vaadin-grid>`;  
         render(template, this);   
     }    
@@ -108,6 +113,8 @@ export default class ProdutosView extends HTMLElement{
             }).catch(erro =>{
                  this.showDialog("Erro na conexão como Servidor!");
                 console.log(erro.message);
+            }).finally(_ =>{
+                this.getReports();
             });
         }     
     }
@@ -128,6 +135,8 @@ export default class ProdutosView extends HTMLElement{
             }).catch(erro =>{
                 this.showDialog("Erro na conexão como Servidor!");
                 console.log(erro.message);
+            }).finally(_ =>{
+                this.getReports();
             });
         }       
     }
@@ -147,20 +156,25 @@ export default class ProdutosView extends HTMLElement{
             }).catch(erro =>{
                 this.showDialog("Erro na conexão como Servidor!");
                 console.log(erro.message);
+            }).finally(_ =>{
+                this.getReports();
             });   
-        }        
+        }
     }
     cancelar(){
         this.cleanFields();
     }
     findByDescricao(){
-        this.querySelector('vaadin-grid').dataProvider = (params, callback)=>{
-            this.service.getServices(`resources/produtosFindByDescricao/${this.querySelector('#findDescricao').value}`).then(
-            (json) =>{ 
-                callback(json, json.length)
-                this.querySelector('#findDescricao').value='';
-            });
-        }
+        let descricao = this.querySelector('#findDescricao').value;
+        if(descricao.trim() != ''){
+            this.querySelector('vaadin-grid').dataProvider = (params, callback)=>{            
+                this.service.getServices(`resources/produtosFindByDescricao/${descricao}`).then(
+                (json) =>{ 
+                    callback(json, json.length)
+                    this.querySelector('#findDescricao').value='';
+                });
+            }
+        }        
     }
     loadingGrid(){        
         const grid = this.querySelector('vaadin-grid');
@@ -168,6 +182,7 @@ export default class ProdutosView extends HTMLElement{
             this.service.getServices(this.URL).then(
                 json => callback(json, json.length));
         }                
+        this.getReports();
     }
     showDialog(message){
         customElements.whenDefined('vaadin-dialog').then(_ =>{
@@ -202,6 +217,14 @@ export default class ProdutosView extends HTMLElement{
             this.service.getServicesJson("resources/categorias").then(
                 json => callback(json, json.length));
         }
+    }
+    getReports(){
+        this.service.getServices(`${this.URL}/reports`).then(
+            (json)=>{
+                this.querySelector('#precoCusto').value=new Intl.NumberFormat('pt-BR').format(json.totalPrecoCusto.toFixed(2));
+                this.querySelector('#totalPreco').value=new Intl.NumberFormat('pt-BR').format(json.totalPreco.toFixed(2));
+            }
+        )
     }
 }
 customElements.define('vapp-produtos-view', ProdutosView);

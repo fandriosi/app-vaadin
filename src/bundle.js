@@ -50197,9 +50197,13 @@
                 <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
             </vaadin-form-item>            
             <vaadin-custom-field label="Preço">
-                <vaadin-number-field  maxlength="5" placeholder="Custo" id="custo"><div slot="prefix">R$</div></vaadin-number-field>
-                <vaadin-number-field  maxlength="5" placeholder="Venda" id="venda"><div slot="prefix">R$</div></vaadin-number-field>
-            </vaadin-custom-field>       
+                <vaadin-number-field  maxlength="12" placeholder="Custo" id="custo"><div slot="prefix">R$</div></vaadin-number-field>
+                <vaadin-number-field  maxlength="12" placeholder="Venda" id="venda"><div slot="prefix">R$</div></vaadin-number-field>
+            </vaadin-custom-field> 
+            <vaadin-form-item>
+                <vaadin-text-field label="Total Custo"  laceholder="Valor Total" id="precoCusto" readonly="true"><div slot="prefix">R$</div></vaadin-text-field> 
+                <vaadin-text-field label="Total Preço" placeholder="Valor Total" id="totalPreco" readonly="true"><div slot="prefix">R$</div></vaadin-text-field>
+            </vaadin-form-item>      
             <vaadin-form-item>
                 <vaadin-button theme="primary" @click=${_ => this.persist()} id="btnSalvar">Salvar</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.deletar()} id="btnExcluir">Excluir</vaadin-button>
@@ -50264,6 +50268,8 @@
               }).catch(erro =>{
                    this.showDialog("Erro na conexão como Servidor!");
                   console.log(erro.message);
+              }).finally(_ =>{
+                  this.getReports();
               });
           }     
       }
@@ -50284,6 +50290,8 @@
               }).catch(erro =>{
                   this.showDialog("Erro na conexão como Servidor!");
                   console.log(erro.message);
+              }).finally(_ =>{
+                  this.getReports();
               });
           }       
       }
@@ -50303,8 +50311,10 @@
               }).catch(erro =>{
                   this.showDialog("Erro na conexão como Servidor!");
                   console.log(erro.message);
+              }).finally(_ =>{
+                  this.getReports();
               });   
-          }        
+          }
       }
       cancelar(){
           this.cleanFields();
@@ -50324,6 +50334,7 @@
               this.service.getServices(this.URL).then(
                   json => callback(json, json.length));
           };                
+          this.getReports();
       }
       showDialog(message){
           customElements.whenDefined('vaadin-dialog').then(_ =>{
@@ -50358,6 +50369,14 @@
               this.service.getServicesJson("resources/categorias").then(
                   json => callback(json, json.length));
           };
+      }
+      getReports(){
+          this.service.getServices(`${this.URL}/reports`).then(
+              (json)=>{
+                  this.querySelector('#precoCusto').value=new Intl.NumberFormat('pt-BR').format(json.totalPrecoCusto.toFixed(2));
+                  this.querySelector('#totalPreco').value=new Intl.NumberFormat('pt-BR').format(json.totalPreco.toFixed(2));
+              }
+          );
       }
   }
   customElements.define('vapp-produtos-view', ProdutosView);
@@ -50534,16 +50553,24 @@
         
         <vaadin-dialog aria-label="simple"></vaadin-dialog>
         <vaadin-form-layout>
-            <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>            
-            <vaadin-text-field disabled="true" label="Data da Compra" id="dataCompra"></vaadin-text-field>
-            <vaadin-text-field disabled="true" label="Data Pagamento" id="dataPagamento" ></vaadin-text-field>
+            <vaadin-text-field label="Código" readonly="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>            
+            <vaadin-text-field readonly="true" label="Data da Compra" id="dataCompra"></vaadin-text-field>
+            <vaadin-text-field readonly="true" label="Data Pagamento" id="dataPagamento" ></vaadin-text-field>
             <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
-            <vaadin-text-field disabled="true" label="Cliente" id="clientes"></vaadin-text-field>       
+            <vaadin-text-field readonly="true" label="Cliente" id="clientes"></vaadin-text-field>       
             <vaadin-combo-box required label="Tipo de Pagamento" item-label-path="descricao" item-value-path="id" id="tipoPagamento" error-message="O Tipo de Pagamento não pode ser nulo!"></vaadin-combo-box>
-            <vaadin-number-field label="Valor Total" maxlength="8" placeholder="Valor Total" id="total" disabled="true"><div slot="prefix">R$</div></vaadin-number-field> 
+            <vaadin-number-field label="Valor Total" placeholder="Valor Total" id="total" readonly="true"><div slot="prefix">R$</div></vaadin-number-field> 
             <vaadin-form-item>
-                <vaadin-text-field  style="width: 70%;" placeholder="Busca cliente por Nome" id="findClienteByName" clear-button-visible></vaadin-text-field>
+                <vaadin-text-field label="Saldo" placeholder="Valor Total" id="totalPago" readonly="true"><div slot="prefix">R$</div></vaadin-text-field> 
+                <vaadin-text-field label="Saldo Pago" placeholder="Valor Total" id="valorTotal" readonly="true"><div slot="prefix">R$</div></vaadin-text-field>
+            </vaadin-form-item>             
+            <vaadin-form-item>
+                <vaadin-text-field label="Nome do Cliente" style="width: 70%;" placeholder="Busca cliente por Nome" id="findClienteByName" clear-button-visible></vaadin-text-field>
                 <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findClientesByName()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
+            </vaadin-form-item>
+            <vaadin-form-item>
+                <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ => this.delete()} id="btnExcluir">Excluir</vaadin-button> 
             </vaadin-form-item>
             <vaadin-form-item colspan="2">
                 <h4>Produtos Vendidos</h4>
@@ -50554,11 +50581,7 @@
                     <vaadin-grid-column path="quantidade" header="Quantidade"></vaadin-grid-column>   
                     <vaadin-grid-column path="produto.strPreco" header="Preço"></vaadin-grid-column>    
                 </vaadin-grid>
-            </vaadin-fomr-item>              
-            <vaadin-form-item>
-                <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
-                <vaadin-button theme="primary" @click=${_ => this.delete()} id="btnExcluir">Excluir</vaadin-button> 
-            </vaadin-form-item>
+            </vaadin-fomr-item>    
         </vaadin-form-layout>
         <h4>Lista de Vendas</h4>
         <vaadin-grid id="grid-vendas">            
@@ -50578,7 +50601,8 @@
               this.service.getServices(this.URL).then((json) => {
                   callback(json, json.length);
               });  
-          };      
+          };        
+          this.getReports();
       }
       salvar(){
           if(this.querySelector('#id').value !== '' && this.querySelector('#tipoPagamento').validate()){
@@ -50595,8 +50619,10 @@
                   }    
               }).catch(erro =>{
                   console.log(erro.message);
+              }).finally(_ =>{
+                  this.getReports();
               });
-          }
+          }        
       }
       delete(){
           if(this.querySelector('#id').value !== ''){
@@ -50613,8 +50639,10 @@
                   }   
               }).catch(erro =>{
                   console.error(erro.message);
+              }).finally(_ =>{
+                  this.getReports();
               });
-          }
+          }        
       }
       cleanField(){
           this.querySelector('#id').value='';
@@ -50690,6 +50718,14 @@
              });              
           });
       }   
+      getReports(){
+          this.service.getServices(`${this.URL}/reports`).then(
+              (json)=>{
+                  this.querySelector('#totalPago').value=new Intl.NumberFormat('pt-BR').format(json.totalValorPago.toFixed(2));
+                  this.querySelector('#valorTotal').value=new Intl.NumberFormat('pt-BR').format(json.totalValorTotal.toFixed(2));
+              }
+          );
+      }
   }
   customElements.define('vapp-venda-view',VappVenda);
 

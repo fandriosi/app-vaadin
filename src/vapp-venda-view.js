@@ -32,13 +32,28 @@ export default class VappVenda extends HTMLElement{
             <vaadin-text-field label="Código" disabled="true" style="width: 100%;" placeholder="Código" id="id"></vaadin-text-field>            
             <vaadin-text-field disabled="true" label="Data da Compra" id="dataCompra"></vaadin-text-field>
             <vaadin-text-field disabled="true" label="Data Pagamento" id="dataPagamento" ></vaadin-text-field>
-            <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
-            <vaadin-text-field disabled="true" label="Cliente" id="clientes"></vaadin-text-field>       
-            <vaadin-combo-box required label="Tipo de Pagamento" item-label-path="descricao" item-value-path="id" id="tipoPagamento" error-message="O Tipo de Pagamento não pode ser nulo!"></vaadin-combo-box>
-            <vaadin-number-field label="Valor Total" maxlength="8" placeholder="Valor Total" id="total" disabled="true"><div slot="prefix">R$</div></vaadin-number-field> 
             <vaadin-form-item>
-                <vaadin-text-field  style="width: 70%;" placeholder="Busca cliente por Nome" id="findClienteByName" clear-button-visible></vaadin-text-field>
+                <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
+                <vaadin-number-field label="Total a Pagar" maxlength="8" placeholder="Total a Pagar" id="totalPagar"><div slot="prefix">R$</div></vaadin-number-field>
+            </vaadin-form-item>            
+                <vaadin-text-field disabled="true" label="Cliente" id="clientes"></vaadin-text-field>       
+                <vaadin-combo-box required label="Tipo de Pagamento" item-label-path="descricao" item-value-path="id" id="tipoPagamento" error-message="O Tipo de Pagamento não pode ser nulo!"></vaadin-combo-box>
+            <vaadin-form-item>
+                <vaadin-number-field label="Valor Total" placeholder="Valor Total" id="total" disabled="true" style="width: 50%;"><div slot="prefix">R$</div></vaadin-number-field> 
+                <vaadin-number-field label="Desconto" placeholder="Desconto" id="desconto" disabled="true" style="width: 50%;"><div slot="prefix">R$</div></vaadin-number-field> 
+            </vaadin-form-item>            
+            <vaadin-form-item>
+                <vaadin-text-field label="Saldo" placeholder="Total" id="totalPago" disabled="true" style="width: 33%;"><div slot="prefix">R$</div></vaadin-text-field> 
+                <vaadin-text-field label="Valor Pago" placeholder="Valor Pago" id="valorTotal" disabled="true" style="width: 33%;"><div slot="prefix">R$</div></vaadin-text-field>
+                <vaadin-text-field label="Saldo Devedor" placeholder="Saldo Devedor" id="saldoDevedor" disabled="true" style="width: 33%;"><div slot="prefix">R$</div></vaadin-text-field>
+            </vaadin-form-item>             
+            <vaadin-form-item>
+                <vaadin-text-field label="Nome do Cliente" style="width: 70%;" placeholder="Busca cliente por Nome" id="findClienteByName" clear-button-visible></vaadin-text-field>
                 <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findClientesByName()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
+            </vaadin-form-item>
+            <vaadin-form-item>
+                <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
+                <vaadin-button theme="primary" @click=${_ => this.delete()} id="btnExcluir">Excluir</vaadin-button> 
             </vaadin-form-item>
             <vaadin-form-item colspan="2">
                 <h4>Produtos Vendidos</h4>
@@ -49,11 +64,7 @@ export default class VappVenda extends HTMLElement{
                     <vaadin-grid-column path="quantidade" header="Quantidade"></vaadin-grid-column>   
                     <vaadin-grid-column path="produto.strPreco" header="Preço"></vaadin-grid-column>    
                 </vaadin-grid>
-            </vaadin-fomr-item>              
-            <vaadin-form-item>
-                <vaadin-button theme="primary" @click=${_ => this.salvar()} id="btnSalvar">Salvar</vaadin-button>
-                <vaadin-button theme="primary" @click=${_ => this.delete()} id="btnExcluir">Excluir</vaadin-button> 
-            </vaadin-form-item>
+            </vaadin-fomr-item>    
         </vaadin-form-layout>
         <h4>Lista de Vendas</h4>
         <vaadin-grid id="grid-vendas">            
@@ -64,6 +75,7 @@ export default class VappVenda extends HTMLElement{
             <vaadin-grid-column path="tipoPagamento" header="Tipo de Pagamento"></vaadin-grid-column>                       
             <vaadin-grid-column path="strValorTotal" header="Total"></vaadin-grid-column>  
             <vaadin-grid-column path="strValorPago" header="Valor Pago"></vaadin-grid-column>    
+            <vaadin-grid-column path="strDesconto" header="Desconto"></vaadin-grid-column>   
         </vaadin-grid>`
         render(templete, this);
     }
@@ -73,7 +85,8 @@ export default class VappVenda extends HTMLElement{
             this.service.getServices(this.URL).then((json) => {
                 callback(json, json.length);
             });  
-        }      
+        }        
+        this.getReports();
     }
     salvar(){
         if(this.querySelector('#id').value !== '' && this.querySelector('#tipoPagamento').validate()){
@@ -90,8 +103,10 @@ export default class VappVenda extends HTMLElement{
                 }    
             }).catch(erro =>{
                 console.log(erro.message);
+            }).finally(_ =>{
+                this.getReports();
             });
-        }
+        }        
     }
     delete(){
         if(this.querySelector('#id').value !== ''){
@@ -108,8 +123,10 @@ export default class VappVenda extends HTMLElement{
                 }   
             }).catch(erro =>{
                 console.error(erro.message);
+            }).finally(_ =>{
+                this.getReports();
             });
-        }
+        }        
     }
     cleanField(){
         this.querySelector('#id').value='';
@@ -118,6 +135,7 @@ export default class VappVenda extends HTMLElement{
         this.querySelector('#valorPago').value='';
         this.querySelector('#clientes').value='';
         this.querySelector('#total').value='';
+        this.querySelector('#totalPagar').value='';
         this.querySelector('#grid-produtos').items=[];
     }
     showDialog(message){
@@ -136,17 +154,17 @@ export default class VappVenda extends HTMLElement{
         return venda.json;
     }
     findClientesByName(){  
-        this.service.getServices(`resources/findClientesByName/${this.querySelector('#findClienteByName').value}`)
-        .then((json) =>{ 
-            this.querySelector('#grid-vendas').clearCache();
-            this.querySelector('#grid-vendas').dataProvider =(params, callback) =>{
-                 callback(json, json.length)
-            }
-            this.querySelector('#findClienteByName').value='';     
-        }).catch(erro =>{
-            this.showDialog("Erro na conexão como Servidor!");
-            console.log(erro.message);
-        }); 
+        let nome = this.querySelector('#findClienteByName').value;
+        if(nome.trim() !=''){
+            this.service.getServices(`resources/findClientesByName/${nome}`)
+            .then((json) =>{ 
+                this.querySelector('#grid-vendas').clearCache();
+                this.querySelector('#grid-vendas').dataProvider =(params, callback) =>{
+                    callback(json, json.length)
+                }
+                this.querySelector('#findClienteByName').value='';     
+            }) 
+        }        
     }
     selectItemsEventListener(){            
         const grid = this.querySelector('#grid-vendas');
@@ -158,18 +176,26 @@ export default class VappVenda extends HTMLElement{
         let clienteField = this.querySelector('#clientes');
         let totalField = this.querySelector('#total');
         let tipoPagamentoField = this.querySelector('#tipoPagamento');
+        let descontoField = this.querySelector('#desconto');
+        let totalPagarField = this.querySelector('#totalPagar');
         grid.addEventListener('active-item-changed', function(event){
             let item = event.detail.value;
             grid.selectedItems = item ? [item]:[];
             gridProdutos.clearCache();
             gridProdutos.items=item.produtosVendidos;    
-            dataCompraField.value = new Date(item.dataCompra).toLocaleDateString('pt-br');
-            dataPagamentoField.value= new Date(item.dataRecebimento).toLocaleDateString('pt-br');
+            dataCompraField.value = item.strDataCompra;
+            dataPagamentoField.value=item.strDataRecebimento;
             idField.value = item.id;
+            if(item.valorPago > 0){
+                totalPagarField.value=((item.valorTotal-item.desconto)-item.valorPago).toFixed(2);
+            }else{
+                totalPagarField.value=(item.valorTotal-item.desconto).toFixed(2);
+            }
             valorPagoField.value = item.valorPago;
+            descontoField.value = item.desconto;
             clienteField.value = item.clientes.nome;
             tipoPagamentoField.value = 0;
-            totalField.value = item.valorTotal.toFixed(2);
+            totalField.value = (item.valorTotal-item.desconto).toFixed(2);
         });    
     }
     attachComboBoxPagamentos(){
@@ -185,6 +211,15 @@ export default class VappVenda extends HTMLElement{
            })              
         });
     }   
+    getReports(){
+        this.service.getServices(`${this.URL}/reports`).then(
+            (json)=>{
+                this.querySelector('#totalPago').value=new Intl.NumberFormat('pt-BR').format(json.totalValorPago.toFixed(2));
+                this.querySelector('#valorTotal').value=new Intl.NumberFormat('pt-BR').format(json.totalValorTotal.toFixed(2));
+                this.querySelector('#saldoDevedor').value=new Intl.NumberFormat('pt-BR').format(json.totalValorPago.toFixed(2) - json.totalValorTotal.toFixed(2));
+            }
+        )
+    }
 }
 customElements.define('vapp-venda-view',VappVenda);
 

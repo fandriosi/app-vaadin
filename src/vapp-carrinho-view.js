@@ -42,15 +42,22 @@ export default class VappCarrinho extends HTMLElement{
             <vaadin-date-picker required label="Data da Compra" id="dataCompra" error-message="A data da Compra não pode ser nulo!"></vaadin-date-picker>
             <vaadin-date-picker required label="Data Pagamento" id="dataPagamento" error-message="A data do Pagamento não pode ser nulo!"></vaadin-date-picker>
             <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
-            <vaadin-combo-box required label="Cliente" item-label-path="nome" item-value-path="id" id="clientes" error-message="O Cliente não pode ser nulo!"></vaadin-combo-box>
             <vaadin-form-item>
-                <vaadin-text-field  style="width: 70%;" placeholder="Buscar por Descrição do Produto" id="findDescricao" clear-button-visible></vaadin-text-field>
-                <vaadin-button theme="primary" id="btnFindByDescricao" @click=${_ => this.findByDescricao()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button>
-            </vaadin-form-item>
-            <vaadin-combo-box required label="Produto" item-label-path="descricao" item-value-path="id" id="produtos" error-message="O produto não pode ser nulo!"></vaadin-combo-box>
+                <vaadin-text-field label="Nome Cliente" style="width: 80%;" placeholder="Buscar por Nome do Cliente" id="findNome" clear-button-visible></vaadin-text-field>
+                <vaadin-button theme="primary" id="btnFindNome" @click=${_ => this.findByNome()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button></br>
+                <vaadin-combo-box required style="width: 100%;" label="Cliente" item-label-path="nome" item-value-path="id" id="clientes" error-message="O Cliente não pode ser nulo!"></vaadin-combo-box>
+            </vaadin-form-item>            
+            <vaadin-form-item>
+                <vaadin-text-field label="Descrição do Produto" style="width: 80%;" placeholder="Buscar por Descrição do Produto" id="findDescricao" clear-button-visible></vaadin-text-field>
+                <vaadin-button theme="primary" id="btnFindDescricao" @click=${_ => this.findByDescricao()}><iron-icon icon="vaadin:search"></iron-icon></vaadin-button></br>
+                <vaadin-combo-box required label="Produto"  style="width: 100%;" item-label-path="descricao" item-value-path="id" id="produtos" error-message="O produto não pode ser nulo!"></vaadin-combo-box>
+            </vaadin-form-item>            
             <vaadin-combo-box required label="Tipo de Pagamento" item-label-path="descricao" item-value-path="id" id="tipoPagamento" error-message="O Tipo de Pagamento não pode ser nulo!"></vaadin-combo-box>
             <vaadin-integer-field required min="1" max="100" has-controls label="Quantidade" id="quantidade"></vaadin-integer-field>
-            <vaadin-number-field label="Valor Total" maxlength="8" placeholder="Valor Total" id="total" readonly="true"><div slot="prefix">R$</div></vaadin-number-field>
+            <vaadin-form-item>
+                <vaadin-number-field label="Valor Total" maxlength="8" placeholder="Valor Total" id="total" readonly="true"><div slot="prefix">R$</div></vaadin-number-field>
+                <vaadin-number-field label="Desconto" maxlength="8" placeholder="Desconto" id="desconto"><div slot="prefix">R$</div></vaadin-number-field>
+            </vaadin-form-item>            
             <vaadin-form-item>
                 <vaadin-button theme="primary" @click=${_ => this.addProdutos()} id="btnSalvar">Adicionar Produto</vaadin-button>
                 <vaadin-button theme="primary" @click=${_ => this.removerItem()} id="btnExcluir">Excluir Produto</vaadin-button>                
@@ -133,20 +140,34 @@ export default class VappCarrinho extends HTMLElement{
         this.produtosVendidos = [];
         this.querySelector('vaadin-grid').clearCache();
     }
-    findByDescricao(){
-        let descricaoTextfield = this.querySelector('#findDescricao');    
-        this.service.getServices("resources/produtosFindByDescricao/"+this.querySelector('#findDescricao').value)
-        .then((json) =>{ 
-            this.querySelector('#produtos').clearCache();    
-            this.querySelector('#produtos').dataProvider = (params, callback) =>{
-                callback(json, json.length);
-            }
-            descricaoTextfield.value="";
+    findByDescricao(){         
+        let descricao = this.querySelector('#findDescricao').value;
+        if(descricao.trim()!=''){
+            this.service.getServices(`${this.PRODUTO_URL}FindByDescricao/${descricao}`)
+            .then((json) =>{ 
+                this.querySelector('#produtos').clearCache();    
+                this.querySelector('#produtos').dataProvider = (params, callback) =>{
+                    callback(json, json.length);
+                }
+                this.querySelector('#findDescricao').value="";
                  
-        }).catch(erro =>{
-            this.showDialog("Erro na conexão como Servidor!");
-            console.log(erro.message);
-        });  
+            })  
+        }
+        
+    }
+    findByNome(){ 
+        let nome = this.querySelector('#findNome').value;
+        if(nome.trim() != ''){
+            this.service.getServices(`${this.CLIENTE_URL}FindByNome/${nome}`)
+            .then((json) =>{ 
+                this.querySelector('#clientes').clearCache();    
+                this.querySelector('#clientes').dataProvider = (params, callback) =>{
+                    callback(json, json.length);
+                }
+                this.querySelector('#findNome').value="";
+                 
+            }) 
+        }        
     }
     comparedDates(){
         if(new Date(this.querySelector('#dataCompra').value).getTime() <=
@@ -160,7 +181,7 @@ export default class VappCarrinho extends HTMLElement{
         this.querySelector('#quantidade').addEventListener('click', _ =>{
             this.service.getServicesJson(`${this.PRODUTO_URL}/${this.querySelector('#produtos').value}`)
             .then((json) =>{
-                if(this.querySelector('#quantidade').value > json.quantidade){
+                if(this.querySelector('#quantidade').value >= json.quantidade){
                     this.showDialog('Quantidade excede o total dos produtos em Estoque');
                     this.querySelector('#btnSalvar').disabled=true;
                 }else{
@@ -176,21 +197,26 @@ export default class VappCarrinho extends HTMLElement{
         let valorPagoField = this.querySelector('#valorPago');
         let clientesField = this.querySelector('#clientes');
         let quantidadeField = this.querySelector('#quantidade');
-        let valorTotalField = this.querySelector('#total')
+        let valorTotalField = this.querySelector('#total');
+        let descontoField = this.querySelector('#desconto');
+        let btnFindNome = this.querySelector('#btnFindNome');
         if(option){
-            dtCompraField.readonly = false;
-            dtPagamentoField.readonly = false;
-            clientesField.readonly= false;
+            dtCompraField.disabled = false;
+            dtPagamentoField.disabled = false;
+            clientesField.disabled= false;
             idField.value = "";
             dtCompraField.value = "";
             dtPagamentoField.value= "";
             valorPagoField.value= "";
             valorTotalField.value="";
-            quantidadeField.value=1;
+            descontoField.value ="";
+            quantidadeField.value=0;
+            btnFindNome.disabled= false;
         }else{
-            dtCompraField.readonly = true;
-            dtPagamentoField.readonly = true;
-            clientesField.readonly= true;
+            dtCompraField.disabled = true;
+            dtPagamentoField.disabled = true;
+            clientesField.disabled= true;
+            btnFindNome.disabled= true;
         }
     }
     attachDate(){
@@ -228,7 +254,8 @@ export default class VappCarrinho extends HTMLElement{
     getJson(){
         const venda = new Venda(this.querySelector('#id').value, this.querySelector('#dataCompra').value, 
             this.querySelector('#dataPagamento').value,this.querySelector('#tipoPagamento').value,this.querySelector('#valorPago').value, 
-            this.querySelector('#quantidade').value,this.querySelector('#total').value, this.querySelector('#clientes').value, this.produtosVendidos);         
+            this.querySelector('#quantidade').value,this.querySelector('#total').value, this.querySelector('#desconto').value,
+             this.querySelector('#clientes').value, this.produtosVendidos);         
         return venda.json;
     }
     selectItemsEventListener(){            
