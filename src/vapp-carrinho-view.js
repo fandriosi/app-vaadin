@@ -201,9 +201,9 @@ export default class VappCarrinho extends HTMLElement{
         let descontoField = this.querySelector('#desconto');
         let btnFindNome = this.querySelector('#btnFindNome');
         if(option){
-            dtCompraField.disabled = false;
-            dtPagamentoField.disabled = false;
-            clientesField.disabled= false;
+            dtCompraField.readonly = false;
+            dtPagamentoField.readonly = false;
+            clientesField.readonly= false;
             idField.value = "";
             dtCompraField.value = "";
             dtPagamentoField.value= "";
@@ -213,9 +213,9 @@ export default class VappCarrinho extends HTMLElement{
             quantidadeField.value=0;
             btnFindNome.disabled= false;
         }else{
-            dtCompraField.disabled = true;
-            dtPagamentoField.disabled = true;
-            clientesField.disabled= true;
+            dtCompraField.readonly = true;
+            dtPagamentoField.readonly = true;
+            clientesField.readonly= true;
             btnFindNome.disabled= true;
         }
     }
