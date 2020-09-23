@@ -33,14 +33,14 @@ export default class VappVenda extends HTMLElement{
             <vaadin-text-field disabled="true" label="Data da Compra" id="dataCompra"></vaadin-text-field>
             <vaadin-text-field disabled="true" label="Data Pagamento" id="dataPagamento" ></vaadin-text-field>
             <vaadin-form-item>
-                <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago"><div slot="prefix">R$</div></vaadin-number-field>
-                <vaadin-number-field label="Total a Pagar" maxlength="8" placeholder="Total a Pagar" id="totalPagar"><div slot="prefix">R$</div></vaadin-number-field>
+                <vaadin-number-field label="Valor Pago" maxlength="8" placeholder="Valor Pago" id="valorPago" style="width: 49%;"><div slot="prefix">R$</div></vaadin-number-field>
+                <vaadin-number-field label="Total a Pagar" maxlength="8" placeholder="Total a Pagar" id="totalPagar" style="width: 49%;"><div slot="prefix">R$</div></vaadin-number-field>
             </vaadin-form-item>            
                 <vaadin-text-field disabled="true" label="Cliente" id="clientes"></vaadin-text-field>       
                 <vaadin-combo-box required label="Tipo de Pagamento" item-label-path="descricao" item-value-path="id" id="tipoPagamento" error-message="O Tipo de Pagamento não pode ser nulo!"></vaadin-combo-box>
             <vaadin-form-item>
-                <vaadin-number-field label="Valor Total" placeholder="Valor Total" id="total" disabled="true" style="width: 50%;"><div slot="prefix">R$</div></vaadin-number-field> 
-                <vaadin-number-field label="Desconto" placeholder="Desconto" id="desconto" disabled="true" style="width: 50%;"><div slot="prefix">R$</div></vaadin-number-field> 
+                <vaadin-number-field label="Valor Total" placeholder="Valor Total" id="total" disabled="true" style="width: 49%;"><div slot="prefix">R$</div></vaadin-number-field> 
+                <vaadin-number-field label="Desconto" placeholder="Desconto" id="desconto" disabled="true" style="width: 49%;"><div slot="prefix">R$</div></vaadin-number-field> 
             </vaadin-form-item>            
             <vaadin-form-item>
                 <vaadin-text-field label="Saldo" placeholder="Total" id="totalPago" disabled="true" style="width: 33%;"><div slot="prefix">R$</div></vaadin-text-field> 
